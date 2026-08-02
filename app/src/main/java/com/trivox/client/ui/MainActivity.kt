@@ -866,14 +866,30 @@ class MainActivity : AppCompatActivity() {
                 ConnectionState.ERROR
             )
         ) {
-            startService(
-                Intent(this, ConnectionService::class.java)
-                    .setAction(ConnectionService.ACTION_STOP)
-            )
-            startService(
-                Intent(this, TrivoxVpnService::class.java)
-                    .setAction(TrivoxVpnService.ACTION_STOP)
-            )
+            when (settingsRepository.load().mode) {
+                ConnectionMode.PROXY -> {
+                    startService(
+                        Intent(
+                            this,
+                            ConnectionService::class.java
+                        ).setAction(
+                            ConnectionService.ACTION_STOP
+                        )
+                    )
+                }
+
+                ConnectionMode.VPN -> {
+                    startService(
+                        Intent(
+                            this,
+                            TrivoxVpnService::class.java
+                        ).setAction(
+                            TrivoxVpnService.ACTION_STOP
+                        )
+                    )
+                }
+            }
+
             return
         }
 

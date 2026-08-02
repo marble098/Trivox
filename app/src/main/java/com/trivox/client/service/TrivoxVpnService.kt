@@ -27,6 +27,8 @@ class TrivoxVpnService : VpnService() {
     private val executor = Executors.newSingleThreadExecutor()
     private val handler = Handler(Looper.getMainLooper())
     private val stopping = AtomicBoolean(false)
+    private val sessionAccepted = AtomicBoolean(false)
+    private val ownsCore = AtomicBoolean(false)
     private lateinit var core: CoreManager
     private var tun: ParcelFileDescriptor? = null
     private var profileId: String? = null
@@ -36,8 +38,16 @@ class TrivoxVpnService : VpnService() {
     override fun onCreate() { super.onCreate(); core = CoreManager(this); NotificationSupport.createChannel(this) }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) { stopConnection(); return START_NOT_STICKY }
+        if (intent?.action == ACTION_STOP) {
+            if (!sessionAccepted.get()) {
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            stopConnection()
+            return START_NOT_STICKY
+        }
         if (ConnectionRuntime.current().state !in setOf(ConnectionState.DISCONNECTED, ConnectionState.ERROR)) return START_NOT_STICKY
+        if (!sessionAccepted.compareAndSet(false, true)) return START_NOT_STICKY
         profileId = intent?.getStringExtra(EXTRA_PROFILE_ID) ?: ConfigRepository(this).selectedId()
         startForeground(NotificationSupport.ID, NotificationSupport.build(this, "Trivox VPN", 0,
             Intent(this, TrivoxVpnService::class.java).setAction(ACTION_STOP)))
@@ -73,6 +83,7 @@ class TrivoxVpnService : VpnService() {
         ConnectionRuntime.update(ConnectionRuntime.Snapshot(ConnectionState.CONNECTING, profile.id, profile.name))
         val result = core.startValidated(request) { fd -> protect(fd) }
         if (!result.success) return fail(result.error)
+        ownsCore.set(true)
         startedElapsed = SystemClock.elapsedRealtime()
         ConnectionRuntime.update(ConnectionRuntime.Snapshot(ConnectionState.CONNECTED, profile.id, profile.name, startedElapsed))
         Diagnostics.info("VPN connection started for ${profile.name}")
@@ -100,8 +111,9 @@ class TrivoxVpnService : VpnService() {
                 if (!observedInitial) { observedInitial = true; return }
                 if (ConnectionRuntime.current().state != ConnectionState.RECONNECTING) return
                 executor.execute {
-                    core.stop()
+                    if (ownsCore.compareAndSet(true, false)) core.stop()
                     val result = core.startValidated(request) { fd -> protect(fd) }
+                    if (result.success) ownsCore.set(true)
                     if (result.success) ConnectionRuntime.update(ConnectionRuntime.current().copy(state = ConnectionState.CONNECTED, error = ""))
                     else fail(result.error)
                 }
@@ -143,9 +155,16 @@ class TrivoxVpnService : VpnService() {
         if (!stopping.compareAndSet(false, true)) return
         ConnectionRuntime.update(ConnectionRuntime.current().copy(state = ConnectionState.STOPPING))
         executor.execute {
-            unregisterNetworkCallback(); core.stop(); tun?.close(); tun = null; storeDuration()
+            unregisterNetworkCallback()
+            if (ownsCore.compareAndSet(true, false)) core.stop()
+            tun?.close()
+            tun = null
+            storeDuration()
             ConnectionRuntime.update(ConnectionRuntime.Snapshot())
-            handler.removeCallbacksAndMessages(null); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
+            handler.removeCallbacksAndMessages(null)
+            sessionAccepted.set(false)
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
         }
     }
 
@@ -162,9 +181,17 @@ class TrivoxVpnService : VpnService() {
     }
 
     private fun fail(message: String) {
-        Diagnostics.error(message); unregisterNetworkCallback(); core.stop(); runCatching { tun?.close() }; tun = null
+        Diagnostics.error(message)
+        unregisterNetworkCallback()
+        if (ownsCore.compareAndSet(true, false)) core.stop()
+        runCatching { tun?.close() }
+        tun = null
         ConnectionRuntime.update(ConnectionRuntime.Snapshot(ConnectionState.ERROR, profileId, error = message))
-        handler.post { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
+        handler.post {
+            sessionAccepted.set(false)
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
     }
 
     override fun onRevoke() { stopConnection() }

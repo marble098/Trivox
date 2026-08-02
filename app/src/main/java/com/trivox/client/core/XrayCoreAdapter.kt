@@ -14,14 +14,13 @@ class XrayCoreAdapter(private val context: Context) : CoreAdapter {
     )
 
     private val className = "libXray.LibXray"
-    private val lock = Any()
 
     override fun isAvailable(): Boolean = runCatching { Class.forName(className); true }.getOrDefault(false)
 
     override fun version(): String = if (!isAvailable()) "missing" else invoke("xrayVersion").data
         ?.optJSONObject("data")?.optString("version") ?: "unknown"
 
-    override fun validate(configJson: String): CoreResult = synchronized(lock) {
+    override fun validate(configJson: String): CoreResult = synchronized(NATIVE_LOCK) {
         if (!isAvailable()) return unavailable()
         val file = context.cacheDir.resolve("trivox-validate-${System.nanoTime()}.json")
         try {
@@ -32,27 +31,107 @@ class XrayCoreAdapter(private val context: Context) : CoreAdapter {
         }
     }
 
-    override fun start(configJson: String, protectSocket: ((Int) -> Boolean)?): CoreResult = synchronized(lock) {
-        if (!isAvailable()) return unavailable()
-        runCatching { registerController(protectSocket) }.onFailure {
-            return CoreResult(false, "Failed to register Android socket protection: ${it.message}")
-        }
-        invoke("runXrayFromJson", JSONObject().put("configJSON", configJson))
-    }
+    override fun start(
+        configJson: String,
+        protectSocket: ((Int) -> Boolean)?
+    ): CoreResult = synchronized(NATIVE_LOCK) {
+        if (!isAvailable()) return@synchronized unavailable()
 
-    override fun stop(): CoreResult = synchronized(lock) {
-        if (!isAvailable()) return unavailable()
-        val result = invoke("stopXray")
-        runCatching { registerController(null) }
-        runCatching { Class.forName(className).getMethod("resetDNS").invoke(null) }
+        if (isRunningUnsafe()) {
+            val stopped = stopAndResetUnsafe()
+            if (!stopped.success) {
+                return@synchronized CoreResult(
+                    false,
+                    "Previous Xray session could not be stopped: ${stopped.error}"
+                )
+            }
+        }
+
+        runCatching {
+            registerController(protectSocket)
+        }.onFailure {
+            return@synchronized CoreResult(
+                false,
+                "Failed to register Android socket protection: ${it.message}"
+            )
+        }
+
+        val result = invoke(
+            "runXrayFromJson",
+            JSONObject().put("configJSON", configJson)
+        )
+
+        if (!result.success) {
+            clearControllersUnsafe()
+        }
+
         result
     }
 
+    override fun stop(): CoreResult =
+        synchronized(NATIVE_LOCK) {
+            if (!isAvailable()) {
+                unavailable()
+            } else {
+                stopAndResetUnsafe()
+            }
+        }
+
     override fun state(): CoreResult = if (!isAvailable()) unavailable() else invoke("getXrayState")
 
-    override fun realDelay(configPath: String, timeoutSeconds: Int, url: String): CoreResult = synchronized(lock) {
+    override fun realDelay(configPath: String, timeoutSeconds: Int, url: String): CoreResult = synchronized(NATIVE_LOCK) {
         if (!isAvailable()) return unavailable()
         invoke("ping", JSONObject().put("configPath", configPath).put("timeout", timeoutSeconds).put("url", url))
+    }
+
+    private fun stopAndResetUnsafe(): CoreResult {
+        val wasRunning = isRunningUnsafe()
+        val result =
+            if (wasRunning) invoke("stopXray")
+            else CoreResult(true)
+
+        clearControllersUnsafe()
+
+        if (!wasRunning) return result
+
+        repeat(30) {
+            if (!isRunningUnsafe()) return CoreResult(true)
+            try {
+                Thread.sleep(100)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return CoreResult(
+                    false,
+                    "Interrupted while waiting for Xray to stop"
+                )
+            }
+        }
+
+        return if (!isRunningUnsafe()) {
+            CoreResult(true)
+        } else if (!result.success) {
+            result
+        } else {
+            CoreResult(
+                false,
+                "Xray did not reach stopped state in time"
+            )
+        }
+    }
+
+    private fun isRunningUnsafe(): Boolean =
+        invoke("getXrayState")
+            .data
+            ?.optJSONObject("data")
+            ?.optBoolean("running") == true
+
+    private fun clearControllersUnsafe() {
+        runCatching { registerController(null) }
+        runCatching {
+            Class.forName(className)
+                .getMethod("resetDNS")
+                .invoke(null)
+        }
     }
 
     private fun invoke(method: String, payload: JSONObject? = null): CoreResult {
@@ -89,4 +168,7 @@ class XrayCoreAdapter(private val context: Context) : CoreAdapter {
     }
 
     private fun unavailable() = CoreResult(false, "Xray Android core is missing. Run tools/trivox-wizard.sh --prepare.")
+    companion object {
+        private val NATIVE_LOCK = Any()
+    }
 }

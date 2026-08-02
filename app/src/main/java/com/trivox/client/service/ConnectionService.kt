@@ -22,6 +22,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 class ConnectionService : Service() {
     private val executor = Executors.newSingleThreadExecutor()
     private val stopping = AtomicBoolean(false)
+    private val sessionAccepted = AtomicBoolean(false)
+    private val ownsCore = AtomicBoolean(false)
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var core: CoreManager
     private var profileId: String? = null
@@ -32,8 +34,16 @@ class ConnectionService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) { stopConnection(); return START_NOT_STICKY }
+        if (intent?.action == ACTION_STOP) {
+            if (!sessionAccepted.get()) {
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            stopConnection()
+            return START_NOT_STICKY
+        }
         if (ConnectionRuntime.current().state !in setOf(ConnectionState.DISCONNECTED, ConnectionState.ERROR)) return START_NOT_STICKY
+        if (!sessionAccepted.compareAndSet(false, true)) return START_NOT_STICKY
         profileId = intent?.getStringExtra(EXTRA_PROFILE_ID) ?: ConfigRepository(this).selectedId()
         val initialNotification = NotificationSupport.build(this, "Trivox", 0, Intent(this, ConnectionService::class.java).setAction(ACTION_STOP))
         startForeground(NotificationSupport.ID, initialNotification)
@@ -53,6 +63,7 @@ class ConnectionService : Service() {
         ConnectionRuntime.update(ConnectionRuntime.Snapshot(ConnectionState.CONNECTING, profile.id, profile.name))
         val result = core.start(request)
         if (!result.success) return fail(result.error)
+        ownsCore.set(true)
         startedElapsed = SystemClock.elapsedRealtime()
         ConnectionRuntime.update(ConnectionRuntime.Snapshot(ConnectionState.CONNECTED, profile.id, profile.name, startedElapsed))
         Diagnostics.info("Local proxy connection started for ${profile.name}")
@@ -86,9 +97,13 @@ class ConnectionService : Service() {
         if (!stopping.compareAndSet(false, true)) return
         ConnectionRuntime.update(ConnectionRuntime.current().copy(state = ConnectionState.STOPPING))
         executor.execute {
-            core.stop(); storeDuration()
+            if (ownsCore.compareAndSet(true, false)) core.stop()
+            storeDuration()
             ConnectionRuntime.update(ConnectionRuntime.Snapshot())
-            handler.removeCallbacksAndMessages(null); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
+            handler.removeCallbacksAndMessages(null)
+            sessionAccepted.set(false)
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
         }
     }
 
@@ -104,9 +119,14 @@ class ConnectionService : Service() {
     }
 
     private fun fail(message: String) {
-        Diagnostics.error(message); core.stop();
+        Diagnostics.error(message)
+        if (ownsCore.compareAndSet(true, false)) core.stop()
         ConnectionRuntime.update(ConnectionRuntime.Snapshot(ConnectionState.ERROR, profileId, error = message))
-        handler.post { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
+        handler.post {
+            sessionAccepted.set(false)
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
     }
 
     override fun onDestroy() { handler.removeCallbacksAndMessages(null); executor.shutdownNow(); super.onDestroy() }

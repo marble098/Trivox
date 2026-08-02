@@ -6,15 +6,6 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-fun commandOutput(vararg command: String): String? =
-    runCatching {
-        val process = ProcessBuilder(*command)
-            .directory(rootProject.projectDir)
-            .redirectErrorStream(true)
-            .start()
-        val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
-        if (process.waitFor() == 0) output.takeIf(String::isNotBlank) else null
-    }.getOrNull()
 
 val supportedAbis = listOf(
     "arm64-v8a",
@@ -38,23 +29,32 @@ val signingProps = Properties().apply {
     }
 }
 
-val gitCommitCount = commandOutput("git", "rev-list", "--count", "HEAD")
-    ?.toIntOrNull()
+val generatedVersionCode = providers
+    .environmentVariable("TRIVOX_VERSION_CODE")
+    .orElse(providers.gradleProperty("trivoxVersionCode"))
+    .orElse("1001")
+    .get()
+    .toIntOrNull()
     ?.coerceAtLeast(1)
-    ?: 1
+    ?: 1001
 
-val gitShortSha = commandOutput("git", "rev-parse", "--short=8", "HEAD")
-    ?: "source"
+val generatedVersionName = providers
+    .environmentVariable("TRIVOX_VERSION_NAME")
+    .orElse(providers.gradleProperty("trivoxVersionName"))
+    .orElse("0.2.1")
+    .get()
+    .trim()
+    .ifBlank { "0.2.1" }
 
-val generatedVersionCode = System.getenv("TRIVOX_VERSION_CODE")
-    ?.toIntOrNull()
-    ?.coerceAtLeast(1)
-    ?: (1000 + gitCommitCount)
-
-val generatedVersionName = System.getenv("TRIVOX_VERSION_NAME")
-    ?.trim()
-    ?.takeIf(String::isNotBlank)
-    ?: "0.2.$gitCommitCount"
+val generatedGitSha = providers
+    .environmentVariable("TRIVOX_GIT_SHA")
+    .orElse(providers.gradleProperty("trivoxGitSha"))
+    .orElse("source")
+    .get()
+    .trim()
+    .replace(Regex("[^A-Za-z0-9._-]"), "")
+    .take(40)
+    .ifBlank { "source" }
 
 android {
     namespace = "com.trivox.client"
@@ -71,7 +71,7 @@ android {
         versionCode = generatedVersionCode
         versionName = generatedVersionName
 
-        buildConfigField("String", "GIT_SHA", "\"$gitShortSha\"")
+        buildConfigField("String", "GIT_SHA", "\"$generatedGitSha\"")
         buildConfigField("int", "BUILD_NUMBER", generatedVersionCode.toString())
 
         vectorDrawables {

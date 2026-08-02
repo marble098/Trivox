@@ -22,6 +22,31 @@ esac
 
 cd "$PROJECT_DIR"
 
+# Calculate version metadata before Gradle configuration.
+if [[ -z "${TRIVOX_VERSION_CODE:-}" ||
+      -z "${TRIVOX_VERSION_NAME:-}" ||
+      -z "${TRIVOX_GIT_SHA:-}" ]]; then
+  if command -v git >/dev/null 2>&1 &&
+     git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    commit_count="$(git rev-list --count HEAD 2>/dev/null || printf '1')"
+    short_sha="$(git rev-parse --short=8 HEAD 2>/dev/null || printf 'source')"
+  else
+    commit_count=1
+    short_sha=source
+  fi
+
+  [[ "$commit_count" =~ ^[0-9]+$ ]] || commit_count=1
+
+  export TRIVOX_VERSION_CODE="${TRIVOX_VERSION_CODE:-$((1000 + commit_count))}"
+  export TRIVOX_VERSION_NAME="${TRIVOX_VERSION_NAME:-0.2.${commit_count}}"
+  export TRIVOX_GIT_SHA="${TRIVOX_GIT_SHA:-$short_sha}"
+fi
+
+printf 'Trivox version: %s (%s), commit %s\n' \
+  "$TRIVOX_VERSION_NAME" \
+  "$TRIVOX_VERSION_CODE" \
+  "$TRIVOX_GIT_SHA"
+
 python3 tools/generate-core-manifest.py \
   --validate-only \
   --abis "${TRIVOX_ABIS:-arm64-v8a,armeabi-v7a,x86_64}" \
