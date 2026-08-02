@@ -24,13 +24,18 @@ object ConnectionRuntime {
     private val snapshot =
         AtomicReference(Snapshot())
     private val listeners =
-        CopyOnWriteArrayList<(Snapshot) -> Unit>()
-    private val sessionCounter = AtomicLong(0)
+        CopyOnWriteArrayList<
+            (Snapshot) -> Unit
+            >()
+    private val sessionCounter =
+        AtomicLong(0)
 
-    fun current(): Snapshot = snapshot.get()
+    fun current(): Snapshot =
+        snapshot.get()
 
     fun nextSessionId(): Long =
-        sessionCounter.incrementAndGet()
+        sessionCounter
+            .incrementAndGet()
 
     fun update(value: Snapshot) {
         snapshot.set(value)
@@ -39,19 +44,23 @@ object ConnectionRuntime {
 
     fun updateSession(
         sessionId: Long,
-        transform: (Snapshot) -> Snapshot
+        transform:
+            (Snapshot) -> Snapshot
     ): Boolean {
         while (true) {
-            val current = snapshot.get()
+            val current =
+                snapshot.get()
 
             if (
-                current.sessionId != sessionId ||
+                current.sessionId !=
+                sessionId ||
                 sessionId == 0L
             ) {
                 return false
             }
 
-            val next = transform(current)
+            val next =
+                transform(current)
 
             if (
                 snapshot.compareAndSet(
@@ -66,53 +75,62 @@ object ConnectionRuntime {
     }
 
     fun addListener(
-        listener: (Snapshot) -> Unit
+        listener:
+            (Snapshot) -> Unit
     ) {
         listeners += listener
+
         runCatching {
-            listener(snapshot.get())
+            listener(
+                snapshot.get()
+            )
         }.onFailure {
             Diagnostics.warning(
-                "Connection listener failed: ${it.message}"
+                "Connection listener failed: " +
+                    it.message
             )
         }
     }
 
-    private fun notifyListeners(value: Snapshot) {
-        listeners.forEach { listener ->
+    private fun notifyListeners(
+        value: Snapshot
+    ) {
+        listeners.forEach {
+                listener ->
             runCatching {
                 listener(value)
             }.onFailure {
                 Diagnostics.warning(
-                    "Connection listener failed: ${it.message}"
+                    "Connection listener failed: " +
+                        it.message
                 )
             }
         }
     }
 
     fun removeListener(
-        listener: (Snapshot) -> Unit
+        listener:
+            (Snapshot) -> Unit
     ) {
         listeners -= listener
     }
 }
 
-class CoreManager(context: Context) {
+class CoreManager(
+    context: Context
+) {
+    private val appContext =
+        context.applicationContext
+
     val adapter: CoreAdapter =
-        XrayCoreAdapter(
-            context.applicationContext
-        )
+        XrayCoreAdapter(appContext)
 
     fun prepare(
         request: CoreStartRequest
     ): Pair<String?, CoreResult> =
         runCatching {
-            val json = XrayConfigBuilder.build(
-                request.profile,
-                request.settings,
-                request.mode,
-                request.tunFd
-            )
+            val json =
+                buildJson(request)
 
             val validation =
                 adapter.validate(json)
@@ -123,6 +141,11 @@ class CoreManager(context: Context) {
                 json to CoreResult(true)
             }
         }.getOrElse {
+            Diagnostics.recordThrowable(
+                "Core configuration preparation",
+                it
+            )
+
             null to CoreResult(
                 false,
                 "Configuration generation failed: " +
@@ -132,10 +155,13 @@ class CoreManager(context: Context) {
 
     fun start(
         request: CoreStartRequest,
-        protect: ((Int) -> Boolean)? = null
+        protect:
+            ((Int) -> Boolean)? = null
     ): CoreResult {
-        val (json, prepared) =
-            prepare(request)
+        val (
+            json,
+            prepared
+        ) = prepare(request)
 
         if (
             !prepared.success ||
@@ -144,40 +170,51 @@ class CoreManager(context: Context) {
             return prepared
         }
 
-        val result =
-            adapter.start(json, protect)
-
-        if (!result.success) {
-            Diagnostics.error(result.error)
-        }
-
-        return result
+        return adapter
+            .start(
+                json,
+                protect
+            )
+            .also {
+                if (!it.success) {
+                    Diagnostics.error(
+                        it.error
+                    )
+                }
+            }
     }
 
     fun startValidated(
         request: CoreStartRequest,
-        protect: ((Int) -> Boolean)? = null
+        protect:
+            ((Int) -> Boolean)? = null
     ): CoreResult {
-        val json = runCatching {
-            XrayConfigBuilder.build(
-                request.profile,
-                request.settings,
-                request.mode,
-                request.tunFd
-            )
-        }.getOrElse {
-            return CoreResult(
-                false,
-                "Configuration generation failed: " +
-                    it.message
-            )
-        }
+        val json =
+            runCatching {
+                buildJson(request)
+            }.getOrElse {
+                Diagnostics.recordThrowable(
+                    "Validated core start",
+                    it
+                )
+
+                return CoreResult(
+                    false,
+                    "Configuration generation failed: " +
+                        it.message
+                )
+            }
 
         return adapter
-            .start(json, protect)
+            .start(
+                json,
+                protect
+            )
             .also {
                 if (!it.success) {
-                    Diagnostics.error(it.error)
+                    Diagnostics.error(
+                        it.error
+                    )
                 }
             }
     }
@@ -186,8 +223,22 @@ class CoreManager(context: Context) {
         adapter.state()
             .data
             ?.optJSONObject("data")
-            ?.optBoolean("running") == true
+            ?.optBoolean("running") ==
+            true
 
     fun stop(): CoreResult =
         adapter.stop()
+
+    private fun buildJson(
+        request: CoreStartRequest
+    ): String =
+        XrayConfigBuilder.build(
+            profile = request.profile,
+            settings = request.settings,
+            mode = request.mode,
+            tunFd = request.tunFd,
+            errorLogPath =
+                Diagnostics
+                    .xrayErrorLogPath()
+        )
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import com.trivox.client.util.Diagnostics
 import org.json.JSONObject
 import java.lang.reflect.Proxy
+import java.util.concurrent.atomic.AtomicReference
 
 class XrayCoreAdapter(
     private val context: Context
@@ -93,47 +94,72 @@ class XrayCoreAdapter(
                 return@synchronized unavailable()
             }
 
-            if (isRunningUnsafe()) {
-                val stopped =
-                    stopAndResetUnsafe()
+            val staleStop =
+                stopNativeUnsafe(
+                    "pre-start"
+                )
 
-                if (!stopped.success) {
-                    return@synchronized CoreResult(
-                        false,
-                        "Previous Xray session " +
-                            "could not be stopped: " +
-                            stopped.error
-                    )
-                }
-            }
-
-            val registered = runCatching {
-                registerController(
-                    protectSocket
+            if (!staleStop.success) {
+                return@synchronized CoreResult(
+                    false,
+                    "Previous Xray session " +
+                        "could not be stopped: " +
+                        staleStop.error
                 )
             }
 
+            val registered =
+                runCatching {
+                    registerStableControllerUnsafe(
+                        protectSocket
+                    )
+                }
+
             if (registered.isFailure) {
+                releaseSessionUnsafe()
+
                 return@synchronized CoreResult(
                     false,
                     "Failed to register Android " +
                         "socket protection: " +
-                        registered
-                            .exceptionOrNull()
-                            ?.message
+                        rootMessage(
+                            registered
+                                .exceptionOrNull()
+                        )
                 )
             }
 
-            val result = invoke(
+            Diagnostics.nativeCheckpoint(
                 "runXrayFromJson",
-                JSONObject().put(
-                    "configJSON",
-                    configJson
+                "begin",
+                if (protectSocket == null) {
+                    "mode=proxy"
+                } else {
+                    "mode=vpn"
+                }
+            )
+
+            val result =
+                invoke(
+                    "runXrayFromJson",
+                    JSONObject().put(
+                        "configJSON",
+                        configJson
+                    )
                 )
+
+            Diagnostics.nativeCheckpoint(
+                "runXrayFromJson",
+                if (result.success) {
+                    "completed"
+                } else {
+                    "failed"
+                },
+                result.error
             )
 
             if (!result.success) {
-                clearControllersUnsafe()
+                releaseSessionUnsafe()
             }
 
             result
@@ -144,7 +170,9 @@ class XrayCoreAdapter(
             if (!isAvailable()) {
                 unavailable()
             } else {
-                stopAndResetUnsafe()
+                stopNativeUnsafe(
+                    "requested"
+                )
             }
         }
 
@@ -178,92 +206,184 @@ class XrayCoreAdapter(
                         "timeout",
                         timeoutSeconds
                     )
-                    .put("url", url)
+                    .put(
+                        "url",
+                        url
+                    )
             )
         }
 
-    private fun stopAndResetUnsafe():
-        CoreResult {
-        val wasRunning =
-            isRunningUnsafe()
+    private fun stopNativeUnsafe(
+        reason: String
+    ): CoreResult {
+        Diagnostics.nativeCheckpoint(
+            "stopXray",
+            "begin",
+            reason
+        )
 
-        if (!wasRunning) {
-            clearControllersUnsafe()
-            return CoreResult(true)
-        }
-
-        val stopResult =
+        /*
+         * XTLS/libXray StopXray is synchronous and
+         * idempotent: it closes the instance under
+         * its own mutex and then clears coreServer.
+         * Extra getXrayState polling is unnecessary.
+         */
+        val result =
             invoke("stopXray")
 
-        val stopped =
-            waitUntilStoppedUnsafe()
-
-        if (!stopped) {
-            /*
-             * Keep the controller strongly referenced while
-             * native code may still call it. Clearing it here
-             * can produce a SIGABRT in libXray.
-             */
-            return if (!stopResult.success) {
-                stopResult
+        Diagnostics.nativeCheckpoint(
+            "stopXray",
+            if (result.success) {
+                "completed"
             } else {
-                CoreResult(
-                    false,
-                    "Xray did not reach the " +
-                        "stopped state in time"
-                )
-            }
-        }
+                "failed"
+            },
+            result.error
+        )
 
-        clearControllersUnsafe()
-        try {
-            Thread.sleep(CLEANUP_COOLDOWN_MS)
-        } catch (_: InterruptedException) {
-            Thread.currentThread().interrupt()
-        }
-        return CoreResult(true)
-    }
-
-    private fun waitUntilStoppedUnsafe():
-        Boolean {
-        repeat(STOP_POLL_ATTEMPTS) {
-            if (!isRunningUnsafe()) {
-                return true
-            }
+        if (result.success) {
+            releaseSessionUnsafe()
 
             try {
                 Thread.sleep(
-                    STOP_POLL_DELAY_MS
+                    CLEANUP_COOLDOWN_MS
                 )
             } catch (
                 _: InterruptedException
             ) {
-                Thread.currentThread()
+                Thread
+                    .currentThread()
                     .interrupt()
-                return !isRunningUnsafe()
             }
         }
 
-        return !isRunningUnsafe()
+        return result
     }
 
-    private fun isRunningUnsafe():
-        Boolean =
-        invoke("getXrayState")
-            .data
-            ?.optJSONObject("data")
-            ?.optBoolean("running") == true
+    private fun registerStableControllerUnsafe(
+        callback: ((Int) -> Boolean)?
+    ) {
+        ACTIVE_PROTECT.set(callback)
 
-    private fun clearControllersUnsafe() {
-        runCatching {
-            registerController(null)
-        }.onFailure {
-            Diagnostics.warning(
-                "Unable to clear Xray " +
-                    "controllers: ${it.message}"
+        val clazz =
+            Class.forName(className)
+        val controllerClass =
+            Class.forName(
+                "libXray.DialerController"
             )
+
+        val controller =
+            ACTIVE_CONTROLLER
+                ?: Proxy.newProxyInstance(
+                    controllerClass.classLoader,
+                    arrayOf(controllerClass)
+                ) {
+                        proxy,
+                        method,
+                        args ->
+
+                    when (method.name) {
+                        "protectFd" -> {
+                            val fd =
+                                (
+                                    args
+                                        ?.firstOrNull()
+                                        as? Number
+                                    )
+                                    ?.toInt()
+                                    ?: return@newProxyInstance false
+
+                            val active =
+                                ACTIVE_PROTECT.get()
+
+                            if (active == null) {
+                                true
+                            } else {
+                                runCatching {
+                                    active(fd)
+                                }.getOrElse {
+                                    Diagnostics
+                                        .recordThrowable(
+                                            "VPN protectFd",
+                                            it
+                                        )
+                                    false
+                                }
+                            }
+                        }
+
+                        "toString" ->
+                            "TrivoxStableDialerController"
+
+                        "hashCode" ->
+                            System.identityHashCode(
+                                proxy
+                            )
+
+                        "equals" ->
+                            proxy ===
+                                args?.firstOrNull()
+
+                        else -> false
+                    }
+                }.also {
+                    ACTIVE_CONTROLLER = it
+                }
+
+        /*
+         * Never pass null here. libXray v26.7.28
+         * captures controller.ProtectFd without a
+         * nil check. A null controller can therefore
+         * panic inside Go and abort libgojni.so.
+         */
+        if (!CONTROLLER_REGISTERED) {
+            clazz.getMethod(
+                "registerDialerController",
+                controllerClass
+            ).invoke(
+                null,
+                controller
+            )
+
+            clazz.getMethod(
+                "registerListenerController",
+                controllerClass
+            ).invoke(
+                null,
+                controller
+            )
+
+            CONTROLLER_REGISTERED = true
         }
 
+        if (callback != null) {
+            clazz.getMethod(
+                "setDNS",
+                controllerClass,
+                String::class.java
+            ).invoke(
+                null,
+                controller,
+                "1.1.1.1:53"
+            )
+        } else {
+            resetDnsUnsafe()
+        }
+    }
+
+    private fun releaseSessionUnsafe() {
+        resetDnsUnsafe()
+        ACTIVE_PROTECT.set(null)
+
+        /*
+         * Keep ACTIVE_CONTROLLER strongly referenced
+         * and registered for the process lifetime.
+         * The callback becomes a safe allow-through
+         * controller when no VPN session is active.
+         */
+    }
+
+    private fun resetDnsUnsafe() {
         runCatching {
             Class.forName(className)
                 .getMethod("resetDNS")
@@ -271,7 +391,7 @@ class XrayCoreAdapter(
         }.onFailure {
             Diagnostics.warning(
                 "Unable to reset Xray DNS: " +
-                    it.message
+                    rootMessage(it)
             )
         }
     }
@@ -281,9 +401,16 @@ class XrayCoreAdapter(
         payload: JSONObject? = null
     ): CoreResult =
         runCatching {
-            val request = JSONObject()
-                .put("apiVersion", 1)
-                .put("method", method)
+            val request =
+                JSONObject()
+                    .put(
+                        "apiVersion",
+                        1
+                    )
+                    .put(
+                        "method",
+                        method
+                    )
 
             if (payload != null) {
                 request.put(
@@ -295,18 +422,23 @@ class XrayCoreAdapter(
             val clazz =
                 Class.forName(className)
 
-            val raw = clazz
-                .getMethod(
+            val raw =
+                clazz.getMethod(
                     "invoke",
                     String::class.java
-                )
-                .invoke(
+                ).invoke(
                     null,
                     request.toString()
-                ) as String
+                ) as? String
+                    ?: error(
+                        "libXray returned " +
+                            "a non-string response"
+                    )
 
-            val response = JSONObject(raw)
-            val result = CoreResult(
+            val response =
+                JSONObject(raw)
+
+            CoreResult(
                 response.optBoolean(
                     "success"
                 ),
@@ -314,93 +446,51 @@ class XrayCoreAdapter(
                     "error"
                 ),
                 response
+            ).also {
+                if (!it.success) {
+                    Diagnostics.error(
+                        "Xray $method failed: " +
+                            Diagnostics.sanitize(
+                                it.error
+                            )
+                    )
+                }
+            }
+        }.getOrElse {
+            Diagnostics.recordThrowable(
+                "Xray invocation $method",
+                it
             )
 
-            if (!result.success) {
-                Diagnostics.error(
-                    "Xray $method failed: " +
-                        Diagnostics.sanitize(
-                            result.error
-                        )
-                )
-            }
-
-            result
-        }.getOrElse {
             CoreResult(
                 false,
                 "Xray invocation failed: " +
-                    (
-                        it.cause?.message
-                            ?: it.message
-                        )
+                    rootMessage(it)
             )
         }
 
-    private fun registerController(
-        callback: ((Int) -> Boolean)?
-    ) {
-        val clazz =
-            Class.forName(className)
-        val controllerClass =
-            Class.forName(
-                "libXray.DialerController"
-            )
-
-        val controller =
-            callback?.let {
-                Proxy.newProxyInstance(
-                    controllerClass.classLoader,
-                    arrayOf(controllerClass)
-                ) { proxy, method, args ->
-                    when (method.name) {
-                        "protectFd" ->
-                            callback(
-                                (
-                                    args?.get(0)
-                                        as Number
-                                    ).toInt()
-                            )
-
-                        "toString" ->
-                            "TrivoxDialerController"
-
-                        "hashCode" ->
-                            System.identityHashCode(
-                                proxy
-                            )
-
-                        "equals" ->
-                            proxy === args?.get(0)
-
-                        else -> false
-                    }
-                }
-            }
-
-        clazz.getMethod(
-            "registerDialerController",
-            controllerClass
-        ).invoke(null, controller)
-
-        clazz.getMethod(
-            "registerListenerController",
-            controllerClass
-        ).invoke(null, controller)
-
-        ACTIVE_CONTROLLER = controller
-
-        if (controller != null) {
-            clazz.getMethod(
-                "setDNS",
-                controllerClass,
-                String::class.java
-            ).invoke(
-                null,
-                controller,
-                "1.1.1.1:53"
-            )
+    private fun rootMessage(
+        throwable: Throwable?
+    ): String {
+        if (throwable == null) {
+            return "unknown error"
         }
+
+        var current: Throwable = throwable
+        val visited =
+            HashSet<Throwable>()
+
+        while (
+            current.cause != null &&
+            visited.add(current)
+        ) {
+            current = current.cause!!
+        }
+
+        return current.message
+            ?: current
+                .javaClass
+                .simpleName
     }
 
     private fun unavailable() =
@@ -412,19 +502,23 @@ class XrayCoreAdapter(
         )
 
     companion object {
-        private val NATIVE_LOCK = Any()
+        private val NATIVE_LOCK =
+            Any()
+
+        private val ACTIVE_PROTECT =
+            AtomicReference<
+                ((Int) -> Boolean)?
+                >(null)
 
         @Volatile
         private var ACTIVE_CONTROLLER:
             Any? = null
 
-        private const val
-            STOP_POLL_ATTEMPTS = 40
+        @Volatile
+        private var CONTROLLER_REGISTERED =
+            false
 
         private const val
-            STOP_POLL_DELAY_MS = 100L
-
-        private const val
-            CLEANUP_COOLDOWN_MS = 120L
+            CLEANUP_COOLDOWN_MS = 180L
     }
 }

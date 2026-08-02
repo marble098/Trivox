@@ -167,4 +167,11 @@
     <string name="clear_dead_profiles">Remove failed profiles</string>
     <string name="no_dead_profiles">No failed profile is available.</string>
     <string name="clear_dead_confirm">Remove %1$d failed profile(s)?</string>
+
+    <string name="refresh_diagnostics">Refresh report</string>
+    <string name="copy_diagnostics">Copy report</string>
+    <string name="clear_diagnostics">Clear logs</string>
+    <string name="clear_diagnostics_title">Clear diagnostic history?</string>
+    <string name="clear_diagnostics_message">Runtime, Xray and recorded crash logs will be deleted from this device.</string>
+    <string name="diagnostics_cleared">Diagnostic history was cleared.</string>
 </resources>

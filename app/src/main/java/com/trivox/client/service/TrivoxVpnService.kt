@@ -38,6 +38,8 @@ class TrivoxVpnService : VpnService() {
         AtomicBoolean(false)
     private val ownsCore =
         AtomicBoolean(false)
+    private val reconnectQueued =
+        AtomicBoolean(false)
 
     private lateinit var core: CoreManager
     private var tun:
@@ -352,6 +354,24 @@ class TrivoxVpnService : VpnService() {
                 profile.name
         )
 
+        handler.postDelayed(
+            {
+                val current =
+                    ConnectionRuntime.current()
+
+                if (
+                    current.sessionId ==
+                    sessionId &&
+                    current.state ==
+                    ConnectionState.CONNECTED
+                ) {
+                    Diagnostics
+                        .markNativeSessionStable()
+                }
+            },
+            NATIVE_STABILITY_WINDOW_MS
+        )
+
         registerNetworkCallback(
             settings
                 .reconnectOnNetworkChange,
@@ -445,9 +465,45 @@ class TrivoxVpnService : VpnService() {
                         return
                     }
 
-                    executeSafely {
-                        reconnectCore(
-                            request
+                    if (
+                        !reconnectQueued
+                            .compareAndSet(
+                                false,
+                                true
+                            )
+                    ) {
+                        return
+                    }
+
+                    val accepted =
+                        executeSafely {
+                            try {
+                                val latest =
+                                    ConnectionRuntime
+                                        .current()
+
+                                if (
+                                    !stopRequested
+                                        .get() &&
+                                    latest.sessionId ==
+                                    sessionId &&
+                                    latest.state ==
+                                    ConnectionState
+                                        .RECONNECTING
+                                ) {
+                                    reconnectCore(
+                                        request
+                                    )
+                                }
+                            } finally {
+                                reconnectQueued
+                                    .set(false)
+                            }
+                        }
+
+                    if (!accepted) {
+                        reconnectQueued.set(
+                            false
                         )
                     }
                 }
@@ -646,6 +702,8 @@ class TrivoxVpnService : VpnService() {
             return
         }
 
+        reconnectQueued.set(false)
+
         executeSafely {
             handler
                 .removeCallbacksAndMessages(
@@ -746,36 +804,79 @@ class TrivoxVpnService : VpnService() {
 
     private fun executeSafely(
         block: () -> Unit
-    ) {
+    ): Boolean =
         try {
             executor.execute {
                 runCatching(block)
                     .onFailure {
-                        Diagnostics.error(
-                            "VPN service failure: " +
-                                it.message
-                        )
+                        Diagnostics
+                            .recordThrowable(
+                                "VPN service task",
+                                it
+                            )
+
+                        if (
+                            !stopRequested.get() &&
+                            !cleanupStarted.get()
+                        ) {
+                            fail(
+                                "VPN service failure: " +
+                                    (
+                                        it.message
+                                            ?: "unknown"
+                                        )
+                            )
+                        }
                     }
             }
+            true
         } catch (
             _: RejectedExecutionException
         ) {
-            block()
+            Diagnostics.warning(
+                "VPN service rejected a task " +
+                    "after shutdown"
+            )
+            false
         }
-    }
 
     override fun onRevoke() {
         requestStop()
     }
 
     override fun onDestroy() {
+        stopRequested.set(true)
+        reconnectQueued.set(false)
         unregisterNetworkCallback()
         handler
             .removeCallbacksAndMessages(
                 null
             )
+
+        if (
+            ownsCore.compareAndSet(
+                true,
+                false
+            )
+        ) {
+            val stopped =
+                core.stop()
+
+            if (!stopped.success) {
+                Diagnostics.error(
+                    "VPN destroy stop failed: " +
+                        stopped.error
+                )
+            }
+        }
+
         runCatching {
             tun?.close()
+        }.onFailure {
+            Diagnostics.warning(
+                "Unable to close VPN TUN: " +
+                    it.message
+            )
         }
         tun = null
         executor.shutdown()
@@ -793,5 +894,8 @@ class TrivoxVpnService : VpnService() {
             "profile_id"
         private const val
             MONITOR_INTERVAL_MS = 1500L
+        private const val
+            NATIVE_STABILITY_WINDOW_MS =
+                30_000L
     }
 }

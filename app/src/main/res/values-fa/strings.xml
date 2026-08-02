@@ -167,4 +167,11 @@
     <string name="clear_dead_profiles">حذف کانفیگ‌های ناموفق</string>
     <string name="no_dead_profiles">کانفیگ ناموفقی وجود ندارد.</string>
     <string name="clear_dead_confirm">تعداد %1$d کانفیگ ناموفق حذف شود؟</string>
+
+    <string name="refresh_diagnostics">تازه‌سازی گزارش</string>
+    <string name="copy_diagnostics">کپی گزارش</string>
+    <string name="clear_diagnostics">پاک‌کردن لاگ‌ها</string>
+    <string name="clear_diagnostics_title">تاریخچه عیب‌یابی پاک شود؟</string>
+    <string name="clear_diagnostics_message">لاگ‌های اجرای برنامه، Xray و کرش‌های ثبت‌شده از دستگاه حذف می‌شوند.</string>
+    <string name="diagnostics_cleared">تاریخچه عیب‌یابی پاک شد.</string>
 </resources>

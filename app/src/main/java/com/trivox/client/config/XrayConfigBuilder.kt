@@ -69,7 +69,8 @@ object XrayConfigBuilder {
         profile: ConfigProfile,
         settings: AppSettings,
         mode: ConnectionMode,
-        tunFd: Int? = null
+        tunFd: Int? = null,
+        errorLogPath: String? = null
     ): String {
         settings.normalize()
 
@@ -94,13 +95,25 @@ object XrayConfigBuilder {
             }
         }
 
-        val root = JSONObject()
-            .put(
+        val log =
+            JSONObject().put(
+                "loglevel",
+                "warning"
+            )
+
+        if (
+            !errorLogPath.isNullOrBlank()
+        ) {
+            log.put(
+                "error",
+                errorLogPath
+            )
+        }
+
+        val root =
+            JSONObject().put(
                 "log",
-                JSONObject().put(
-                    "loglevel",
-                    "warning"
-                )
+                log
             )
 
         if (tunFd != null) {

@@ -1,51 +1,951 @@
 package com.trivox.client.util
 
+import android.app.ActivityManager
+import android.app.ApplicationExitInfo
 import android.content.Context
 import android.os.Build
+import android.os.Process
 import com.trivox.client.BuildConfig
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.InputStream
+import java.io.PrintWriter
+import java.io.StringWriter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 
 object Diagnostics {
-    enum class Level { ERROR, WARNING, INFO, DEBUG }
-    private lateinit var file: File
-    private const val maxBytes = 256 * 1024
-    @Volatile var debugEnabled = false
+    enum class Level {
+        ERROR,
+        WARNING,
+        INFO,
+        DEBUG
+    }
 
-    fun initialize(context: Context) { file = File(context.filesDir, "diagnostics.log") }
-    @Synchronized fun log(level: Level, message: String) {
-        if (level == Level.DEBUG && !debugEnabled) return
-        if (!::file.isInitialized) return
-        if (file.length() > maxBytes) {
-            val tail = file.readText().takeLast(maxBytes / 2)
-            file.writeText(tail.substringAfter('\n', tail))
+    private const val PREFS =
+        "trivox_diagnostics"
+    private const val MAX_RUNTIME_BYTES =
+        1024 * 1024
+    private const val MAX_CRASH_BYTES =
+        2 * 1024 * 1024
+    private const val MAX_XRAY_BYTES =
+        1024 * 1024
+    private const val MAX_ARCHIVES = 3
+    private const val REPORT_TAIL_BYTES =
+        512 * 1024
+    private const val TRACE_LIMIT_BYTES =
+        256 * 1024
+    private const val RECENT_NATIVE_CRASH_MS =
+        30 * 60 * 1000L
+
+    private val initialized =
+        AtomicBoolean(false)
+    private val handlingCrash =
+        AtomicBoolean(false)
+    private val lock = Any()
+
+    private lateinit var appContext:
+        Context
+    private lateinit var diagnosticsDir:
+        File
+    private lateinit var runtimeFile:
+        File
+    private lateinit var crashFile:
+        File
+    private lateinit var xrayFile:
+        File
+
+    private var previousHandler:
+        Thread.UncaughtExceptionHandler? =
+        null
+
+    @Volatile
+    var debugEnabled = false
+
+    fun initialize(context: Context) {
+        if (
+            !initialized.compareAndSet(
+                false,
+                true
+            )
+        ) {
+            return
         }
-        val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
-        file.appendText("$stamp ${level.name} ${sanitize(message)}\n")
-    }
-    fun error(message: String) = log(Level.ERROR, message)
-    fun warning(message: String) = log(Level.WARNING, message)
-    fun info(message: String) = log(Level.INFO, message)
-    fun debug(message: String) = log(Level.DEBUG, message)
-    fun recent(): String = if (::file.isInitialized && file.isFile) file.readText().takeLast(maxBytes) else ""
-    fun report(coreVersion: String, mode: String, state: String, profile: String, lastError: String): String = buildString {
-        appendLine("Trivox sanitized diagnostics")
-        appendLine("App: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-        appendLine("Android: ${Build.VERSION.RELEASE} API ${Build.VERSION.SDK_INT}")
-        appendLine("Device ABI: ${Build.SUPPORTED_ABIS.joinToString()}")
-        appendLine("Xray: ${sanitize(coreVersion)}")
-        appendLine("Mode: $mode")
-        appendLine("State: $state")
-        appendLine("Profile: ${sanitize(profile)}")
-        appendLine("Last error: ${sanitize(lastError)}")
-        appendLine("--- Recent logs ---")
-        append(recent())
+
+        appContext =
+            context.applicationContext
+        diagnosticsDir =
+            File(
+                appContext.filesDir,
+                "diagnostics"
+            ).apply {
+                mkdirs()
+            }
+        runtimeFile =
+            File(
+                diagnosticsDir,
+                "runtime.log"
+            )
+        crashFile =
+            File(
+                diagnosticsDir,
+                "crashes.log"
+            )
+        xrayFile =
+            File(
+                diagnosticsDir,
+                "xray-error.log"
+            )
+
+        installExceptionHandler()
+        inspectPreviousNativeCheckpoint()
+        collectHistoricalExitReasons()
+
+        info(
+            "Application session started; " +
+                "pid=${Process.myPid()}, " +
+                "version=${BuildConfig.VERSION_NAME}, " +
+                "code=${BuildConfig.VERSION_CODE}, " +
+                "git=${BuildConfig.GIT_SHA}"
+        )
     }
 
-    fun sanitize(input: String): String = input
-        .replace(Regex("(?i)(vless|vmess|trojan|ss|socks|https?)://[^\\s]+"), "<redacted-uri>")
-        .replace(Regex("(?i)\\b(uuid|password|pass|token|privateKey|publicKey|shortId)\\b\\s*[:=]\\s*[^,}\\s]+"), "$1=<redacted>")
-        .replace(Regex("[0-9a-fA-F]{8}-[0-9a-fA-F-]{27,}"), "<redacted-uuid>")
+    fun log(
+        level: Level,
+        message: String
+    ) {
+        if (
+            level == Level.DEBUG &&
+            !debugEnabled
+        ) {
+            return
+        }
+
+        if (!initialized.get()) {
+            return
+        }
+
+        runCatching {
+            synchronized(lock) {
+                val line =
+                    "${timestamp()} " +
+                        "${level.name} " +
+                        "${sanitize(message)}\n"
+
+                rotateIfNeeded(
+                    runtimeFile,
+                    MAX_RUNTIME_BYTES,
+                    line.length
+                )
+                runtimeFile.appendText(
+                    line,
+                    Charsets.UTF_8
+                )
+            }
+        }
+    }
+
+    fun error(message: String) =
+        log(Level.ERROR, message)
+
+    fun warning(message: String) =
+        log(Level.WARNING, message)
+
+    fun info(message: String) =
+        log(Level.INFO, message)
+
+    fun debug(message: String) =
+        log(Level.DEBUG, message)
+
+    fun activity(
+        event: String,
+        activityName: String
+    ) {
+        debug(
+            "Activity $event: $activityName"
+        )
+    }
+
+    fun recordThrowable(
+        category: String,
+        throwable: Throwable
+    ) {
+        if (!initialized.get()) {
+            return
+        }
+
+        val stack = StringWriter().also {
+            throwable.printStackTrace(
+                PrintWriter(it)
+            )
+        }.toString()
+
+        appendCrash(
+            buildString {
+                appendLine(
+                    "JVM throwable: " +
+                        sanitize(category)
+                )
+                appendLine(
+                    "Thread: " +
+                        Thread.currentThread().name
+                )
+                append(
+                    sanitize(stack)
+                )
+            }
+        )
+
+        error(
+            "$category: " +
+                (
+                    throwable.cause?.message
+                        ?: throwable.message
+                        ?: throwable
+                            .javaClass
+                            .simpleName
+                    )
+        )
+    }
+
+    fun nativeCheckpoint(
+        operation: String,
+        phase: String,
+        detail: String = ""
+    ) {
+        if (!initialized.get()) {
+            return
+        }
+
+        appContext
+            .getSharedPreferences(
+                PREFS,
+                Context.MODE_PRIVATE
+            )
+            .edit()
+            .putString(
+                "native_operation",
+                sanitize(operation)
+            )
+            .putString(
+                "native_phase",
+                sanitize(phase)
+            )
+            .putString(
+                "native_detail",
+                sanitize(detail)
+            )
+            .putString(
+                "native_thread",
+                Thread.currentThread().name
+            )
+            .putLong(
+                "native_timestamp",
+                System.currentTimeMillis()
+            )
+            .commit()
+
+        info(
+            "Native checkpoint: " +
+                "$operation/$phase " +
+                detail
+        )
+    }
+
+    fun xrayErrorLogPath(): String {
+        check(initialized.get()) {
+            "Diagnostics is not initialized"
+        }
+
+        synchronized(lock) {
+            rotateIfNeeded(
+                xrayFile,
+                MAX_XRAY_BYTES,
+                0
+            )
+        }
+
+        return xrayFile.absolutePath
+    }
+
+    fun hasRecentNativeCrash(): Boolean {
+        if (!initialized.get()) {
+            return false
+        }
+
+        val at =
+            appContext
+                .getSharedPreferences(
+                    PREFS,
+                    Context.MODE_PRIVATE
+                )
+                .getLong(
+                    "last_native_crash_at",
+                    0L
+                )
+
+        return at > 0 &&
+            System.currentTimeMillis() - at <
+            RECENT_NATIVE_CRASH_MS
+    }
+
+    fun markNativeSessionStable() {
+        if (!initialized.get()) {
+            return
+        }
+
+        appContext
+            .getSharedPreferences(
+                PREFS,
+                Context.MODE_PRIVATE
+            )
+            .edit()
+            .remove(
+                "last_native_crash_at"
+            )
+            .apply()
+
+        info(
+            "Native session passed the " +
+                "stability window"
+        )
+    }
+
+    fun recent(): String {
+        if (!initialized.get()) {
+            return ""
+        }
+
+        return synchronized(lock) {
+            readTail(
+                runtimeFile,
+                REPORT_TAIL_BYTES
+            )
+        }
+    }
+
+    fun crashHistory(): String {
+        if (!initialized.get()) {
+            return ""
+        }
+
+        return synchronized(lock) {
+            readTail(
+                crashFile,
+                REPORT_TAIL_BYTES
+            )
+        }
+    }
+
+    fun xrayHistory(): String {
+        if (!initialized.get()) {
+            return ""
+        }
+
+        return synchronized(lock) {
+            readTail(
+                xrayFile,
+                REPORT_TAIL_BYTES
+            )
+        }
+    }
+
+    fun clear() {
+        if (!initialized.get()) {
+            return
+        }
+
+        synchronized(lock) {
+            diagnosticsDir
+                .listFiles()
+                ?.filter {
+                    it.name.endsWith(".log") ||
+                        it.name.contains(
+                            ".log."
+                        )
+                }
+                ?.forEach {
+                    runCatching {
+                        it.delete()
+                    }
+                }
+
+            runtimeFile.createNewFile()
+            crashFile.createNewFile()
+            xrayFile.createNewFile()
+        }
+    }
+
+    fun report(
+        coreVersion: String,
+        mode: String,
+        state: String,
+        profile: String,
+        lastError: String
+    ): String =
+        buildString {
+            appendLine(
+                "Trivox diagnostics"
+            )
+            appendLine(
+                "App: " +
+                    "${BuildConfig.VERSION_NAME} " +
+                    "(${BuildConfig.VERSION_CODE})"
+            )
+            appendLine(
+                "Git: ${BuildConfig.GIT_SHA}"
+            )
+            appendLine(
+                "Android: " +
+                    "${Build.VERSION.RELEASE} " +
+                    "API ${Build.VERSION.SDK_INT}"
+            )
+            appendLine(
+                "Device: " +
+                    "${Build.MANUFACTURER} " +
+                    Build.MODEL
+            )
+            appendLine(
+                "ABI: " +
+                    Build.SUPPORTED_ABIS
+                        .joinToString()
+            )
+            appendLine(
+                "Xray: ${sanitize(coreVersion)}"
+            )
+            appendLine(
+                "Mode: ${sanitize(mode)}"
+            )
+            appendLine(
+                "State: ${sanitize(state)}"
+            )
+            appendLine(
+                "Profile: ${sanitize(profile)}"
+            )
+            appendLine(
+                "Last error: " +
+                    sanitize(lastError)
+            )
+            appendLine(
+                "Last native checkpoint: " +
+                    lastNativeCheckpoint()
+            )
+            appendLine()
+            appendLine(
+                "--- Process exits and crashes ---"
+            )
+            appendLine(
+                crashHistory()
+                    .ifBlank {
+                        "No recorded crash history."
+                    }
+            )
+            appendLine()
+            appendLine(
+                "--- Xray warning/error log ---"
+            )
+            appendLine(
+                sanitize(
+                    xrayHistory()
+                ).ifBlank {
+                    "No Xray warning/error log."
+                }
+            )
+            appendLine()
+            appendLine(
+                "--- Runtime breadcrumbs ---"
+            )
+            append(
+                recent()
+                    .ifBlank {
+                        "No runtime breadcrumbs."
+                    }
+            )
+        }
+
+    fun sanitize(input: String): String =
+        input
+            .replace(
+                Regex(
+                    "(?i)(vless|vmess|" +
+                        "trojan|ss|socks|" +
+                        "https?)://[^\\s]+"
+                ),
+                "<redacted-uri>"
+            )
+            .replace(
+                Regex(
+                    "(?i)\\b(uuid|password|" +
+                        "pass|token|privateKey|" +
+                        "publicKey|shortId)\\b" +
+                        "\\s*[:=]\\s*" +
+                        "[^,}\\s]+"
+                ),
+                "\$1=<redacted>"
+            )
+            .replace(
+                Regex(
+                    "[0-9a-fA-F]{8}-" +
+                        "[0-9a-fA-F-]{27,}"
+                ),
+                "<redacted-uuid>"
+            )
+
+    private fun installExceptionHandler() {
+        previousHandler =
+            Thread
+                .getDefaultUncaughtExceptionHandler()
+
+        Thread
+            .setDefaultUncaughtExceptionHandler {
+                    thread,
+                    throwable ->
+
+                if (
+                    handlingCrash.compareAndSet(
+                        false,
+                        true
+                    )
+                ) {
+                    val writer =
+                        StringWriter()
+
+                    throwable.printStackTrace(
+                        PrintWriter(writer)
+                    )
+
+                    appendCrash(
+                        buildString {
+                            appendLine(
+                                "Uncaught JVM crash"
+                            )
+                            appendLine(
+                                "Thread: " +
+                                    "${thread.name} " +
+                                    "(${thread.id})"
+                            )
+                            appendLine(
+                                "Native checkpoint: " +
+                                    lastNativeCheckpoint()
+                            )
+                            append(
+                                sanitize(
+                                    writer.toString()
+                                )
+                            )
+                        }
+                    )
+                }
+
+                previousHandler
+                    ?.uncaughtException(
+                        thread,
+                        throwable
+                    )
+                    ?: run {
+                        Process.killProcess(
+                            Process.myPid()
+                        )
+                    }
+            }
+    }
+
+    private fun inspectPreviousNativeCheckpoint() {
+        val prefs =
+            appContext
+                .getSharedPreferences(
+                    PREFS,
+                    Context.MODE_PRIVATE
+                )
+
+        val phase =
+            prefs.getString(
+                "native_phase",
+                ""
+            ).orEmpty()
+
+        if (phase != "begin") {
+            return
+        }
+
+        appendCrash(
+            buildString {
+                appendLine(
+                    "Previous process ended while " +
+                        "a native operation was active"
+                )
+                appendLine(
+                    "Operation: " +
+                        prefs.getString(
+                            "native_operation",
+                            "unknown"
+                        )
+                )
+                appendLine(
+                    "Thread: " +
+                        prefs.getString(
+                            "native_thread",
+                            "unknown"
+                        )
+                )
+                appendLine(
+                    "Detail: " +
+                        prefs.getString(
+                            "native_detail",
+                            ""
+                        )
+                )
+                appendLine(
+                    "Started at: " +
+                        prefs.getLong(
+                            "native_timestamp",
+                            0L
+                        )
+                )
+            }
+        )
+    }
+
+    private fun collectHistoricalExitReasons() {
+        if (
+            Build.VERSION.SDK_INT <
+            Build.VERSION_CODES.R
+        ) {
+            return
+        }
+
+        runCatching {
+            val manager =
+                appContext
+                    .getSystemService(
+                        ActivityManager::class.java
+                    )
+
+            val prefs =
+                appContext
+                    .getSharedPreferences(
+                        PREFS,
+                        Context.MODE_PRIVATE
+                    )
+
+            val lastSeen =
+                prefs.getLong(
+                    "last_exit_timestamp",
+                    0L
+                )
+
+            val exits:
+                List<ApplicationExitInfo> =
+                manager
+                    .getHistoricalProcessExitReasons(
+                        appContext.packageName,
+                        0,
+                        12
+                    )
+                    .filter {
+                        it.timestamp > lastSeen
+                    }
+                    .sortedBy {
+                        it.timestamp
+                    }
+
+            var newest = lastSeen
+
+            exits.forEach {
+                    info: ApplicationExitInfo ->
+                newest =
+                    maxOf(
+                        newest,
+                        info.timestamp
+                    )
+
+                val trace =
+                    runCatching {
+                        info.traceInputStream
+                            ?.use {
+                                input: InputStream ->
+                                readLimited(
+                                    input,
+                                    TRACE_LIMIT_BYTES
+                                )
+                            }
+                    }.getOrNull()
+                        .orEmpty()
+
+                appendCrash(
+                    buildString {
+                        appendLine(
+                            "Historical process exit"
+                        )
+                        appendLine(
+                            "Timestamp: " +
+                                info.timestamp
+                        )
+                        appendLine(
+                            "Reason: " +
+                                reasonLabel(
+                                    info.reason
+                                ) +
+                                " (${info.reason})"
+                        )
+                        appendLine(
+                            "Status: ${info.status}"
+                        )
+                        appendLine(
+                            "Importance: " +
+                                info.importance
+                        )
+                        appendLine(
+                            "Process: " +
+                                info.processName
+                        )
+                        appendLine(
+                            "Description: " +
+                                info.description
+                                    .orEmpty()
+                        )
+                        appendLine(
+                            "PSS/RSS: " +
+                                "${info.pss}/" +
+                                info.rss
+                        )
+
+                        if (trace.isNotBlank()) {
+                            appendLine(
+                                "--- Exit trace ---"
+                            )
+                            append(
+                                sanitize(trace)
+                            )
+                        }
+                    }
+                )
+
+                if (
+                    info.reason ==
+                    ApplicationExitInfo
+                        .REASON_CRASH_NATIVE
+                ) {
+                    prefs
+                        .edit()
+                        .putLong(
+                            "last_native_crash_at",
+                            info.timestamp
+                        )
+                        .apply()
+                }
+            }
+
+            if (newest > lastSeen) {
+                prefs
+                    .edit()
+                    .putLong(
+                        "last_exit_timestamp",
+                        newest
+                    )
+                    .apply()
+            }
+        }.onFailure {
+            warning(
+                "Unable to read historical " +
+                    "process exits: " +
+                    it.message
+            )
+        }
+    }
+
+    private fun lastNativeCheckpoint():
+        String {
+        if (!initialized.get()) {
+            return "unavailable"
+        }
+
+        val prefs =
+            appContext
+                .getSharedPreferences(
+                    PREFS,
+                    Context.MODE_PRIVATE
+                )
+
+        val operation =
+            prefs.getString(
+                "native_operation",
+                "none"
+            )
+        val phase =
+            prefs.getString(
+                "native_phase",
+                "none"
+            )
+        val thread =
+            prefs.getString(
+                "native_thread",
+                "unknown"
+            )
+        val at =
+            prefs.getLong(
+                "native_timestamp",
+                0L
+            )
+
+        return "$operation/$phase " +
+            "thread=$thread at=$at"
+    }
+
+    private fun appendCrash(text: String) {
+        if (!initialized.get()) {
+            return
+        }
+
+        runCatching {
+            synchronized(lock) {
+                val value =
+                    buildString {
+                        appendLine()
+                        appendLine(
+                            "===== ${timestamp()} ====="
+                        )
+                        appendLine(text.trim())
+                    }
+
+                rotateIfNeeded(
+                    crashFile,
+                    MAX_CRASH_BYTES,
+                    value.length
+                )
+                crashFile.appendText(
+                    value,
+                    Charsets.UTF_8
+                )
+            }
+        }
+    }
+
+    private fun rotateIfNeeded(
+        file: File,
+        maxBytes: Int,
+        incomingChars: Int
+    ) {
+        if (
+            file.length() +
+            incomingChars <
+            maxBytes
+        ) {
+            return
+        }
+
+        for (
+            index in MAX_ARCHIVES downTo 1
+        ) {
+            val current =
+                if (index == 1) {
+                    file
+                } else {
+                    File(
+                        file.parentFile,
+                        "${file.name}." +
+                            "${index - 1}"
+                    )
+                }
+
+            val next =
+                File(
+                    file.parentFile,
+                    "${file.name}.$index"
+                )
+
+            if (current.exists()) {
+                if (next.exists()) {
+                    next.delete()
+                }
+                current.renameTo(next)
+            }
+        }
+
+        file.createNewFile()
+    }
+
+    private fun readTail(
+        file: File,
+        maxChars: Int
+    ): String =
+        runCatching {
+            if (!file.isFile) {
+                ""
+            } else {
+                file.readText(
+                    Charsets.UTF_8
+                ).takeLast(maxChars)
+            }
+        }.getOrDefault("")
+
+    private fun readLimited(
+        input: InputStream,
+        limit: Int
+    ): String {
+        val output =
+            ByteArrayOutputStream()
+        val buffer =
+            ByteArray(8192)
+        var remaining = limit
+
+        while (remaining > 0) {
+            val read =
+                input.read(
+                    buffer,
+                    0,
+                    minOf(
+                        buffer.size,
+                        remaining
+                    )
+                )
+
+            if (read <= 0) {
+                break
+            }
+
+            output.write(
+                buffer,
+                0,
+                read
+            )
+            remaining -= read
+        }
+
+        return output.toString(
+            Charsets.UTF_8.name()
+        )
+    }
+
+    private fun reasonLabel(
+        reason: Int
+    ): String =
+        when (reason) {
+            0 -> "UNKNOWN"
+            1 -> "EXIT_SELF"
+            2 -> "SIGNALED"
+            3 -> "LOW_MEMORY"
+            4 -> "CRASH"
+            5 -> "CRASH_NATIVE"
+            6 -> "ANR"
+            7 -> "INITIALIZATION_FAILURE"
+            8 -> "PERMISSION_CHANGE"
+            9 -> "EXCESSIVE_RESOURCE_USAGE"
+            10 -> "USER_REQUESTED"
+            11 -> "USER_STOPPED"
+            12 -> "DEPENDENCY_DIED"
+            13 -> "OTHER"
+            14 -> "FREEZER"
+            15 -> "PACKAGE_STATE_CHANGE"
+            16 -> "PACKAGE_UPDATED"
+            else -> "REASON_$reason"
+        }
+
+    private fun timestamp(): String =
+        SimpleDateFormat(
+            "yyyy-MM-dd HH:mm:ss.SSS",
+            Locale.US
+        ).format(Date())
 }

@@ -242,6 +242,24 @@ class ConnectionService : Service() {
                 profile.name
         )
 
+        handler.postDelayed(
+            {
+                val current =
+                    ConnectionRuntime.current()
+
+                if (
+                    current.sessionId ==
+                    sessionId &&
+                    current.state ==
+                    ConnectionState.CONNECTED
+                ) {
+                    Diagnostics
+                        .markNativeSessionStable()
+                }
+            },
+            NATIVE_STABILITY_WINDOW_MS
+        )
+
         scheduleMonitor()
     }
 
@@ -435,24 +453,42 @@ class ConnectionService : Service() {
 
     private fun executeSafely(
         block: () -> Unit
-    ) {
+    ): Boolean =
         try {
             executor.execute {
                 runCatching(block)
                     .onFailure {
-                        Diagnostics.error(
-                            "Connection service " +
-                                "failure: " +
-                                it.message
-                        )
+                        Diagnostics
+                            .recordThrowable(
+                                "Connection service task",
+                                it
+                            )
+
+                        if (
+                            !stopRequested.get() &&
+                            !cleanupStarted.get()
+                        ) {
+                            fail(
+                                "Connection service " +
+                                    "failure: " +
+                                    (
+                                        it.message
+                                            ?: "unknown"
+                                        )
+                            )
+                        }
                     }
             }
+            true
         } catch (
             _: RejectedExecutionException
         ) {
-            block()
+            Diagnostics.warning(
+                "Connection service rejected " +
+                    "a task after shutdown"
+            )
+            false
         }
-    }
 
     override fun onDestroy() {
         handler
@@ -478,5 +514,8 @@ class ConnectionService : Service() {
             "profile_id"
         private const val
             MONITOR_INTERVAL_MS = 1500L
+        private const val
+            NATIVE_STABILITY_WINDOW_MS =
+                30_000L
     }
 }

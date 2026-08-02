@@ -108,6 +108,13 @@ jobs:
             tools/prepare-core.sh
 
           python3 -m py_compile tools/generate-core-manifest.py
+          if grep -R --fixed-strings             "registerController(null)"             app/src/main/java; then
+            echo "Unsafe null native controller registration detected." >&2
+            exit 1
+          fi
+          grep -Fq             "ACTIVE_PROTECT"             app/src/main/java/com/trivox/client/core/XrayCoreAdapter.kt
+          grep -Fq             "getHistoricalProcessExitReasons"             app/src/main/java/com/trivox/client/util/Diagnostics.kt
+          grep -Fq             "DEFAULT_MIXED_PORT = 10202"             app/src/main/java/com/trivox/client/data/Models.kt
 
           grep -Fq 'protocol", "mixed"' \
             app/src/main/java/com/trivox/client/config/XrayConfigBuilder.kt
