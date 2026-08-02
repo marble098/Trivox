@@ -250,9 +250,41 @@ class ConfigParserTest {
             )
         )
 
+        val proxyInbounds =
+            proxy.getJSONArray("inbounds")
+
         assertEquals(
-            2,
-            proxy.getJSONArray("inbounds").length()
+            1,
+            proxyInbounds.length()
+        )
+
+        val mixedInbound =
+            proxyInbounds.getJSONObject(0)
+
+        assertEquals(
+            "mixed",
+            mixedInbound.getString("protocol")
+        )
+
+        assertEquals(
+            "mixed-in",
+            mixedInbound.getString("tag")
+        )
+
+        assertEquals(
+            "127.0.0.1",
+            mixedInbound.getString("listen")
+        )
+
+        assertEquals(
+            10202,
+            mixedInbound.getInt("port")
+        )
+
+        assertTrue(
+            mixedInbound
+                .getJSONObject("settings")
+                .getBoolean("udp")
         )
 
         val proxyJson = proxy.toString()

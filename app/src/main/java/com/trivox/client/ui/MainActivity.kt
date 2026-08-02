@@ -346,31 +346,62 @@ class MainActivity : AppCompatActivity() {
         renderConnectedInfo(current)
     }
 
-    private fun renderConnectedInfo(snapshot: ConnectionRuntime.Snapshot) {
-        val profile = repository.find(snapshot.profileId)
-        val connected = snapshot.state == ConnectionState.CONNECTED && profile != null
+    private fun renderConnectedInfo(
+        snapshot: ConnectionRuntime.Snapshot
+    ) {
+        val connectedProfile =
+            if (
+                snapshot.state ==
+                ConnectionState.CONNECTED
+            ) {
+                repository.find(
+                    snapshot.profileId
+                )
+            } else {
+                null
+            }
 
         livePingText.text =
-            if (connected) {
-                profile?.latencyMs?.let {
-                    getString(R.string.live_ping_value, it)
-                } ?: getString(R.string.live_ping_waiting)
-            } else {
-                getString(R.string.live_ping_off)
-            }
+            connectedProfile
+                ?.latencyMs
+                ?.let { latency ->
+                    getString(
+                        R.string.live_ping_value,
+                        latency
+                    )
+                }
+                ?: if (connectedProfile != null) {
+                    getString(
+                        R.string.live_ping_waiting
+                    )
+                } else {
+                    getString(
+                        R.string.live_ping_off
+                    )
+                }
 
         exitInfoText.text =
-            if (connected && profile != null) {
-                profileExitLine(profile).ifBlank {
-                    getString(R.string.exit_info_waiting)
+            connectedProfile
+                ?.let { profile ->
+                    profileExitLine(profile)
+                        .ifBlank {
+                            getString(
+                                R.string.exit_info_waiting
+                            )
+                        }
                 }
-            } else {
-                getString(R.string.exit_info_off)
-            }
+                ?: getString(
+                    R.string.exit_info_off
+                )
 
-        refreshExitButton.isEnabled = connected
+        refreshExitButton.isEnabled =
+            connectedProfile != null
+
         copySummaryButton.isEnabled =
-            repository.find(snapshot.profileId ?: repository.selectedId()) != null
+            repository.find(
+                snapshot.profileId
+                    ?: repository.selectedId()
+            ) != null
     }
 
     private fun showImportDialog() {
