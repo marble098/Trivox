@@ -67,14 +67,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           commit_count="$(git rev-list --count HEAD)"
           version_code="$((1000 + commit_count))"
           version_name="0.2.${commit_count}"
           short_sha="$(git rev-parse --short=8 HEAD)"
 
-          echo "TRIVOX_VERSION_CODE=$version_code" >> "$GITHUB_ENV"
-          echo "TRIVOX_VERSION_NAME=$version_name" >> "$GITHUB_ENV"
-          echo "TRIVOX_GIT_SHA=$short_sha" >> "$GITHUB_ENV"
+          {
+            printf 'TRIVOX_VERSION_CODE=%s\n' "$version_code"
+            printf 'TRIVOX_VERSION_NAME=%s\n' "$version_name"
+            printf 'TRIVOX_GIT_SHA=%s\n' "$short_sha"
+          } >> "$GITHUB_ENV"
 
           {
             echo "### Trivox automatic version"
@@ -105,6 +108,12 @@ jobs:
             tools/prepare-core.sh
 
           python3 -m py_compile tools/generate-core-manifest.py
+
+          grep -Fq 'protocol", "mixed"' \
+            app/src/main/java/com/trivox/client/config/XrayConfigBuilder.kt
+          grep -Fq 'DEFAULT_MIXED_PORT = 10202' \
+            app/src/main/java/com/trivox/client/data/Models.kt
+          grep -Fq 'create("persistent")' app/build.gradle.kts
 
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
@@ -147,14 +156,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           commit_count="$(git rev-list --count HEAD)"
           version_code="$((1000 + commit_count))"
           version_name="0.2.${commit_count}"
           short_sha="$(git rev-parse --short=8 HEAD)"
 
-          echo "TRIVOX_VERSION_CODE=$version_code" >> "$GITHUB_ENV"
-          echo "TRIVOX_VERSION_NAME=$version_name" >> "$GITHUB_ENV"
-          echo "TRIVOX_GIT_SHA=$short_sha" >> "$GITHUB_ENV"
+          {
+            printf 'TRIVOX_VERSION_CODE=%s\n' "$version_code"
+            printf 'TRIVOX_VERSION_NAME=%s\n' "$version_name"
+            printf 'TRIVOX_GIT_SHA=%s\n' "$short_sha"
+          } >> "$GITHUB_ENV"
 
       - name: Fix script permissions
         shell: bash
@@ -206,10 +218,12 @@ jobs:
             exit 2
           fi
 
-          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
-          printf 'abis=%s\n' "$abis" >> "$GITHUB_OUTPUT"
-          printf 'latest_stable=%s\n' "$latest_stable" >> "$GITHUB_OUTPUT"
-          printf 'latest_prerelease=%s\n' "$latest_prerelease" >> "$GITHUB_OUTPUT"
+          {
+            printf 'version=%s\n' "$version"
+            printf 'abis=%s\n' "$abis"
+            printf 'latest_stable=%s\n' "$latest_stable"
+            printf 'latest_prerelease=%s\n' "$latest_prerelease"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Download and verify official libXray
         shell: bash
@@ -251,7 +265,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          for value in             "$KEYSTORE_B64"             "$KEYSTORE_PASSWORD"             "$KEY_ALIAS"             "$KEY_PASSWORD"             "$EXPECTED_CERT_SHA256"; do
+          for value in \
+            "$KEYSTORE_B64" \
+            "$KEYSTORE_PASSWORD" \
+            "$KEY_ALIAS" \
+            "$KEY_PASSWORD" \
+            "$EXPECTED_CERT_SHA256"
+          do
             [[ -n "$value" ]] || {
               echo "Persistent signing secrets are incomplete." >&2
               exit 1
@@ -259,20 +279,21 @@ jobs:
           done
 
           umask 077
+
           printf '%s' "$KEYSTORE_B64" |
             base64 --decode > "$RUNNER_TEMP/trivox-release.jks"
 
-          keytool -list             -keystore "$RUNNER_TEMP/trivox-release.jks"             -storepass "$KEYSTORE_PASSWORD"             -alias "$KEY_ALIAS" > /dev/null
+          keytool -list \
+            -keystore "$RUNNER_TEMP/trivox-release.jks" \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -alias "$KEY_ALIAS" \
+            > /dev/null
 
           {
-            printf 'storeFile=%s
-' "$RUNNER_TEMP/trivox-release.jks"
-            printf 'storePassword=%s
-' "$KEYSTORE_PASSWORD"
-            printf 'keyAlias=%s
-' "$KEY_ALIAS"
-            printf 'keyPassword=%s
-' "$KEY_PASSWORD"
+            printf '%s\n' "storeFile=$RUNNER_TEMP/trivox-release.jks"
+            printf '%s\n' "storePassword=$KEYSTORE_PASSWORD"
+            printf '%s\n' "keyAlias=$KEY_ALIAS"
+            printf '%s\n' "keyPassword=$KEY_PASSWORD"
           } > signing.properties
 
       - name: Build selected variants
@@ -292,12 +313,12 @@ jobs:
 
           test -s dist/SHA256SUMS.txt
 
-          cat > dist/VERSION.txt <<VERSION
-          versionName=${TRIVOX_VERSION_NAME}
-          versionCode=${TRIVOX_VERSION_CODE}
-          gitSha=${TRIVOX_GIT_SHA}
-          coreVersion=${{ steps.core.outputs.version }}
-          VERSION
+          {
+            printf 'versionName=%s\n' "$TRIVOX_VERSION_NAME"
+            printf 'versionCode=%s\n' "$TRIVOX_VERSION_CODE"
+            printf 'gitSha=%s\n' "$TRIVOX_GIT_SHA"
+            printf 'coreVersion=%s\n' "${{ steps.core.outputs.version }}"
+          } > dist/VERSION.txt
 
           ls -lh dist/*.apk
           cat dist/SHA256SUMS.txt
@@ -311,10 +332,14 @@ jobs:
           set -euo pipefail
 
           apksigner="$(
-            find "$ANDROID_HOME/build-tools"               -type f -name apksigner |
+            find "$ANDROID_HOME/build-tools" \
+              -type f \
+              -name apksigner \
+              -print |
               sort -V |
               tail -n 1
           )"
+
           [[ -x "$apksigner" ]] || {
             echo "apksigner was not found." >&2
             exit 1
@@ -326,9 +351,16 @@ jobs:
               tr '[:lower:]' '[:upper:]'
           )"
 
+          [[ -n "$expected" ]] || {
+            echo "Expected certificate digest is empty." >&2
+            exit 1
+          }
+
           first=""
+
           for apk in dist/*.apk; do
             "$apksigner" verify --verbose "$apk"
+
             actual="$(
               "$apksigner" verify --print-certs "$apk" |
                 sed -n 's/^Signer #1 certificate SHA-256 digest: //p' |
@@ -336,12 +368,19 @@ jobs:
                 tr -d ':[:space:]' |
                 tr '[:lower:]' '[:upper:]'
             )"
+
+            [[ -n "$actual" ]] || {
+              echo "Could not read certificate digest from $apk" >&2
+              exit 1
+            }
+
             [[ "$actual" == "$expected" ]] || {
               echo "Unexpected certificate for $apk" >&2
               echo "Expected: $expected" >&2
               echo "Actual:   $actual" >&2
               exit 1
             }
+
             if [[ -z "$first" ]]; then
               first="$actual"
             elif [[ "$first" != "$actual" ]]; then
@@ -409,22 +448,11 @@ jobs:
             echo
 
             for apk in dist/*.apk; do
-              name=$(basename -- "$apk")
+              name="$(basename -- "$apk")"
               echo "- [$name](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${release_tag}/${name})"
             done
 
             echo "- [SHA256SUMS.txt](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${release_tag}/SHA256SUMS.txt)"
             echo "- [VERSION.txt](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${release_tag}/VERSION.txt)"
             echo "- [SIGNING_CERT_SHA256.txt](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${release_tag}/SIGNING_CERT_SHA256.txt)"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Explain pull request output policy
-        if: github.event_name == 'pull_request'
-        shell: bash
-        run: |
-          {
-            echo "### APK build passed"
-            echo
-            echo "APK publishing is intentionally disabled for pull requests."
-            echo "Run this workflow manually or push to main/master to publish direct APK files in Releases."
           } >> "$GITHUB_STEP_SUMMARY"
