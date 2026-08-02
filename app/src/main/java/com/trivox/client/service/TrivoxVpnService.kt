@@ -10,7 +10,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
-import androidx.core.app.NotificationManagerCompat
 import com.trivox.client.core.ConnectionRuntime
 import com.trivox.client.core.CoreManager
 import com.trivox.client.core.CoreStartRequest
@@ -123,9 +122,18 @@ class TrivoxVpnService : VpnService() {
                 if (state !in setOf(ConnectionState.CONNECTED, ConnectionState.RECONNECTING)) return
                 if (state == ConnectionState.CONNECTED && !core.isRunning()) { fail("Xray stopped unexpectedly"); return }
                 val current = ConnectionRuntime.current()
-                NotificationManagerCompat.from(this@TrivoxVpnService).notify(NotificationSupport.ID,
-                    NotificationSupport.build(this@TrivoxVpnService, current.profileName, startedElapsed,
-                        Intent(this@TrivoxVpnService, TrivoxVpnService::class.java).setAction(ACTION_STOP)))
+                NotificationSupport.notifyIfAllowed(
+    this@TrivoxVpnService,
+    NotificationSupport.build(
+        this@TrivoxVpnService,
+        current.profileName,
+        startedElapsed,
+        Intent(
+            this@TrivoxVpnService,
+            TrivoxVpnService::class.java
+        ).setAction(ACTION_STOP)
+    )
+)
                 handler.postDelayed(this, 1000)
             }
         })
