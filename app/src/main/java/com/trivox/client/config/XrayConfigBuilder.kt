@@ -8,11 +8,18 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 object Validators {
-    fun validPort(port: Int): Boolean = port in 1..65535
+    fun validPort(port: Int): Boolean =
+        port in 1..65535
 
     fun validateDns(value: String): Boolean {
         val text = value.trim()
-        if (text.isBlank() || text.any(Char::isWhitespace)) return false
+
+        if (
+            text.isBlank() ||
+            text.any(Char::isWhitespace)
+        ) {
+            return false
+        }
 
         if (
             text.startsWith("https://") ||
@@ -23,8 +30,13 @@ object Validators {
             return true
         }
 
-        if (text.startsWith('[')) return text.contains(']')
-        return text.matches(Regex("[A-Za-z0-9._:-]+"))
+        if (text.startsWith('[')) {
+            return text.contains(']')
+        }
+
+        return text.matches(
+            Regex("[A-Za-z0-9._:-]+")
+        )
     }
 }
 
@@ -59,12 +71,14 @@ object XrayConfigBuilder {
         mode: ConnectionMode,
         tunFd: Int? = null
     ): String {
-        require(Validators.validPort(settings.socksPort)) {
-            "Invalid SOCKS port"
+        settings.normalize()
+
+        require(
+            Validators.validPort(settings.socksPort)
+        ) {
+            "Invalid mixed proxy port"
         }
-        require(Validators.validPort(settings.httpPort)) {
-            "Invalid HTTP port"
-        }
+
         require(settings.mtu in 576..9000) {
             "MTU must be between 576 and 9000"
         }
@@ -72,19 +86,30 @@ object XrayConfigBuilder {
         if (settings.dnsMode == DnsMode.CUSTOM) {
             require(
                 settings.customDns.isNotEmpty() &&
-                    settings.customDns.all(Validators::validateDns)
+                    settings.customDns.all(
+                        Validators::validateDns
+                    )
             ) {
                 "Invalid custom DNS endpoint"
             }
         }
 
         val root = JSONObject()
-            .put("log", JSONObject().put("loglevel", "warning"))
+            .put(
+                "log",
+                JSONObject().put(
+                    "loglevel",
+                    "warning"
+                )
+            )
 
         if (tunFd != null) {
             root.put(
                 "env",
-                JSONObject().put("xray.tun.fd", tunFd.toString())
+                JSONObject().put(
+                    "xray.tun.fd",
+                    tunFd.toString()
+                )
             )
         }
 
@@ -93,12 +118,14 @@ object XrayConfigBuilder {
             if (mode == ConnectionMode.VPN) {
                 vpnInbounds(settings)
             } else {
-                proxyInbounds(settings)
+                mixedProxyInbound(settings)
             }
         )
 
-        val proxy = normalizeOutbound(JSONObject(profile.outboundJson))
-            .put("tag", "proxy")
+        val proxy =
+            normalizeOutbound(
+                JSONObject(profile.outboundJson)
+            ).put("tag", "proxy")
 
         root.put(
             "outbounds",
@@ -106,28 +133,49 @@ object XrayConfigBuilder {
                 .put(proxy)
                 .put(
                     JSONObject()
-                        .put("protocol", "freedom")
+                        .put(
+                            "protocol",
+                            "freedom"
+                        )
                         .put("tag", "direct")
                 )
                 .put(
                     JSONObject()
-                        .put("protocol", "blackhole")
+                        .put(
+                            "protocol",
+                            "blackhole"
+                        )
                         .put("tag", "block")
                 )
         )
 
-        root.put("dns", dns(profile, settings))
+        root.put(
+            "dns",
+            dns(profile, settings)
+        )
+
         root.put(
             "routing",
             JSONObject()
-                .put("domainStrategy", "IPIfNonMatch")
+                .put(
+                    "domainStrategy",
+                    "IPIfNonMatch"
+                )
                 .put(
                     "rules",
                     JSONArray().put(
                         JSONObject()
                             .put("type", "field")
-                            .put("ip", JSONArray(privateNetworks))
-                            .put("outboundTag", "direct")
+                            .put(
+                                "ip",
+                                JSONArray(
+                                    privateNetworks
+                                )
+                            )
+                            .put(
+                                "outboundTag",
+                                "direct"
+                            )
                     )
                 )
         )
@@ -135,97 +183,142 @@ object XrayConfigBuilder {
         return root.toString(2)
     }
 
-    private fun normalizeOutbound(outbound: JSONObject): JSONObject {
-        val stream = outbound.optJSONObject("streamSettings") ?: return outbound
-        val network = stream.optString("network").trim().lowercase()
+    private fun normalizeOutbound(
+        outbound: JSONObject
+    ): JSONObject {
+        val stream =
+            outbound.optJSONObject(
+                "streamSettings"
+            ) ?: return outbound
 
-        if (network.isBlank() || network == "none" || network == "null") {
+        val network = stream
+            .optString("network")
+            .trim()
+            .lowercase()
+
+        if (
+            network.isBlank() ||
+            network == "none" ||
+            network == "null"
+        ) {
             stream.put("network", "tcp")
         }
 
         return outbound
     }
 
-    private fun proxyInbounds(settings: AppSettings): JSONArray =
-        JSONArray()
+    private fun mixedProxyInbound(
+        settings: AppSettings
+    ): JSONArray = JSONArray().put(
+        JSONObject()
+            .put("tag", "mixed-in")
+            .put("listen", "127.0.0.1")
+            .put("port", settings.socksPort)
+            .put("protocol", "mixed")
             .put(
+                "settings",
                 JSONObject()
-                    .put("tag", "socks-in")
-                    .put("listen", "127.0.0.1")
-                    .put("port", settings.socksPort)
-                    .put("protocol", "socks")
+                    .put("udp", true)
+                    .put("auth", "noauth")
+            )
+            .put(
+                "sniffing",
+                JSONObject()
+                    .put("enabled", true)
                     .put(
-                        "settings",
-                        JSONObject()
-                            .put("udp", true)
-                            .put("auth", "noauth")
+                        "destOverride",
+                        JSONArray()
+                            .put("http")
+                            .put("tls")
+                            .put("quic")
+                    )
+                    .put(
+                        "routeOnly",
+                        false
                     )
             )
-            .put(
-                JSONObject()
-                    .put("tag", "http-in")
-                    .put("listen", "127.0.0.1")
-                    .put("port", settings.httpPort)
-                    .put("protocol", "http")
-                    .put("settings", JSONObject())
-            )
+    )
 
-    private fun vpnInbounds(settings: AppSettings): JSONArray =
-        JSONArray().put(
-            JSONObject()
-                .put("tag", "tun-in")
-                .put("port", 0)
-                .put("protocol", "tun")
-                .put(
-                    "settings",
-                    JSONObject()
-                        .put("name", "trivox0")
-                        .put("mtu", settings.mtu)
-                )
-        )
+    private fun vpnInbounds(
+        settings: AppSettings
+    ): JSONArray = JSONArray().put(
+        JSONObject()
+            .put("tag", "tun-in")
+            .put("port", 0)
+            .put("protocol", "tun")
+            .put(
+                "settings",
+                JSONObject()
+                    .put("name", "trivox0")
+                    .put("mtu", settings.mtu)
+            )
+    )
 
     private fun dns(
         profile: ConfigProfile,
         settings: AppSettings
-    ): JSONObject =
-        when (settings.dnsMode) {
-            DnsMode.IMPORTED ->
-                profile.originalDnsJson?.let(::JSONObject) ?: defaultDns()
+    ): JSONObject = when (settings.dnsMode) {
+        DnsMode.IMPORTED ->
+            profile.originalDnsJson
+                ?.let(::JSONObject)
+                ?: defaultDns()
 
-            DnsMode.CUSTOM ->
-                JSONObject().put("servers", JSONArray(settings.customDns))
+        DnsMode.CUSTOM ->
+            JSONObject().put(
+                "servers",
+                JSONArray(settings.customDns)
+            )
 
-            DnsMode.SYSTEM ->
-                JSONObject().put("servers", JSONArray().put("localhost"))
+        DnsMode.SYSTEM ->
+            JSONObject().put(
+                "servers",
+                JSONArray().put("localhost")
+            )
 
-            DnsMode.DIRECT ->
-                JSONObject().put(
+        DnsMode.DIRECT ->
+            JSONObject().put(
+                "servers",
+                JSONArray().put(
+                    JSONObject()
+                        .put(
+                            "address",
+                            "1.1.1.1"
+                        )
+                        .put(
+                            "skipFallback",
+                            true
+                        )
+                )
+            )
+
+        DnsMode.THROUGH_PROXY ->
+            JSONObject()
+                .put(
                     "servers",
                     JSONArray().put(
-                        JSONObject()
-                            .put("address", "1.1.1.1")
-                            .put("skipFallback", true)
+                        "https://1.1.1.1/dns-query"
                     )
                 )
+                .put(
+                    "queryStrategy",
+                    "UseIP"
+                )
 
-            DnsMode.THROUGH_PROXY ->
-                JSONObject()
-                    .put(
-                        "servers",
-                        JSONArray().put("https://1.1.1.1/dns-query")
-                    )
-                    .put("queryStrategy", "UseIP")
-
-            DnsMode.TRIVOX_DEFAULT -> defaultDns()
-        }
+        DnsMode.TRIVOX_DEFAULT ->
+            defaultDns()
+    }
 
     private fun defaultDns(): JSONObject =
         JSONObject()
             .put(
                 "servers",
                 JSONArray()
-                    .put("https://1.1.1.1/dns-query")
-                    .put("https://8.8.8.8/dns-query")
+                    .put(
+                        "https://1.1.1.1/dns-query"
+                    )
+                    .put(
+                        "https://8.8.8.8/dns-query"
+                    )
             )
             .put("queryStrategy", "UseIP")
 }

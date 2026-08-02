@@ -129,6 +129,7 @@ jobs:
 
   build:
     name: Build direct-download APKs
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     needs: validate
     timeout-minutes: 60
@@ -239,35 +240,40 @@ jobs:
           test -s app/src/main/assets/core-manifest.json
           test -s gradle.properties
 
-      - name: Configure optional release signing
+      - name: Configure persistent APK signing
         shell: bash
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          EXPECTED_CERT_SHA256: ${{ secrets.ANDROID_CERT_SHA256 }}
         run: |
           set -euo pipefail
 
-          if [[ -n "$KEYSTORE_B64" && \
-                -n "$KEYSTORE_PASSWORD" && \
-                -n "$KEY_ALIAS" && \
-                -n "$KEY_PASSWORD" ]]; then
+          for value in             "$KEYSTORE_B64"             "$KEYSTORE_PASSWORD"             "$KEY_ALIAS"             "$KEY_PASSWORD"             "$EXPECTED_CERT_SHA256"; do
+            [[ -n "$value" ]] || {
+              echo "Persistent signing secrets are incomplete." >&2
+              exit 1
+            }
+          done
 
-            umask 077
+          umask 077
+          printf '%s' "$KEYSTORE_B64" |
+            base64 --decode > "$RUNNER_TEMP/trivox-release.jks"
 
-            printf '%s' "$KEYSTORE_B64" |
-              base64 --decode > "$RUNNER_TEMP/trivox-release.jks"
+          keytool -list             -keystore "$RUNNER_TEMP/trivox-release.jks"             -storepass "$KEYSTORE_PASSWORD"             -alias "$KEY_ALIAS" > /dev/null
 
-            {
-              printf 'storeFile=%s\n' "$RUNNER_TEMP/trivox-release.jks"
-              printf 'storePassword=%s\n' "$KEYSTORE_PASSWORD"
-              printf 'keyAlias=%s\n' "$KEY_ALIAS"
-              printf 'keyPassword=%s\n' "$KEY_PASSWORD"
-            } > signing.properties
-          else
-            echo "Signing secrets are not configured; release APKs use the installable debug key."
-          fi
+          {
+            printf 'storeFile=%s
+' "$RUNNER_TEMP/trivox-release.jks"
+            printf 'storePassword=%s
+' "$KEYSTORE_PASSWORD"
+            printf 'keyAlias=%s
+' "$KEY_ALIAS"
+            printf 'keyPassword=%s
+' "$KEY_PASSWORD"
+          } > signing.properties
 
       - name: Build selected variants
         shell: bash
@@ -296,6 +302,55 @@ jobs:
           ls -lh dist/*.apk
           cat dist/SHA256SUMS.txt
           cat dist/VERSION.txt
+
+      - name: Verify stable APK certificate
+        shell: bash
+        env:
+          EXPECTED_CERT_SHA256: ${{ secrets.ANDROID_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+
+          apksigner="$(
+            find "$ANDROID_HOME/build-tools"               -type f -name apksigner |
+              sort -V |
+              tail -n 1
+          )"
+          [[ -x "$apksigner" ]] || {
+            echo "apksigner was not found." >&2
+            exit 1
+          }
+
+          expected="$(
+            printf '%s' "$EXPECTED_CERT_SHA256" |
+              tr -d ':[:space:]' |
+              tr '[:lower:]' '[:upper:]'
+          )"
+
+          first=""
+          for apk in dist/*.apk; do
+            "$apksigner" verify --verbose "$apk"
+            actual="$(
+              "$apksigner" verify --print-certs "$apk" |
+                sed -n 's/^Signer #1 certificate SHA-256 digest: //p' |
+                head -n 1 |
+                tr -d ':[:space:]' |
+                tr '[:lower:]' '[:upper:]'
+            )"
+            [[ "$actual" == "$expected" ]] || {
+              echo "Unexpected certificate for $apk" >&2
+              echo "Expected: $expected" >&2
+              echo "Actual:   $actual" >&2
+              exit 1
+            }
+            if [[ -z "$first" ]]; then
+              first="$actual"
+            elif [[ "$first" != "$actual" ]]; then
+              echo "APK signatures are inconsistent." >&2
+              exit 1
+            fi
+          done
+
+          printf '%s\n' "$first" > dist/SIGNING_CERT_SHA256.txt
 
       - name: Remove temporary signing files
         if: always()
@@ -332,6 +387,7 @@ jobs:
               dist/*.apk \
               dist/SHA256SUMS.txt \
               dist/VERSION.txt \
+              dist/SIGNING_CERT_SHA256.txt \
               --clobber
           else
             gh release create \
@@ -339,6 +395,7 @@ jobs:
               dist/*.apk \
               dist/SHA256SUMS.txt \
               dist/VERSION.txt \
+              dist/SIGNING_CERT_SHA256.txt \
               --target "$GITHUB_SHA" \
               --title "$release_title" \
               --generate-notes \
@@ -358,6 +415,7 @@ jobs:
 
             echo "- [SHA256SUMS.txt](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${release_tag}/SHA256SUMS.txt)"
             echo "- [VERSION.txt](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${release_tag}/VERSION.txt)"
+            echo "- [SIGNING_CERT_SHA256.txt](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${release_tag}/SIGNING_CERT_SHA256.txt)"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Explain pull request output policy

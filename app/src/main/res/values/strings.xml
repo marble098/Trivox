@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="app_name">Trivox</string>
     <string name="state_disconnected">Disconnected</string>
@@ -47,7 +47,7 @@
     <string name="notification_connected">%1$s • %2$s</string>
     <string name="stop">Stop</string>
     <string name="session_time">Session %1$s</string>
-    <string name="local_endpoints">SOCKS 127.0.0.1:%1$d • HTTP 127.0.0.1:%2$d</string>
+    <string name="local_endpoints">Mixed proxy 127.0.0.1:%1$d</string>
     <string name="tcp_test">TCP connect</string>
     <string name="proxy_test">Real Xray delay</string>
     <string name="icmp_unavailable">ICMP ping is not available on this device.</string>
@@ -66,7 +66,7 @@
     <string name="copied">Copied to clipboard.</string>
     <string name="config_actions">Configuration actions</string>
     <string name="new_name">New name</string>
-    <string name="invalid_port">Ports must be 1–65535 and MTU must be 576–9000.</string>
+    <string name="invalid_port">Mixed proxy port must be 1–65535 and MTU must be 576–9000.</string>
     <string name="subscription_failed">Subscription refresh failed; saved configurations were kept.</string>
     <string name="socks_port">Local SOCKS port</string>
     <string name="http_port">Local HTTP port</string>
@@ -91,7 +91,6 @@
     <string name="status_error">Error %1$s</string>
     <string name="copy_suffix">%1$s (copy)</string>
     <string name="latency_format">%1$d ms</string>
-
     <string name="interface_section">Interface</string>
     <string name="language">Application language</string>
     <string name="language_system">System default</string>
@@ -101,7 +100,6 @@
     <string name="vpn_section">VPN interface</string>
     <string name="dns_section">DNS</string>
     <string name="reconnect_section">Recovery and reconnect</string>
-
     <string name="edit_config">Edit configuration</string>
     <string name="edit_config_description">Edit the original share link or complete JSON. Saving validates the content before replacing the profile.</string>
     <string name="copy_link">Copy share link</string>
@@ -119,7 +117,6 @@
     <string name="delete_config_title">Delete configuration?</string>
     <string name="delete_config_message">“%1$s” will be removed from this device.</string>
     <string name="unknown_error">Unknown error</string>
-
     <string name="ping_now">Ping now</string>
     <string name="ping_short">Ping</string>
     <string name="profile_details">Profile details</string>
@@ -162,4 +159,12 @@
     <string name="reality_public_key">REALITY public key</string>
     <string name="reality_short_id">REALITY short ID</string>
     <string name="version_short">v%1$s • code %2$d</string>
+    <string name="mixed_port">Mixed proxy port</string>
+    <string name="mixed_proxy_hint">One SOCKS5 + HTTP port; default 10202</string>
+    <string name="copy_local_proxy">Copy local mixed proxy</string>
+    <string name="local_mixed_proxy">Local mixed proxy</string>
+    <string name="export_backup">Export complete backup</string>
+    <string name="clear_dead_profiles">Remove failed profiles</string>
+    <string name="no_dead_profiles">No failed profile is available.</string>
+    <string name="clear_dead_confirm">Remove %1$d failed profile(s)?</string>
 </resources>

@@ -68,18 +68,17 @@
                 android:orientation="vertical"
                 android:padding="10dp">
 
+                <TextView
+                    style="@style/Widget.Trivox.FieldLabel"
+                    android:text="@string/mixed_proxy_hint" />
+
                 <EditText
                     android:id="@+id/socksPort"
                     style="@style/Widget.Trivox.Input"
-                    android:hint="@string/socks_port"
-                    android:inputType="number" />
-
-                <EditText
-                    android:id="@+id/httpPort"
-                    style="@style/Widget.Trivox.Input"
-                    android:layout_marginTop="7dp"
-                    android:hint="@string/http_port"
-                    android:inputType="number" />
+                    android:layout_marginTop="4dp"
+                    android:hint="@string/mixed_port"
+                    android:inputType="number"
+                    android:textDirection="ltr" />
             </LinearLayout>
 
             <TextView
@@ -136,6 +135,7 @@
                     android:layout_height="96dp"
                     android:layout_marginTop="7dp"
                     android:background="@drawable/input_background"
+                    android:fontFamily="@font/vazirmatn"
                     android:gravity="top|start"
                     android:hint="@string/custom_dns_hint"
                     android:inputType="textMultiLine"

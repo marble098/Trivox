@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="app_name">Trivox</string>
     <string name="state_disconnected">قطع</string>
@@ -47,7 +47,7 @@
     <string name="notification_connected">%1$s • %2$s</string>
     <string name="stop">توقف</string>
     <string name="session_time">مدت اتصال %1$s</string>
-    <string name="local_endpoints">SOCKS 127.0.0.1:%1$d • HTTP 127.0.0.1:%2$d</string>
+    <string name="local_endpoints">پروکسی Mixed روی 127.0.0.1:%1$d</string>
     <string name="tcp_test">اتصال TCP</string>
     <string name="proxy_test">تأخیر واقعی Xray</string>
     <string name="icmp_unavailable">پینگ ICMP در این دستگاه در دسترس نیست.</string>
@@ -66,7 +66,7 @@
     <string name="copied">در کلیپ‌بورد کپی شد.</string>
     <string name="config_actions">عملیات کانفیگ</string>
     <string name="new_name">نام جدید</string>
-    <string name="invalid_port">پورت‌ها باید بین ۱ تا ۶۵۵۳۵ و MTU بین ۵۷۶ تا ۹۰۰۰ باشد.</string>
+    <string name="invalid_port">پورت پروکسی Mixed باید بین ۱ تا ۶۵۵۳۵ و MTU بین ۵۷۶ تا ۹۰۰۰ باشد.</string>
     <string name="subscription_failed">به‌روزرسانی اشتراک شکست خورد؛ کانفیگ‌های قبلی حفظ شدند.</string>
     <string name="socks_port">پورت SOCKS محلی</string>
     <string name="http_port">پورت HTTP محلی</string>
@@ -91,7 +91,6 @@
     <string name="status_error">خطا %1$s</string>
     <string name="copy_suffix">کپی %1$s</string>
     <string name="latency_format">%1$d ms</string>
-
     <string name="interface_section">رابط کاربری</string>
     <string name="language">زبان برنامه</string>
     <string name="language_system">زبان پیش‌فرض دستگاه</string>
@@ -101,7 +100,6 @@
     <string name="vpn_section">رابط وی‌پی‌ان</string>
     <string name="dns_section">تنظیمات DNS</string>
     <string name="reconnect_section">بازیابی و اتصال دوباره</string>
-
     <string name="edit_config">ویرایش کانفیگ</string>
     <string name="edit_config_description">لینک اصلی یا JSON کامل را ویرایش کنید. محتوا پیش از جایگزینی اعتبارسنجی می‌شود.</string>
     <string name="copy_link">کپی لینک کانفیگ</string>
@@ -119,7 +117,6 @@
     <string name="delete_config_title">کانفیگ حذف شود؟</string>
     <string name="delete_config_message">«%1$s» از این دستگاه حذف خواهد شد.</string>
     <string name="unknown_error">خطای ناشناخته</string>
-
     <string name="ping_now">پینگ همین کانفیگ</string>
     <string name="ping_short">پینگ</string>
     <string name="profile_details">جزئیات کانفیگ</string>
@@ -162,4 +159,12 @@
     <string name="reality_public_key">کلید عمومی REALITY</string>
     <string name="reality_short_id">Short ID در REALITY</string>
     <string name="version_short">نسخه %1$s • کد %2$d</string>
+    <string name="mixed_port">پورت پروکسی Mixed</string>
+    <string name="mixed_proxy_hint">یک پورت مشترک SOCKS5 و HTTP؛ پیش‌فرض ۱۰۲۰۲</string>
+    <string name="copy_local_proxy">کپی پروکسی Mixed محلی</string>
+    <string name="local_mixed_proxy">پروکسی Mixed محلی</string>
+    <string name="export_backup">خروجی پشتیبان کامل</string>
+    <string name="clear_dead_profiles">حذف کانفیگ‌های ناموفق</string>
+    <string name="no_dead_profiles">کانفیگ ناموفقی وجود ندارد.</string>
+    <string name="clear_dead_confirm">تعداد %1$d کانفیگ ناموفق حذف شود؟</string>
 </resources>

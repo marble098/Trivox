@@ -4,7 +4,8 @@
         <item name="colorPrimary">@color/blue</item>
         <item name="colorPrimaryDark">@color/navy</item>
         <item name="colorAccent">@color/blue</item>
-        <item name="android:fontFamily">sans</item>
+        <item name="fontFamily">@font/vazirmatn</item>
+        <item name="android:fontFamily">@font/vazirmatn</item>
         <item name="android:windowBackground">@color/surface</item>
         <item name="android:colorBackground">@color/surface</item>
         <item name="android:textColorPrimary">@color/text_primary</item>

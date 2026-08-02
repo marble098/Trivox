@@ -31,7 +31,7 @@ class DiagnosticsActivity : AppCompatActivity() {
             appendLine("Prepared: ${manifest?.prepared ?: false}")
             appendLine("Manifest SHA-256: ${manifest?.sha256?.takeIf(String::isNotBlank) ?: "missing"}")
             appendLine("ABIs: ${manifest?.abis?.joinToString().orEmpty()}")
-            appendLine("Local ports: SOCKS ${settings.socksPort}, HTTP ${settings.httpPort}")
+            appendLine("Local mixed proxy: 127.0.0.1:${settings.socksPort}")
         }
         findViewById<TextView>(R.id.reportText).text = report
         findViewById<android.view.View>(R.id.exportButton).setOnClickListener { exporter.launch("trivox-diagnostics.txt") }

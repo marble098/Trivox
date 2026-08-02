@@ -30,7 +30,6 @@ import androidx.core.os.LocaleListCompat
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.trivox.client.BuildConfig
 import com.trivox.client.R
 import com.trivox.client.config.ConfigParser
 import com.trivox.client.config.XrayConfigBuilder
@@ -50,6 +49,7 @@ import com.trivox.client.network.SubscriptionManager
 import com.trivox.client.service.ConnectionService
 import com.trivox.client.service.NotificationSupport
 import com.trivox.client.service.TrivoxVpnService
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URI
 import java.util.UUID
@@ -77,6 +77,7 @@ class MainActivity : AppCompatActivity() {
     private val worker = Executors.newSingleThreadExecutor()
     private val handler = Handler(Looper.getMainLooper())
     private val livePingBusy = AtomicBoolean(false)
+    private val connectionActionBusy = AtomicBoolean(false)
 
     private var filter = ""
     private var importDialogInput: EditText? = null
@@ -129,7 +130,7 @@ class MainActivity : AppCompatActivity() {
 
         repository = ConfigRepository(this)
         settingsRepository = SettingsRepository(this)
-        pingManager = PingManager(CoreManager(this).adapter)
+        pingManager = PingManager()
 
         bindViews()
         setupToolbar()
@@ -162,16 +163,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupToolbar() {
         val toolbar = findViewById<Toolbar>(R.id.toolbar)
-        toolbar.subtitle = getString(
-            R.string.version_short,
-            BuildConfig.VERSION_NAME,
-            BuildConfig.BUILD_NUMBER
-        )
+        toolbar.title = getString(R.string.app_name)
+        toolbar.subtitle = null
         toolbar.menu.add(0, MENU_VIEW, 0, R.string.grid).setShowAsAction(2)
         toolbar.menu.add(0, MENU_FASTEST, 1, R.string.select_fastest)
-        toolbar.menu.add(0, MENU_SETTINGS, 2, R.string.settings)
-        toolbar.menu.add(0, MENU_ROUTING, 3, R.string.app_routing)
-        toolbar.menu.add(0, MENU_DIAGNOSTICS, 4, R.string.diagnostics)
+        toolbar.menu.add(0, MENU_COPY_PROXY, 2, R.string.copy_local_proxy)
+        toolbar.menu.add(0, MENU_EXPORT_BACKUP, 3, R.string.export_backup)
+        toolbar.menu.add(0, MENU_CLEAR_DEAD, 4, R.string.clear_dead_profiles)
+        toolbar.menu.add(0, MENU_SETTINGS, 5, R.string.settings)
+        toolbar.menu.add(0, MENU_ROUTING, 6, R.string.app_routing)
+        toolbar.menu.add(0, MENU_DIAGNOSTICS, 7, R.string.diagnostics)
 
         toolbar.setOnMenuItemClickListener {
             when (it.itemId) {
@@ -185,6 +186,21 @@ class MainActivity : AppCompatActivity() {
 
                 MENU_FASTEST -> {
                     selectFastestProfile()
+                    true
+                }
+
+                MENU_COPY_PROXY -> {
+                    copyLocalProxyEndpoint()
+                    true
+                }
+
+                MENU_EXPORT_BACKUP -> {
+                    exportCompleteBackup()
+                    true
+                }
+
+                MENU_CLEAR_DEAD -> {
+                    confirmClearDeadProfiles()
                     true
                 }
 
@@ -804,6 +820,52 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    private fun copyLocalProxyEndpoint() {
+        val port = settingsRepository.load().socksPort
+        val value = buildString {
+            appendLine("socks5://127.0.0.1:$port")
+            append("http://127.0.0.1:$port")
+        }
+        copyToClipboard(getString(R.string.local_mixed_proxy), value)
+    }
+
+    private fun exportCompleteBackup() {
+        val profiles = JSONArray().apply {
+            repository.all().forEach { put(it.toJson()) }
+        }
+        val backup = JSONObject()
+            .put("format", "trivox-backup-v1")
+            .put("createdAt", System.currentTimeMillis())
+            .put("settings", settingsRepository.load().toJson())
+            .put("profiles", profiles)
+            .toString(2)
+        shareText(getString(R.string.export_backup), backup)
+    }
+
+    private fun confirmClearDeadProfiles() {
+        val dead = repository.all().filter {
+            it.testStatus == TestStatus.DEAD ||
+                it.testStatus == TestStatus.ERROR
+        }
+        if (dead.isEmpty()) {
+            toast(getString(R.string.no_dead_profiles))
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.clear_dead_profiles)
+            .setMessage(getString(R.string.clear_dead_confirm, dead.size))
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.delete) { _, _ ->
+                val selected = repository.selectedId()
+                dead.forEach { repository.delete(it.id) }
+                if (dead.any { it.id == selected }) {
+                    repository.select(null)
+                }
+                refresh()
+            }
+            .show()
+    }
+
     private fun duplicateProfile(profile: ConfigProfile) {
         repository.save(
             profile.copy(
@@ -860,36 +922,33 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun toggleConnection() {
+        if (!connectionActionBusy.compareAndSet(false, true)) return
+        handler.postDelayed(
+            { connectionActionBusy.set(false) },
+            CONNECTION_ACTION_COOLDOWN_MS
+        )
+
+        val runtime = ConnectionRuntime.current()
         if (
-            ConnectionRuntime.current().state !in setOf(
+            runtime.state !in setOf(
                 ConnectionState.DISCONNECTED,
                 ConnectionState.ERROR
             )
         ) {
-            when (settingsRepository.load().mode) {
+            when (runtime.mode ?: settingsRepository.load().mode) {
                 ConnectionMode.PROXY -> {
                     startService(
-                        Intent(
-                            this,
-                            ConnectionService::class.java
-                        ).setAction(
-                            ConnectionService.ACTION_STOP
-                        )
+                        Intent(this, ConnectionService::class.java)
+                            .setAction(ConnectionService.ACTION_STOP)
                     )
                 }
-
                 ConnectionMode.VPN -> {
                     startService(
-                        Intent(
-                            this,
-                            TrivoxVpnService::class.java
-                        ).setAction(
-                            TrivoxVpnService.ACTION_STOP
-                        )
+                        Intent(this, TrivoxVpnService::class.java)
+                            .setAction(TrivoxVpnService.ACTION_STOP)
                     )
                 }
             }
-
             return
         }
 
@@ -971,6 +1030,18 @@ class MainActivity : AppCompatActivity() {
                 R.string.disconnect
             }
         )
+
+        modeSpinner.isEnabled =
+            snapshot.state in setOf(
+                ConnectionState.DISCONNECTED,
+                ConnectionState.ERROR
+            )
+        connectButton.isEnabled =
+            snapshot.state !in setOf(
+                ConnectionState.PREPARING,
+                ConnectionState.CONNECTING,
+                ConnectionState.STOPPING
+            )
 
         if (snapshot.error.isNotBlank()) {
             selectedText.text = snapshot.error
@@ -1090,10 +1161,14 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val MENU_VIEW = 100
         private const val MENU_FASTEST = 101
-        private const val MENU_SETTINGS = 102
-        private const val MENU_ROUTING = 103
-        private const val MENU_DIAGNOSTICS = 104
+        private const val MENU_COPY_PROXY = 102
+        private const val MENU_EXPORT_BACKUP = 103
+        private const val MENU_CLEAR_DEAD = 104
+        private const val MENU_SETTINGS = 105
+        private const val MENU_ROUTING = 106
+        private const val MENU_DIAGNOSTICS = 107
         private const val LIVE_PING_INTERVAL_MS = 3_000L
+        private const val CONNECTION_ACTION_COOLDOWN_MS = 1_500L
         private const val EXIT_CACHE_MS = 10 * 60 * 1_000L
 
         private val SHARE_SCHEMES = setOf(

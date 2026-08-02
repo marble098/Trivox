@@ -4,7 +4,8 @@
         <item name="colorPrimary">@color/blue</item>
         <item name="colorPrimaryDark">@color/navy</item>
         <item name="colorAccent">@color/blue</item>
-        <item name="android:fontFamily">sans</item>
+        <item name="fontFamily">@font/vazirmatn</item>
+        <item name="android:fontFamily">@font/vazirmatn</item>
         <item name="android:windowBackground">@color/surface</item>
         <item name="android:colorBackground">@color/surface</item>
         <item name="android:textColorPrimary">@color/text_primary</item>
@@ -28,12 +29,16 @@
     </style>
 
     <style name="TextAppearance.Trivox.Toolbar" parent="TextAppearance.Widget.AppCompat.Toolbar.Title">
-        <item name="android:textSize">17sp</item>
+        <item name="fontFamily">@font/vazirmatn_bold</item>
+        <item name="android:fontFamily">@font/vazirmatn_bold</item>
+        <item name="android:textSize">19sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:textColor">@color/text_primary</item>
     </style>
 
     <style name="Widget.Trivox.Button.Primary" parent="Widget.AppCompat.Button">
+        <item name="fontFamily">@font/vazirmatn_semibold</item>
+        <item name="android:fontFamily">@font/vazirmatn_semibold</item>
         <item name="android:background">@drawable/button_primary_background</item>
         <item name="android:backgroundTint">@null</item>
         <item name="android:textColor">@color/white</item>
@@ -48,6 +53,8 @@
     </style>
 
     <style name="Widget.Trivox.Button.Secondary" parent="Widget.AppCompat.Button">
+        <item name="fontFamily">@font/vazirmatn_medium</item>
+        <item name="android:fontFamily">@font/vazirmatn_medium</item>
         <item name="android:background">@drawable/button_secondary_background</item>
         <item name="android:backgroundTint">@null</item>
         <item name="android:textColor">@color/text_primary</item>
@@ -62,6 +69,8 @@
     </style>
 
     <style name="Widget.Trivox.Input" parent="Widget.AppCompat.EditText">
+        <item name="fontFamily">@font/vazirmatn_regular</item>
+        <item name="android:fontFamily">@font/vazirmatn_regular</item>
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">42dp</item>
         <item name="android:background">@drawable/input_background</item>
@@ -74,6 +83,8 @@
     </style>
 
     <style name="Widget.Trivox.SectionTitle" parent="TextAppearance.AppCompat.Caption">
+        <item name="fontFamily">@font/vazirmatn_semibold</item>
+        <item name="android:fontFamily">@font/vazirmatn_semibold</item>
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">10dp</item>
@@ -84,6 +95,8 @@
     </style>
 
     <style name="Widget.Trivox.FieldLabel" parent="TextAppearance.AppCompat.Caption">
+        <item name="fontFamily">@font/vazirmatn_medium</item>
+        <item name="android:fontFamily">@font/vazirmatn_medium</item>
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:textColor">@color/muted</item>
@@ -92,6 +105,8 @@
     </style>
 
     <style name="Widget.Trivox.CheckBox" parent="Widget.AppCompat.CompoundButton.CheckBox">
+        <item name="fontFamily">@font/vazirmatn_regular</item>
+        <item name="android:fontFamily">@font/vazirmatn_regular</item>
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:minHeight">38dp</item>

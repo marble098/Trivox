@@ -62,7 +62,7 @@
                 android:id="@+id/durationText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:fontFamily="monospace"
+                android:fontFamily="@font/vazirmatn"
                 android:text="00:00"
                 android:textColor="@color/text_primary"
                 android:textDirection="ltr"
