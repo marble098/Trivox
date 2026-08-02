@@ -348,26 +348,64 @@ jobs:
               tr '[:lower:]' '[:upper:]'
           )"
 
-          [[ -n "$expected" ]] || {
-            echo "Expected certificate digest is empty." >&2
+          [[ "$expected" =~ ^[0-9A-F]{64}$ ]] || {
+            echo "ANDROID_CERT_SHA256 is empty or invalid." >&2
+            exit 1
+          }
+
+          shopt -s nullglob
+          apks=(dist/*.apk)
+          shopt -u nullglob
+
+          (( ${#apks[@]} > 0 )) || {
+            echo "No APK files are available for certificate verification." >&2
             exit 1
           }
 
           first=""
 
-          for apk in dist/*.apk; do
-            "$apksigner" verify --verbose "$apk"
+          for apk in "${apks[@]}"; do
+            cert_output=""
+
+            if ! cert_output="$(
+              "$apksigner" verify \
+                --verbose \
+                --print-certs \
+                "$apk" \
+                2>&1
+            )"; then
+              printf '%s\n' "$cert_output" >&2
+              echo "APK signature verification failed: $apk" >&2
+              exit 1
+            fi
+
+            printf '%s\n' "$cert_output"
 
             actual="$(
-              "$apksigner" verify --print-certs "$apk" |
-                sed -n 's/^Signer #1 certificate SHA-256 digest: //p' |
-                head -n 1 |
-                tr -d ':[:space:]' |
-                tr '[:lower:]' '[:upper:]'
+              printf '%s\n' "$cert_output" |
+                awk '
+                  BEGIN {
+                    IGNORECASE = 1
+                  }
+
+                  /certificate[[:space:]]+SHA-256[[:space:]]+digest/ {
+                    line = $0
+                    sub(
+                      /^.*certificate[[:space:]]+SHA-256[[:space:]]+digest:[[:space:]]*/,
+                      "",
+                      line
+                    )
+                    gsub(/[^0-9A-Fa-f]/, "", line)
+                    print toupper(line)
+                    exit
+                  }
+                '
             )"
 
-            [[ -n "$actual" ]] || {
-              echo "Could not read certificate digest from $apk" >&2
+            [[ "$actual" =~ ^[0-9A-F]{64}$ ]] || {
+              echo "Could not parse a valid SHA-256 certificate digest from $apk" >&2
+              echo "Raw apksigner output:" >&2
+              printf '%s\n' "$cert_output" >&2
               exit 1
             }
 
@@ -382,11 +420,19 @@ jobs:
               first="$actual"
             elif [[ "$first" != "$actual" ]]; then
               echo "APK signatures are inconsistent." >&2
+              echo "First:   $first" >&2
+              echo "Current: $actual" >&2
+              echo "APK:     $apk" >&2
               exit 1
             fi
+
+            printf 'Verified certificate %s for %s\n' \
+              "$actual" \
+              "$apk"
           done
 
-          printf '%s\n' "$first" > dist/SIGNING_CERT_SHA256.txt
+          printf '%s\n' "$first" > \
+            dist/SIGNING_CERT_SHA256.txt
 
       - name: Remove temporary signing files
         if: always()
