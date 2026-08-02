@@ -10,14 +10,14 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/import_description"
+        android:text="@string/edit_config_description"
         android:textColor="@color/text_secondary"
         android:textSize="11sp" />
 
     <EditText
-        android:id="@+id/importInput"
+        android:id="@+id/editConfigInput"
         android:layout_width="match_parent"
-        android:layout_height="180dp"
+        android:layout_height="240dp"
         android:layout_marginTop="8dp"
         android:background="@drawable/input_background"
         android:gravity="top|start"
@@ -29,28 +29,4 @@
         android:textColorHint="@color/muted"
         android:textDirection="ltr"
         android:textSize="11sp" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:orientation="horizontal">
-
-        <Button
-            android:id="@+id/clipboardButton"
-            style="@style/Widget.Trivox.Button.Secondary"
-            android:layout_width="0dp"
-            android:layout_height="40dp"
-            android:layout_weight="1"
-            android:text="@string/import_clipboard" />
-
-        <Button
-            android:id="@+id/fileButton"
-            style="@style/Widget.Trivox.Button.Secondary"
-            android:layout_width="0dp"
-            android:layout_height="40dp"
-            android:layout_marginStart="7dp"
-            android:layout_weight="1"
-            android:text="@string/import_file" />
-    </LinearLayout>
 </LinearLayout>

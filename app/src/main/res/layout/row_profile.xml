@@ -2,48 +2,82 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="4dp"
+    android:layoutDirection="locale"
+    android:layout_marginTop="3dp"
+    android:layout_marginBottom="3dp"
     android:background="@drawable/row_background"
     android:gravity="center_vertical"
-    android:minHeight="72dp"
+    android:minHeight="66dp"
     android:orientation="horizontal"
-    android:padding="10dp">
+    android:paddingStart="8dp"
+    android:paddingTop="7dp"
+    android:paddingEnd="5dp"
+    android:paddingBottom="7dp"
+    android:textDirection="locale">
+
     <TextView
         android:id="@+id/favoriteText"
-        android:layout_width="32dp"
-        android:layout_height="wrap_content"
+        android:layout_width="28dp"
+        android:layout_height="match_parent"
         android:gravity="center"
-        android:textSize="20sp" />
+        android:textColor="@color/blue"
+        android:textSize="17sp" />
+
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:orientation="vertical">
+
         <TextView
             android:id="@+id/nameText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="1"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp"
             android:textStyle="bold" />
+
         <TextView
             android:id="@+id/detailText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
             android:ellipsize="middle"
             android:maxLines="1"
-            android:textColor="@color/muted"
-            android:textSize="12sp" />
+            android:textColor="@color/text_secondary"
+            android:textDirection="ltr"
+            android:textSize="10sp" />
+
         <TextView
             android:id="@+id/statusText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:ellipsize="end"
             android:maxLines="1"
-            android:textSize="12sp" />
+            android:textColor="@color/muted"
+            android:textSize="10sp" />
     </LinearLayout>
+
     <TextView
         android:id="@+id/latencyText"
-        android:layout_width="60dp"
+        android:layout_width="58dp"
         android:layout_height="wrap_content"
-        android:gravity="center" />
+        android:gravity="center"
+        android:textColor="@color/text_primary"
+        android:textDirection="ltr"
+        android:textSize="10sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/actionText"
+        android:layout_width="32dp"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:text="⋮"
+        android:textColor="@color/text_secondary"
+        android:textSize="20sp"
+        android:textStyle="bold" />
 </LinearLayout>

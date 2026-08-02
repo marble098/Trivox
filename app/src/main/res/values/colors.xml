@@ -1,13 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="navy">#14213D</color>
+    <color name="navy">#0F172A</color>
     <color name="blue">#2563EB</color>
+    <color name="blue_pressed">#1D4ED8</color>
     <color name="green">#15803D</color>
     <color name="red">#B91C1C</color>
-    <color name="surface">#F8FAFC</color>
-    <color name="surface_dark">#111827</color>
-    <color name="text_primary">#111827</color>
-    <color name="text_primary_dark">#F9FAFB</color>
-    <color name="muted">#64748B</color>
+    <color name="surface">#F3F6FA</color>
+    <color name="surface_dark">#0E1420</color>
+    <color name="panel">#FFFFFF</color>
+    <color name="field">#F7F9FC</color>
+    <color name="text_primary">#172033</color>
+    <color name="text_primary_dark">#F4F7FC</color>
+    <color name="text_secondary">#526071</color>
+    <color name="muted">#748195</color>
+    <color name="divider">#DCE3EC</color>
+    <color name="selected">#EAF2FF</color>
+    <color name="selected_stroke">#2563EB</color>
+    <color name="button_secondary">#E8EEF6</color>
     <color name="white">#FFFFFF</color>
+    <color name="transparent">#00000000</color>
 </resources>

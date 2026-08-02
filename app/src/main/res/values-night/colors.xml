@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="surface">#0E1420</color>
+    <color name="panel">#141C2A</color>
+    <color name="field">#111927</color>
+    <color name="text_primary">#EEF4FF</color>
+    <color name="text_secondary">#B8C2D1</color>
+    <color name="muted">#8F9BAD</color>
+    <color name="divider">#273346</color>
+    <color name="selected">#1A2D4C</color>
+    <color name="selected_stroke">#4D8DFF</color>
+    <color name="button_secondary">#202B3C</color>
+</resources>
