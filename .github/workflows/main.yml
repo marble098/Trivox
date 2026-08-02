@@ -2,13 +2,8 @@ name: Build Trivox APKs
 
 on:
   push:
-    branches:
-      - main
-      - master
-      - develop
-
+    branches: [main, master, develop]
   pull_request:
-
   workflow_dispatch:
     inputs:
       build_type:
@@ -16,43 +11,34 @@ on:
         required: true
         default: all
         type: choice
-        options:
-          - debug
-          - release
-          - all
-
+        options: [debug, release, all]
       core_version:
         description: Pinned Xray/libXray version
         required: true
         default: v26.7.28
         type: string
-
       use_latest_stable:
         description: Replace pinned version with latest stable
         required: false
         default: false
         type: boolean
-
       use_latest_prerelease:
         description: Use latest compatible prerelease
         required: false
         default: false
         type: boolean
-
       requested_abis:
         description: Comma-separated ABIs
         required: true
         default: arm64-v8a,armeabi-v7a,x86_64
         type: string
-
       create_release:
-        description: Publish APKs to a GitHub Release
+        description: Publish direct-download APKs in GitHub Releases
         required: false
         default: false
         type: boolean
-
       release_tag:
-        description: Release tag
+        description: Release tag, for example v0.1.1
         required: false
         default: ""
         type: string
@@ -66,7 +52,6 @@ concurrency:
 
 env:
   JAVA_VERSION: "17"
-  GRADLE_VERSION: "8.13"
   GRADLE_DISTRIBUTION_SHA256: "20f1b1176237254a6fc204d8434196fa11a4cfb387567519c61556e8710aed78"
   DEFAULT_CORE_VERSION: "v26.7.28"
   DEFAULT_ABIS: "arm64-v8a,armeabi-v7a,x86_64"
@@ -81,51 +66,27 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@v4
 
-      - name: Fix file permissions
+      - name: Validate project files
         shell: bash
         run: |
           set -euo pipefail
 
-          chmod +x gradlew
-          chmod +x build.sh
+          chmod +x gradlew build.sh
+          find tools -maxdepth 1 -type f -name "*.sh" -exec chmod +x {} +
 
-          if [[ -d tools ]]; then
-            find tools -maxdepth 1 -type f -name "*.sh" -exec chmod +x {} +
-          fi
+          test -s gradle/wrapper/gradle-wrapper.jar
+          test -s gradle/wrapper/gradle-wrapper.properties
 
-      - name: Fix Gradle wrapper checksum
-        shell: bash
-        run: |
-          set -euo pipefail
+          grep -Fqx \
+            "distributionSha256Sum=${GRADLE_DISTRIBUTION_SHA256}" \
+            gradle/wrapper/gradle-wrapper.properties
 
-          WRAPPER_FILE="gradle/wrapper/gradle-wrapper.properties"
+          bash -n \
+            build.sh \
+            tools/trivox-wizard.sh \
+            tools/prepare-core.sh
 
-          if [[ ! -f "$WRAPPER_FILE" ]]; then
-            echo "Missing file: $WRAPPER_FILE" >&2
-            exit 1
-          fi
-
-          sed -i \
-            "s|^distributionSha256Sum=.*|distributionSha256Sum=${GRADLE_DISTRIBUTION_SHA256}|" \
-            "$WRAPPER_FILE"
-
-          if ! grep -q '^distributionSha256Sum=' "$WRAPPER_FILE"; then
-            printf '\ndistributionSha256Sum=%s\n' \
-              "$GRADLE_DISTRIBUTION_SHA256" >> "$WRAPPER_FILE"
-          fi
-
-          echo "Gradle wrapper configuration:"
-          grep -E '^distributionUrl=|^distributionSha256Sum=' "$WRAPPER_FILE"
-
-          CONFIGURED_SHA="$(
-            sed -n 's/^distributionSha256Sum=//p' "$WRAPPER_FILE" |
-            tr -d '\r'
-          )"
-
-          if [[ "$CONFIGURED_SHA" != "$GRADLE_DISTRIBUTION_SHA256" ]]; then
-            echo "Gradle checksum could not be corrected." >&2
-            exit 1
-          fi
+          python3 -m py_compile tools/generate-core-manifest.py
 
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
@@ -140,27 +101,13 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
+          cache-cleanup: always
 
-      - name: Validate scripts
+      - name: Run unit tests and lint
         shell: bash
         run: |
           set -euo pipefail
-
-          bash -n tools/trivox-wizard.sh
-          bash -n tools/prepare-core.sh
-          bash -n build.sh
-          python3 -m py_compile tools/generate-core-manifest.py
-
-      - name: Run tests and lint
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          ./gradlew \
-            --no-daemon \
-            --stacktrace \
-            test \
-            lint
+          ./gradlew --no-daemon --stacktrace test lint
 
   prepare-core:
     name: Prepare official Android core
@@ -172,38 +119,13 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@v4
 
-      - name: Fix file permissions
+      - name: Fix script permissions
         shell: bash
         run: |
           set -euo pipefail
 
-          chmod +x gradlew
           chmod +x build.sh
-
-          if [[ -d tools ]]; then
-            find tools -maxdepth 1 -type f -name "*.sh" -exec chmod +x {} +
-          fi
-
-      - name: Fix Gradle wrapper checksum
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          WRAPPER_FILE="gradle/wrapper/gradle-wrapper.properties"
-
-          if [[ ! -f "$WRAPPER_FILE" ]]; then
-            echo "Missing file: $WRAPPER_FILE" >&2
-            exit 1
-          fi
-
-          sed -i \
-            "s|^distributionSha256Sum=.*|distributionSha256Sum=${GRADLE_DISTRIBUTION_SHA256}|" \
-            "$WRAPPER_FILE"
-
-          if ! grep -q '^distributionSha256Sum=' "$WRAPPER_FILE"; then
-            printf '\ndistributionSha256Sum=%s\n' \
-              "$GRADLE_DISTRIBUTION_SHA256" >> "$WRAPPER_FILE"
-          fi
+          find tools -maxdepth 1 -type f -name "*.sh" -exec chmod +x {} +
 
       - name: Select core inputs
         id: core
@@ -221,15 +143,15 @@ jobs:
           latest_stable="${LATEST_STABLE:-false}"
           latest_prerelease="${LATEST_PRERELEASE:-false}"
 
-          if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then
+          [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || {
             echo "Invalid core version: $version" >&2
             exit 2
-          fi
+          }
 
-          if [[ ! "$abis" =~ ^(arm64-v8a|armeabi-v7a|x86_64)(,(arm64-v8a|armeabi-v7a|x86_64))*$ ]]; then
+          [[ "$abis" =~ ^(arm64-v8a|armeabi-v7a|x86_64)(,(arm64-v8a|armeabi-v7a|x86_64))*$ ]] || {
             echo "Invalid ABI input: $abis" >&2
             exit 2
-          fi
+          }
 
           if [[ "$latest_stable" == "true" && "$latest_prerelease" == "true" ]]; then
             echo "Select only one latest-version option." >&2
@@ -275,9 +197,9 @@ jobs:
           test -s app/src/main/assets/core-manifest.json
           test -s gradle.properties
 
-          echo "Official Android core prepared successfully."
-          ls -lh app/libs/libXray.aar
-          ls -lh app/src/main/assets/core-manifest.json
+          ls -lh \
+            app/libs/libXray.aar \
+            app/src/main/assets/core-manifest.json
 
       - name: Upload prepared core
         uses: actions/upload-artifact@v4
@@ -301,48 +223,13 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@v4
 
-      - name: Fix file permissions
+      - name: Fix script permissions
         shell: bash
         run: |
           set -euo pipefail
 
-          chmod +x gradlew
-          chmod +x build.sh
-
-          if [[ -d tools ]]; then
-            find tools -maxdepth 1 -type f -name "*.sh" -exec chmod +x {} +
-          fi
-
-      - name: Fix Gradle wrapper checksum
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          WRAPPER_FILE="gradle/wrapper/gradle-wrapper.properties"
-
-          if [[ ! -f "$WRAPPER_FILE" ]]; then
-            echo "Missing file: $WRAPPER_FILE" >&2
-            exit 1
-          fi
-
-          sed -i \
-            "s|^distributionSha256Sum=.*|distributionSha256Sum=${GRADLE_DISTRIBUTION_SHA256}|" \
-            "$WRAPPER_FILE"
-
-          if ! grep -q '^distributionSha256Sum=' "$WRAPPER_FILE"; then
-            printf '\ndistributionSha256Sum=%s\n' \
-              "$GRADLE_DISTRIBUTION_SHA256" >> "$WRAPPER_FILE"
-          fi
-
-          CONFIGURED_SHA="$(
-            sed -n 's/^distributionSha256Sum=//p' "$WRAPPER_FILE" |
-            tr -d '\r'
-          )"
-
-          if [[ "$CONFIGURED_SHA" != "$GRADLE_DISTRIBUTION_SHA256" ]]; then
-            echo "Gradle checksum could not be corrected." >&2
-            exit 1
-          fi
+          chmod +x gradlew build.sh
+          find tools -maxdepth 1 -type f -name "*.sh" -exec chmod +x {} +
 
       - name: Download prepared core
         uses: actions/download-artifact@v4
@@ -359,8 +246,6 @@ jobs:
           test -s app/src/main/assets/core-manifest.json
           test -s gradle.properties
 
-          echo "Prepared core downloaded successfully."
-
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -371,6 +256,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
+          cache-cleanup: always
 
       - name: Configure optional release signing
         shell: bash
@@ -382,9 +268,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ -n "$KEYSTORE_B64" &&
-                -n "$KEYSTORE_PASSWORD" &&
-                -n "$KEY_ALIAS" &&
+          if [[ -n "$KEYSTORE_B64" && \
+                -n "$KEYSTORE_PASSWORD" && \
+                -n "$KEY_ALIAS" && \
                 -n "$KEY_PASSWORD" ]]; then
 
             umask 077
@@ -398,11 +284,8 @@ jobs:
               printf 'keyAlias=%s\n' "$KEY_ALIAS"
               printf 'keyPassword=%s\n' "$KEY_PASSWORD"
             } > signing.properties
-
-            echo "Release signing configured."
           else
-            echo "Signing secrets are not configured."
-            echo "Release APK will use the installable debug key."
+            echo "Signing secrets are not configured; release APKs use the installable debug key."
           fi
 
       - name: Build selected variants
@@ -411,7 +294,6 @@ jobs:
           REQUESTED_BUILD: ${{ inputs.build_type }}
         run: |
           set -euo pipefail
-
           bash build.sh "${REQUESTED_BUILD:-all}"
 
       - name: Verify generated APKs
@@ -419,38 +301,109 @@ jobs:
         run: |
           set -euo pipefail
 
-          if ! compgen -G "dist/*.apk" > /dev/null; then
-            echo "No APK files were generated in the dist directory." >&2
+          compgen -G "dist/*.apk" > /dev/null || {
+            echo "No APK files were generated." >&2
             exit 1
-          fi
+          }
 
-          echo "Generated APK files:"
+          test -s dist/SHA256SUMS.txt
+
           ls -lh dist/*.apk
-
-          if [[ ! -s dist/SHA256SUMS.txt ]]; then
-            (
-              cd dist
-              sha256sum ./*.apk > SHA256SUMS.txt
-            )
-          fi
-
-          echo "APK checksums:"
           cat dist/SHA256SUMS.txt
 
       - name: Remove temporary signing files
         if: always()
         shell: bash
         run: |
-          rm -f -- signing.properties
-          rm -f -- "$RUNNER_TEMP/trivox-release.jks"
+          rm -f -- \
+            signing.properties \
+            "$RUNNER_TEMP/trivox-release.jks"
 
-      - name: Upload generated APKs
+      - name: Upload arm64-v8a debug APK
+        if: ${{ hashFiles('dist/trivox-arm64-v8a-debug.apk') != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: trivox-apks-${{ github.run_number }}
-          path: |
-            dist/*.apk
-            dist/SHA256SUMS.txt
+          name: trivox-arm64-v8a-debug-${{ github.run_number }}
+          path: dist/trivox-arm64-v8a-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Upload armeabi-v7a debug APK
+        if: ${{ hashFiles('dist/trivox-armeabi-v7a-debug.apk') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivox-armeabi-v7a-debug-${{ github.run_number }}
+          path: dist/trivox-armeabi-v7a-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Upload x86_64 debug APK
+        if: ${{ hashFiles('dist/trivox-x86_64-debug.apk') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivox-x86_64-debug-${{ github.run_number }}
+          path: dist/trivox-x86_64-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Upload universal debug APK
+        if: ${{ hashFiles('dist/trivox-universal-debug.apk') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivox-universal-debug-${{ github.run_number }}
+          path: dist/trivox-universal-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Upload arm64-v8a release APK
+        if: ${{ hashFiles('dist/trivox-arm64-v8a-release.apk') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivox-arm64-v8a-release-${{ github.run_number }}
+          path: dist/trivox-arm64-v8a-release.apk
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Upload armeabi-v7a release APK
+        if: ${{ hashFiles('dist/trivox-armeabi-v7a-release.apk') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivox-armeabi-v7a-release-${{ github.run_number }}
+          path: dist/trivox-armeabi-v7a-release.apk
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Upload x86_64 release APK
+        if: ${{ hashFiles('dist/trivox-x86_64-release.apk') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivox-x86_64-release-${{ github.run_number }}
+          path: dist/trivox-x86_64-release.apk
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Upload universal release APK
+        if: ${{ hashFiles('dist/trivox-universal-release.apk') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivox-universal-release-${{ github.run_number }}
+          path: dist/trivox-universal-release.apk
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivox-checksums-${{ github.run_number }}
+          path: dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
 
@@ -468,25 +421,14 @@ jobs:
       contents: write
 
     steps:
-      - name: Download generated APKs
+      - name: Download all separate APK artifacts
         uses: actions/download-artifact@v4
         with:
-          name: trivox-apks-${{ github.run_number }}
+          pattern: trivox-*-${{ github.run_number }}
           path: dist
+          merge-multiple: true
 
-      - name: Verify release files
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if ! compgen -G "dist/*.apk" > /dev/null; then
-            echo "No APK files are available for release." >&2
-            exit 1
-          fi
-
-          ls -lh dist
-
-      - name: Publish GitHub Release
+      - name: Publish direct-download APK files
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -495,8 +437,22 @@ jobs:
         run: |
           set -euo pipefail
 
-          gh release create "$RELEASE_TAG" \
-            dist/*.apk \
-            dist/SHA256SUMS.txt \
-            --title "Trivox $RELEASE_TAG" \
-            --generate-notes
+          compgen -G "dist/*.apk" > /dev/null || {
+            echo "No APK files are available for release." >&2
+            exit 1
+          }
+
+          if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release upload \
+              "$RELEASE_TAG" \
+              dist/*.apk \
+              dist/SHA256SUMS.txt \
+              --clobber
+          else
+            gh release create \
+              "$RELEASE_TAG" \
+              dist/*.apk \
+              dist/SHA256SUMS.txt \
+              --title "Trivox $RELEASE_TAG" \
+              --generate-notes
+          fi
