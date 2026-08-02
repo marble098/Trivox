@@ -1,0 +1,12 @@
+{
+  "name": "Xray-core",
+  "adapter": "libXray",
+  "version": "v26.7.28",
+  "artifact": "libXray.aar",
+  "sha256": "",
+  "sourceUrl": "https://github.com/XTLS/libXray/releases/tag/v26.7.28",
+  "buildDate": "",
+  "abis": [],
+  "capabilities": ["share-link-conversion", "config-validation", "proxy", "android-tun", "tcp", "udp", "ipv4", "ipv6"],
+  "prepared": false
+}

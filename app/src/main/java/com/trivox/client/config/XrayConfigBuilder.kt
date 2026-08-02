@@ -1,0 +1,64 @@
+package com.trivox.client.config
+
+import com.trivox.client.data.AppSettings
+import com.trivox.client.data.ConfigProfile
+import com.trivox.client.data.ConnectionMode
+import com.trivox.client.data.DnsMode
+import org.json.JSONArray
+import org.json.JSONObject
+
+object Validators {
+    fun validPort(port: Int) = port in 1..65535
+    fun validateDns(value: String): Boolean {
+        val text = value.trim()
+        if (text.isBlank() || text.any(Char::isWhitespace)) return false
+        if (text.startsWith("https://") || text.startsWith("https+local://") || text.startsWith("tcp://") || text.startsWith("quic://")) return true
+        if (text.startsWith('[')) return text.contains(']')
+        return text.matches(Regex("[A-Za-z0-9._:-]+"))
+    }
+}
+
+object XrayConfigBuilder {
+    fun build(profile: ConfigProfile, settings: AppSettings, mode: ConnectionMode, tunFd: Int? = null): String {
+        require(Validators.validPort(settings.socksPort)) { "Invalid SOCKS port" }
+        require(Validators.validPort(settings.httpPort)) { "Invalid HTTP port" }
+        require(settings.mtu in 576..9000) { "MTU must be between 576 and 9000" }
+        if (settings.dnsMode == DnsMode.CUSTOM) require(settings.customDns.isNotEmpty() && settings.customDns.all(Validators::validateDns)) { "Invalid custom DNS endpoint" }
+
+        val root = JSONObject().put("log", JSONObject().put("loglevel", "warning"))
+        if (tunFd != null) root.put("env", JSONObject().put("xray.tun.fd", tunFd.toString()))
+        root.put("inbounds", if (mode == ConnectionMode.VPN) vpnInbounds(settings) else proxyInbounds(settings))
+
+        val proxy = JSONObject(profile.outboundJson).put("tag", "proxy")
+        root.put("outbounds", JSONArray().put(proxy)
+            .put(JSONObject().put("protocol", "freedom").put("tag", "direct"))
+            .put(JSONObject().put("protocol", "blackhole").put("tag", "block")))
+        root.put("dns", dns(profile, settings))
+        root.put("routing", JSONObject().put("domainStrategy", "IPIfNonMatch").put("rules", JSONArray()
+            .put(JSONObject().put("type", "field").put("ip", JSONArray().put("geoip:private")).put("outboundTag", "direct"))))
+        return root.toString(2)
+    }
+
+    private fun proxyInbounds(settings: AppSettings) = JSONArray()
+        .put(JSONObject().put("tag", "socks-in").put("listen", "127.0.0.1").put("port", settings.socksPort)
+            .put("protocol", "socks").put("settings", JSONObject().put("udp", true).put("auth", "noauth")))
+        .put(JSONObject().put("tag", "http-in").put("listen", "127.0.0.1").put("port", settings.httpPort)
+            .put("protocol", "http").put("settings", JSONObject()))
+
+    private fun vpnInbounds(settings: AppSettings) = JSONArray().put(JSONObject()
+        .put("tag", "tun-in").put("port", 0).put("protocol", "tun")
+        .put("settings", JSONObject().put("name", "trivox0").put("mtu", settings.mtu)))
+
+    private fun dns(profile: ConfigProfile, settings: AppSettings): JSONObject = when (settings.dnsMode) {
+        DnsMode.IMPORTED -> profile.originalDnsJson?.let(::JSONObject) ?: defaultDns()
+        DnsMode.CUSTOM -> JSONObject().put("servers", JSONArray(settings.customDns))
+        DnsMode.SYSTEM -> JSONObject().put("servers", JSONArray().put("localhost"))
+        DnsMode.DIRECT -> JSONObject().put("servers", JSONArray().put(JSONObject().put("address", "1.1.1.1").put("skipFallback", true)))
+        DnsMode.THROUGH_PROXY -> JSONObject().put("servers", JSONArray().put("https://1.1.1.1/dns-query")).put("queryStrategy", "UseIP")
+        DnsMode.TRIVOX_DEFAULT -> defaultDns()
+    }
+
+    private fun defaultDns() = JSONObject().put("servers", JSONArray()
+        .put("https://1.1.1.1/dns-query").put("https://8.8.8.8/dns-query"))
+        .put("queryStrategy", "UseIP")
+}

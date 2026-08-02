@@ -1,0 +1,5 @@
+-keep class libXray.** { *; }
+-keep class go.** { *; }
+-keepclasseswithmembernames class * { native <methods>; }
+-dontwarn libXray.**
+-dontwarn go.**

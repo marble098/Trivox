@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+        <androidx.appcompat.widget.Toolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:title="@string/settings" />
+        <EditText
+            android:id="@+id/socksPort"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/socks_port"
+            android:inputType="number" />
+        <EditText
+            android:id="@+id/httpPort"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/http_port"
+            android:inputType="number" />
+        <EditText
+            android:id="@+id/mtuInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/mtu"
+            android:inputType="number" />
+        <CheckBox
+            android:id="@+id/ipv6Check"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/ipv6" />
+        <Spinner
+            android:id="@+id/dnsMode"
+            android:layout_width="match_parent"
+            android:layout_height="48dp" />
+        <EditText
+            android:id="@+id/customDns"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/custom_dns_hint"
+            android:inputType="textMultiLine" />
+        <CheckBox
+            android:id="@+id/reconnectNetwork"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/reconnect_network" />
+        <CheckBox
+            android:id="@+id/reconnectBoot"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/reconnect_boot" />
+        <CheckBox
+            android:id="@+id/blockingCheck"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/blocking_mode" />
+        <Button
+            android:id="@+id/saveButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/save" />
+    </LinearLayout>
+</ScrollView>
