@@ -342,14 +342,33 @@ jobs:
             exit 1
           }
 
+          normalize_sha256() {
+            tr -cd '0-9A-Fa-f' |
+              tr '[:lower:]' '[:upper:]'
+          }
+
+          extract_cert_sha256() {
+            awk -F ': ' 'index(tolower($0), "certificate sha-256 digest:") { value=$NF; gsub(/[^0-9A-Fa-f]/, "", value); print toupper(value); exit }'
+          }
+
           expected="$(
             printf '%s' "$EXPECTED_CERT_SHA256" |
-              tr -d ':[:space:]' |
-              tr '[:lower:]' '[:upper:]'
+              normalize_sha256
           )"
 
           [[ "$expected" =~ ^[0-9A-F]{64}$ ]] || {
             echo "ANDROID_CERT_SHA256 is empty or invalid." >&2
+            exit 1
+          }
+
+          parser_test="$(
+            printf '%s\n' \
+              "V2 Signer: certificate SHA-256 digest: a4bf01b1c2f213e60f9944784b26af6d647418ac181b4f8feeccb2cef00fbc9c" |
+              extract_cert_sha256
+          )"
+
+          [[ "$parser_test" == "A4BF01B1C2F213E60F9944784B26AF6D647418AC181B4F8FEECCB2CEF00FBC9C" ]] || {
+            echo "The certificate parser self-test failed." >&2
             exit 1
           }
 
@@ -383,27 +402,11 @@ jobs:
 
             actual="$(
               printf '%s\n' "$cert_output" |
-                awk '
-                  BEGIN {
-                    IGNORECASE = 1
-                  }
-
-                  /certificate[[:space:]]+SHA-256[[:space:]]+digest/ {
-                    line = $0
-                    sub(
-                      /^.*certificate[[:space:]]+SHA-256[[:space:]]+digest:[[:space:]]*/,
-                      "",
-                      line
-                    )
-                    gsub(/[^0-9A-Fa-f]/, "", line)
-                    print toupper(line)
-                    exit
-                  }
-                '
+                extract_cert_sha256
             )"
 
             [[ "$actual" =~ ^[0-9A-F]{64}$ ]] || {
-              echo "Could not parse a valid SHA-256 certificate digest from $apk" >&2
+              echo "Could not parse a valid certificate SHA-256 from $apk" >&2
               echo "Raw apksigner output:" >&2
               printf '%s\n' "$cert_output" >&2
               exit 1
