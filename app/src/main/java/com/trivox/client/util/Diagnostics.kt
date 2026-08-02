@@ -11,6 +11,7 @@ import java.io.File
 import java.io.InputStream
 import java.io.PrintWriter
 import java.io.StringWriter
+import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -37,6 +38,9 @@ object Diagnostics {
         512 * 1024
     private const val TRACE_LIMIT_BYTES =
         256 * 1024
+    private const val TRACE_SAMPLE_BYTES =
+        64 * 1024
+    private const val MAX_EXIT_RECORDS = 8
     private const val RECENT_NATIVE_CRASH_MS =
         30 * 60 * 1000L
 
@@ -99,6 +103,7 @@ object Diagnostics {
                 "xray-error.log"
             )
 
+        repairLegacyCrashLog()
         installExceptionHandler()
         inspectPreviousNativeCheckpoint()
         collectHistoricalExitReasons()
@@ -275,7 +280,7 @@ object Diagnostics {
             return false
         }
 
-        val at =
+        val at: Long =
             appContext
                 .getSharedPreferences(
                     PREFS,
@@ -364,6 +369,9 @@ object Diagnostics {
                     it.name.endsWith(".log") ||
                         it.name.contains(
                             ".log."
+                        ) ||
+                        it.name.startsWith(
+                            "legacy-native-trace-"
                         )
                 }
                 ?.forEach {
@@ -642,7 +650,7 @@ object Diagnostics {
                     .getHistoricalProcessExitReasons(
                         appContext.packageName,
                         0,
-                        12
+                        MAX_EXIT_RECORDS
                     )
                     .filter {
                         it.timestamp > lastSeen
@@ -661,14 +669,22 @@ object Diagnostics {
                         info.timestamp
                     )
 
-                val trace =
+                val traceSummary: String =
                     runCatching {
                         info.traceInputStream
                             ?.use {
                                 input: InputStream ->
-                                readLimited(
+                                val (
+                                    bytes,
+                                    truncated
+                                ) = readLimitedBytes(
                                     input,
                                     TRACE_LIMIT_BYTES
+                                )
+
+                                summarizeExitTrace(
+                                    bytes,
+                                    truncated
                                 )
                             }
                     }.getOrNull()
@@ -712,12 +728,14 @@ object Diagnostics {
                                 info.rss
                         )
 
-                        if (trace.isNotBlank()) {
+                        if (
+                            traceSummary.isNotBlank()
+                        ) {
                             appendLine(
-                                "--- Exit trace ---"
+                                "--- Exit trace summary ---"
                             )
                             append(
-                                sanitize(trace)
+                                traceSummary
                             )
                         }
                     }
@@ -881,15 +899,97 @@ object Diagnostics {
             }
         }.getOrDefault("")
 
-    private fun readLimited(
+    private fun repairLegacyCrashLog() {
+        if (
+            !crashFile.isFile ||
+            crashFile.length() == 0L
+        ) {
+            return
+        }
+
+        val sample =
+            runCatching {
+                crashFile
+                    .inputStream()
+                    .use {
+                        readLimitedBytes(
+                            it,
+                            TRACE_SAMPLE_BYTES
+                        ).first
+                    }
+            }.getOrNull()
+                ?: return
+
+        if (!looksBinary(sample)) {
+            return
+        }
+
+        val archive =
+            File(
+                diagnosticsDir,
+                "legacy-native-trace-" +
+                    System.currentTimeMillis() +
+                    ".bin"
+            )
+
+        val archived =
+            runCatching {
+                if (
+                    !crashFile.renameTo(
+                        archive
+                    )
+                ) {
+                    crashFile.copyTo(
+                        archive,
+                        overwrite = true
+                    )
+                    crashFile.writeBytes(
+                        ByteArray(0)
+                    )
+                }
+
+                true
+            }.getOrDefault(false)
+
+        crashFile.createNewFile()
+
+        appendCrash(
+            buildString {
+                appendLine(
+                    "Legacy diagnostic log migration"
+                )
+                appendLine(
+                    "A previous Android native " +
+                        "tombstone was stored as raw " +
+                        "binary data and made the text " +
+                        "report unreadable."
+                )
+                appendLine(
+                    if (archived) {
+                        "The raw trace was quarantined " +
+                            "inside private app storage."
+                    } else {
+                        "The unreadable raw trace could " +
+                            "not be preserved."
+                    }
+                )
+                appendLine(
+                    "Future native exits are recorded " +
+                        "as compact text summaries."
+                )
+            }
+        )
+    }
+
+    private fun readLimitedBytes(
         input: InputStream,
         limit: Int
-    ): String {
+    ): Pair<ByteArray, Boolean> {
         val output =
             ByteArrayOutputStream()
         val buffer =
             ByteArray(8192)
-        var remaining = limit
+        var remaining = limit + 1
 
         while (remaining > 0) {
             val read =
@@ -914,9 +1014,171 @@ object Diagnostics {
             remaining -= read
         }
 
-        return output.toString(
-            Charsets.UTF_8.name()
-        )
+        val captured =
+            output.toByteArray()
+        val truncated =
+            captured.size > limit
+        val result =
+            if (truncated) {
+                captured.copyOf(limit)
+            } else {
+                captured
+            }
+
+        return result to truncated
+    }
+
+    private fun summarizeExitTrace(
+        bytes: ByteArray,
+        truncated: Boolean
+    ): String {
+        if (bytes.isEmpty()) {
+            return ""
+        }
+
+        if (!looksBinary(bytes)) {
+            return sanitize(
+                bytes.toString(
+                    Charsets.UTF_8
+                )
+            ).let {
+                if (truncated) {
+                    "$it\n[Trace truncated]"
+                } else {
+                    it
+                }
+            }
+        }
+
+        val symbols =
+            extractReadableSymbols(bytes)
+        val digest =
+            MessageDigest
+                .getInstance("SHA-256")
+                .digest(bytes)
+                .joinToString("") {
+                    "%02x".format(
+                        it.toInt() and 0xff
+                    )
+                }
+
+        return buildString {
+            appendLine(
+                "[Binary Android tombstone omitted " +
+                    "from the text report]"
+            )
+            appendLine(
+                "Captured bytes: ${bytes.size}" +
+                    if (truncated) {
+                        " (truncated)"
+                    } else {
+                        ""
+                    }
+            )
+            appendLine(
+                "Captured SHA-256: $digest"
+            )
+
+            if (symbols.isNotEmpty()) {
+                appendLine(
+                    "Readable crash markers:"
+                )
+                symbols.forEach {
+                    appendLine(
+                        "- ${sanitize(it)}"
+                    )
+                }
+            } else {
+                appendLine(
+                    "No reliable readable symbol was " +
+                        "found in the captured trace."
+                )
+            }
+        }.trimEnd()
+    }
+
+    private fun looksBinary(
+        bytes: ByteArray
+    ): Boolean {
+        if (bytes.isEmpty()) {
+            return false
+        }
+
+        var controls = 0
+
+        bytes.forEach {
+            val value =
+                it.toInt() and 0xff
+
+            if (value == 0) {
+                return true
+            }
+
+            if (
+                value < 32 &&
+                value != 9 &&
+                value != 10 &&
+                value != 13
+            ) {
+                controls += 1
+            }
+        }
+
+        return controls * 20 >
+            bytes.size
+    }
+
+    private fun extractReadableSymbols(
+        bytes: ByteArray
+    ): List<String> {
+        val candidates =
+            ArrayList<String>()
+        val current =
+            StringBuilder()
+
+        fun flush() {
+            if (current.length >= 4) {
+                candidates +=
+                    current.toString()
+                        .trim()
+            }
+            current.setLength(0)
+        }
+
+        bytes.forEach {
+            val value =
+                it.toInt() and 0xff
+
+            if (value in 32..126) {
+                current.append(
+                    value.toChar()
+                )
+            } else {
+                flush()
+            }
+        }
+        flush()
+
+        val important =
+            Regex(
+                "(?i)(SIG[A-Z]+|" +
+                    "libgojni|runtime\\.|" +
+                    "panic|fatal|abort|" +
+                    "backtrace|com\\.trivox|" +
+                    "Thread-|pool-|xray)"
+            )
+
+        return candidates
+            .asSequence()
+            .filter {
+                important.containsMatchIn(it)
+            }
+            .map {
+                it.take(240)
+            }
+            .distinct()
+            .take(32)
+            .toList()
     }
 
     private fun reasonLabel(

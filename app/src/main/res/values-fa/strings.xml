@@ -174,4 +174,12 @@
     <string name="clear_diagnostics_title">تاریخچه عیب‌یابی پاک شود؟</string>
     <string name="clear_diagnostics_message">لاگ‌های اجرای برنامه، Xray و کرش‌های ثبت‌شده از دستگاه حذف می‌شوند.</string>
     <string name="diagnostics_cleared">تاریخچه عیب‌یابی پاک شد.</string>
+    <string name="about_section">درباره Trivox</string>
+    <string name="about_creators_label">سازندگان برنامه</string>
+    <string name="about_creators_value">MARBLE098 • PCPAPC172</string>
+    <string name="about_app_version_value">نسخه برنامه %1$s (%2$d) • %3$s • %4$s</string>
+    <string name="about_core_version_value">نسخه هسته Xray: %1$s</string>
+    <string name="about_signing_value">امضای SHA-256: %1$s</string>
+    <string name="about_package_value">شناسه بسته: %1$s</string>
+    <string name="about_unavailable">در دسترس نیست</string>
 </resources>

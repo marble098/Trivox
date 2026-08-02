@@ -93,10 +93,26 @@ class TrivoxApp : Application() {
     }
 
     override fun onTrimMemory(level: Int) {
-        Diagnostics.warning(
-            "System requested memory trim: " +
-                level
-        )
+        when {
+            level >= TRIM_MEMORY_COMPLETE ->
+                Diagnostics.warning(
+                    "Critical memory trim: " +
+                        level
+                )
+
+            level >= TRIM_MEMORY_BACKGROUND ->
+                Diagnostics.info(
+                    "Background memory trim: " +
+                        level
+                )
+
+            else ->
+                Diagnostics.debug(
+                    "Routine memory trim: " +
+                        level
+                )
+        }
+
         super.onTrimMemory(level)
     }
 

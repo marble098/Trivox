@@ -182,20 +182,15 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
 
-            signingConfig =
-                if (
-                    signingPropsFile.isFile
-                ) {
+            if (
+                signingPropsFile.isFile
+            ) {
+                signingConfig =
                     signingConfigs
                         .getByName(
                             "persistent"
                         )
-                } else {
-                    signingConfigs
-                        .getByName(
-                            "debug"
-                        )
-                }
+            }
 
             proguardFiles(
                 getDefaultProguardFile(

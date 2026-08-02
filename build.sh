@@ -47,6 +47,17 @@ printf 'Trivox version: %s (%s), commit %s\n' \
   "$TRIVOX_VERSION_CODE" \
   "$TRIVOX_GIT_SHA"
 
+case "$MODE" in
+  release|universal|arm64-v8a|armeabi-v7a|x86_64|all)
+    if [[ ! -s signing.properties ]]; then
+      printf '%s\n' \
+        'ERROR: A permanent signing.properties file is required for installable release APKs.' \
+        'The build was stopped instead of silently changing the Android signing identity.' >&2
+      exit 1
+    fi
+    ;;
+esac
+
 python3 tools/generate-core-manifest.py \
   --validate-only \
   --abis "${TRIVOX_ABIS:-arm64-v8a,armeabi-v7a,x86_64}" \

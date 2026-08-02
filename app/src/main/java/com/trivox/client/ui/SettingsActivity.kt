@@ -1,20 +1,26 @@
 package com.trivox.client.ui
 
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.Spinner
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.appcompat.widget.Toolbar
 import androidx.core.os.LocaleListCompat
+import com.trivox.client.BuildConfig
 import com.trivox.client.R
 import com.trivox.client.config.Validators
 import com.trivox.client.data.DnsMode
 import com.trivox.client.data.SettingsRepository
+import org.json.JSONObject
+import java.security.MessageDigest
 
 class SettingsActivity : AppCompatActivity() {
     override fun onCreate(
@@ -157,6 +163,8 @@ class SettingsActivity : AppCompatActivity() {
             )
         )
 
+        renderAbout()
+
         findViewById<Button>(
             R.id.saveButton
         ).setOnClickListener {
@@ -269,6 +277,126 @@ class SettingsActivity : AppCompatActivity() {
             finish()
         }
     }
+
+    private fun renderAbout() {
+        findViewById<TextView>(
+            R.id.aboutCreators
+        ).text =
+            getString(
+                R.string.about_creators_value
+            )
+
+        findViewById<TextView>(
+            R.id.aboutAppVersion
+        ).text =
+            getString(
+                R.string.about_app_version_value,
+                BuildConfig.VERSION_NAME,
+                BuildConfig.VERSION_CODE,
+                BuildConfig.BUILD_TYPE,
+                BuildConfig.GIT_SHA
+            )
+
+        findViewById<TextView>(
+            R.id.aboutCoreVersion
+        ).text =
+            getString(
+                R.string.about_core_version_value,
+                readCoreVersion()
+            )
+
+        findViewById<TextView>(
+            R.id.aboutSigning
+        ).text =
+            getString(
+                R.string.about_signing_value,
+                signingCertificateSha256()
+            )
+
+        findViewById<TextView>(
+            R.id.aboutPackage
+        ).text =
+            getString(
+                R.string.about_package_value,
+                packageName
+            )
+    }
+
+    private fun readCoreVersion(): String =
+        runCatching {
+            assets
+                .open(
+                    "core-manifest.json"
+                )
+                .bufferedReader()
+                .use {
+                    JSONObject(
+                        it.readText()
+                    ).optString(
+                        "version",
+                        "unknown"
+                    )
+                }
+        }.getOrDefault("unknown")
+
+    private fun signingCertificateSha256():
+        String =
+        runCatching {
+            val packageInfo =
+                if (
+                    Build.VERSION.SDK_INT >=
+                    Build.VERSION_CODES.P
+                ) {
+                    packageManager
+                        .getPackageInfo(
+                            packageName,
+                            PackageManager
+                                .GET_SIGNING_CERTIFICATES
+                        )
+                } else {
+                    @Suppress("DEPRECATION")
+                    packageManager
+                        .getPackageInfo(
+                            packageName,
+                            PackageManager
+                                .GET_SIGNATURES
+                        )
+                }
+
+            val signatures =
+                if (
+                    Build.VERSION.SDK_INT >=
+                    Build.VERSION_CODES.P
+                ) {
+                    packageInfo
+                        .signingInfo
+                        ?.apkContentsSigners
+                } else {
+                    @Suppress("DEPRECATION")
+                    packageInfo.signatures
+                }
+
+            val certificate =
+                signatures
+                    ?.firstOrNull()
+                    ?.toByteArray()
+                    ?: error(
+                        "No APK signer"
+                    )
+
+            MessageDigest
+                .getInstance("SHA-256")
+                .digest(certificate)
+                .joinToString(":") {
+                    "%02X".format(
+                        it.toInt() and 0xff
+                    )
+                }
+        }.getOrDefault(
+            getString(
+                R.string.about_unavailable
+            )
+        )
 
     private fun compactAdapter(
         values: Array<String>

@@ -168,6 +168,75 @@
                     style="@style/Widget.Trivox.CheckBox"
                     android:text="@string/reconnect_boot" />
             </LinearLayout>
+
+            <TextView
+                style="@style/Widget.Trivox.SectionTitle"
+                android:text="@string/about_section" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/panel_background"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    style="@style/Widget.Trivox.FieldLabel"
+                    android:text="@string/about_creators_label" />
+
+                <TextView
+                    android:id="@+id/aboutCreators"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="@font/vazirmatn_bold"
+                    android:textColor="@color/text_primary"
+                    android:textDirection="locale"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/aboutAppVersion"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="9dp"
+                    android:fontFamily="@font/vazirmatn_medium"
+                    android:textColor="@color/text_primary"
+                    android:textDirection="locale"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/aboutCoreVersion"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:fontFamily="@font/vazirmatn"
+                    android:textColor="@color/text_primary"
+                    android:textDirection="locale"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/aboutSigning"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:fontFamily="@font/vazirmatn"
+                    android:textColor="@color/muted"
+                    android:textDirection="ltr"
+                    android:textIsSelectable="true"
+                    android:textSize="10sp" />
+
+                <TextView
+                    android:id="@+id/aboutPackage"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="@font/vazirmatn"
+                    android:textColor="@color/muted"
+                    android:textDirection="ltr"
+                    android:textIsSelectable="true"
+                    android:textSize="10sp" />
+            </LinearLayout>
         </LinearLayout>
     </ScrollView>
 
