@@ -1,0 +1,268 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:layoutDirection="locale"
+    android:orientation="vertical"
+    android:paddingStart="10dp"
+    android:paddingTop="4dp"
+    android:paddingEnd="10dp"
+    android:paddingBottom="8dp"
+    android:textDirection="locale">
+
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/toolbar"
+        style="@style/Widget.Trivox.Toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:minHeight="48dp"
+        android:navigationIcon="@android:drawable/ic_menu_close_clear_cancel"
+        android:title="@string/edit_config" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:background="@drawable/panel_background"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="8dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/protocol"
+            android:textColor="@color/muted"
+            android:textSize="10sp" />
+
+        <TextView
+            android:id="@+id/protocolValue"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:textColor="@color/text_primary"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/formModeButton"
+            style="@style/Widget.Trivox.Button.Secondary"
+            android:layout_width="72dp"
+            android:layout_height="36dp"
+            android:text="@string/form_editor" />
+
+        <Button
+            android:id="@+id/jsonModeButton"
+            style="@style/Widget.Trivox.Button.Secondary"
+            android:layout_width="82dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="4dp"
+            android:text="@string/raw_json" />
+    </LinearLayout>
+
+    <ScrollView
+        android:id="@+id/formContainer"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="6dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="8dp">
+
+            <TextView style="@style/Widget.Trivox.SectionTitle" android:text="@string/basic_settings" />
+
+            <EditText
+                android:id="@+id/nameInput"
+                style="@style/Widget.Trivox.Input"
+                android:hint="@string/remarks" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal">
+
+                <EditText
+                    android:id="@+id/addressInput"
+                    style="@style/Widget.Trivox.Input"
+                    android:layout_width="0dp"
+                    android:layout_weight="2"
+                    android:hint="@string/address"
+                    android:inputType="textUri" />
+
+                <EditText
+                    android:id="@+id/portInput"
+                    style="@style/Widget.Trivox.Input"
+                    android:layout_width="0dp"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1"
+                    android:hint="@string/port"
+                    android:inputType="number" />
+            </LinearLayout>
+
+            <EditText
+                android:id="@+id/credentialInput"
+                style="@style/Widget.Trivox.Input"
+                android:layout_marginTop="6dp"
+                android:hint="@string/user_id_or_password"
+                android:inputType="textVisiblePassword"
+                android:textDirection="ltr" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal">
+
+                <EditText
+                    android:id="@+id/encryptionInput"
+                    style="@style/Widget.Trivox.Input"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:hint="@string/encryption_method" />
+
+                <EditText
+                    android:id="@+id/flowInput"
+                    style="@style/Widget.Trivox.Input"
+                    android:layout_width="0dp"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1"
+                    android:hint="@string/flow" />
+            </LinearLayout>
+
+            <TextView style="@style/Widget.Trivox.SectionTitle" android:text="@string/transport_settings" />
+
+            <Spinner
+                android:id="@+id/transportSpinner"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:background="@drawable/input_background"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp" />
+
+            <EditText
+                android:id="@+id/headerInput"
+                style="@style/Widget.Trivox.Input"
+                android:layout_marginTop="6dp"
+                android:hint="@string/header_type" />
+
+            <EditText
+                android:id="@+id/hostInput"
+                style="@style/Widget.Trivox.Input"
+                android:layout_marginTop="6dp"
+                android:hint="@string/host" />
+
+            <EditText
+                android:id="@+id/pathInput"
+                style="@style/Widget.Trivox.Input"
+                android:layout_marginTop="6dp"
+                android:hint="@string/path" />
+
+            <EditText
+                android:id="@+id/serviceNameInput"
+                style="@style/Widget.Trivox.Input"
+                android:layout_marginTop="6dp"
+                android:hint="@string/grpc_service_name" />
+
+            <TextView style="@style/Widget.Trivox.SectionTitle" android:text="@string/security_settings" />
+
+            <Spinner
+                android:id="@+id/securitySpinner"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:background="@drawable/input_background"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp" />
+
+            <EditText
+                android:id="@+id/sniInput"
+                style="@style/Widget.Trivox.Input"
+                android:layout_marginTop="6dp"
+                android:hint="@string/sni" />
+
+            <EditText
+                android:id="@+id/fingerprintInput"
+                style="@style/Widget.Trivox.Input"
+                android:layout_marginTop="6dp"
+                android:hint="@string/fingerprint" />
+
+            <EditText
+                android:id="@+id/publicKeyInput"
+                style="@style/Widget.Trivox.Input"
+                android:layout_marginTop="6dp"
+                android:hint="@string/reality_public_key"
+                android:textDirection="ltr" />
+
+            <EditText
+                android:id="@+id/shortIdInput"
+                style="@style/Widget.Trivox.Input"
+                android:layout_marginTop="6dp"
+                android:hint="@string/reality_short_id"
+                android:textDirection="ltr" />
+        </LinearLayout>
+    </ScrollView>
+
+    <LinearLayout
+        android:id="@+id/jsonContainer"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="6dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/raw_json_description"
+            android:textColor="@color/text_secondary"
+            android:textSize="10sp" />
+
+        <EditText
+            android:id="@+id/rawJsonInput"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="5dp"
+            android:layout_weight="1"
+            android:background="@drawable/input_background"
+            android:fontFamily="monospace"
+            android:gravity="top|start"
+            android:inputType="textMultiLine|textNoSuggestions"
+            android:padding="10dp"
+            android:scrollbars="vertical"
+            android:textColor="@color/text_primary"
+            android:textDirection="ltr"
+            android:textSize="10sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/editorCancelButton"
+            style="@style/Widget.Trivox.Button.Secondary"
+            android:layout_width="0dp"
+            android:layout_height="42dp"
+            android:layout_marginEnd="3dp"
+            android:layout_weight="1"
+            android:text="@string/cancel" />
+
+        <Button
+            android:id="@+id/editorSaveButton"
+            style="@style/Widget.Trivox.Button.Primary"
+            android:layout_width="0dp"
+            android:layout_height="42dp"
+            android:layout_marginStart="3dp"
+            android:layout_weight="1"
+            android:text="@string/save" />
+    </LinearLayout>
+</LinearLayout>

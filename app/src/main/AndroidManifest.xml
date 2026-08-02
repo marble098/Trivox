@@ -26,6 +26,10 @@
         android:usesCleartextTraffic="false">
 
         <activity
+            android:name=".ui.ConfigEditorActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
             android:name=".ui.DiagnosticsActivity"
             android:exported="false" />
         <activity

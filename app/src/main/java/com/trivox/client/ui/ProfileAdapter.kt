@@ -14,7 +14,8 @@ import java.util.Date
 class ProfileAdapter(
     private val onClick: (ConfigProfile) -> Unit,
     private val onLongClick: (ConfigProfile) -> Unit,
-    private val onAction: (ConfigProfile) -> Unit
+    private val onAction: (ConfigProfile) -> Unit,
+    private val onPing: (ConfigProfile) -> Unit
 ) : RecyclerView.Adapter<ProfileAdapter.Holder>() {
     private val items = mutableListOf<ConfigProfile>()
     private var selectedId: String? = null
@@ -47,27 +48,21 @@ class ProfileAdapter(
             .inflate(R.layout.row_profile, parent, false)
     )
 
-    override fun onBindViewHolder(
-        holder: Holder,
-        position: Int
-    ) = holder.bind(items[position])
+    override fun onBindViewHolder(holder: Holder, position: Int) {
+        holder.bind(items[position])
+    }
 
     override fun getItemCount() = items.size
 
-    inner class Holder(view: View) :
-        RecyclerView.ViewHolder(view) {
-        private val favorite =
-            view.findViewById<TextView>(R.id.favoriteText)
-        private val name =
-            view.findViewById<TextView>(R.id.nameText)
-        private val detail =
-            view.findViewById<TextView>(R.id.detailText)
-        private val status =
-            view.findViewById<TextView>(R.id.statusText)
-        private val latency =
-            view.findViewById<TextView>(R.id.latencyText)
-        private val action =
-            view.findViewById<TextView>(R.id.actionText)
+    inner class Holder(view: View) : RecyclerView.ViewHolder(view) {
+        private val favorite = view.findViewById<TextView>(R.id.favoriteText)
+        private val name = view.findViewById<TextView>(R.id.nameText)
+        private val detail = view.findViewById<TextView>(R.id.detailText)
+        private val location = view.findViewById<TextView>(R.id.locationText)
+        private val status = view.findViewById<TextView>(R.id.statusText)
+        private val latency = view.findViewById<TextView>(R.id.latencyText)
+        private val ping = view.findViewById<TextView>(R.id.pingActionText)
+        private val action = view.findViewById<TextView>(R.id.actionText)
 
         fun bind(profile: ConfigProfile) {
             itemView.isActivated = profile.id == selectedId
@@ -75,19 +70,33 @@ class ProfileAdapter(
 
             favorite.text = if (profile.favorite) "★" else "☆"
             name.text = profile.name
+            detail.text = itemView.context.getString(
+                R.string.profile_detail,
+                profile.protocol.uppercase(),
+                profile.server,
+                profile.port,
+                profile.group
+            )
 
-            detail.text =
-                itemView.context.getString(
-                    R.string.profile_detail,
-                    profile.protocol.uppercase(),
-                    profile.server,
-                    profile.port,
-                    profile.group
-                )
+            val locationValue = buildString {
+                profile.exitFlag.takeIf(String::isNotBlank)?.let {
+                    append(it)
+                    append(' ')
+                }
+                profile.exitCountry.takeIf(String::isNotBlank)?.let {
+                    append(it)
+                }
+                if (profile.exitIp.isNotBlank()) {
+                    if (isNotBlank()) append(" • ")
+                    append(profile.exitIp)
+                }
+            }
 
-            val prefix =
-                if (profile.id == connectedId) "● " else ""
+            location.text = locationValue
+            location.visibility =
+                if (locationValue.isBlank()) View.GONE else View.VISIBLE
 
+            val prefix = if (profile.id == connectedId) "● " else ""
             val time =
                 if (profile.lastTestAt > 0) {
                     DateFormat.getDateTimeInstance(
@@ -98,50 +107,41 @@ class ProfileAdapter(
                     ""
                 }
 
-            status.text =
-                prefix +
-                    when (profile.testStatus) {
-                        TestStatus.UNTESTED -> "—"
-                        TestStatus.TESTING ->
-                            itemView.context.getString(
-                                R.string.status_testing
-                            )
+            status.text = prefix + when (profile.testStatus) {
+                TestStatus.UNTESTED -> "—"
+                TestStatus.TESTING ->
+                    itemView.context.getString(R.string.status_testing)
+                TestStatus.ALIVE ->
+                    itemView.context.getString(R.string.status_alive, time)
+                TestStatus.DEAD ->
+                    itemView.context.getString(R.string.status_dead, time)
+                TestStatus.ERROR ->
+                    itemView.context.getString(R.string.status_error, time)
+            }
 
-                        TestStatus.ALIVE ->
-                            itemView.context.getString(
-                                R.string.status_alive,
-                                time
-                            )
+            latency.text = profile.latencyMs?.let {
+                itemView.context.getString(R.string.latency_format, it)
+            } ?: "—"
 
-                        TestStatus.DEAD ->
-                            itemView.context.getString(
-                                R.string.status_dead,
-                                time
-                            )
-
-                        TestStatus.ERROR ->
-                            itemView.context.getString(
-                                R.string.status_error,
-                                time
-                            )
-                    }
-
-            latency.text =
-                profile.latencyMs?.let {
-                    itemView.context.getString(
-                        R.string.latency_format,
-                        it
-                    )
-                } ?: "—"
+            ping.text =
+                if (profile.testStatus == TestStatus.TESTING) {
+                    "…"
+                } else {
+                    itemView.context.getString(R.string.ping_short)
+                }
 
             action.contentDescription =
                 itemView.context.getString(R.string.config_actions)
+            ping.contentDescription =
+                itemView.context.getString(R.string.ping_now)
 
             itemView.setOnClickListener { onClick(profile) }
             itemView.setOnLongClickListener {
                 onLongClick(profile)
                 true
             }
+            latency.setOnClickListener { onPing(profile) }
+            ping.setOnClickListener { onPing(profile) }
             action.setOnClickListener { onAction(profile) }
         }
     }
