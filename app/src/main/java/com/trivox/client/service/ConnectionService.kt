@@ -6,7 +6,6 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
-import androidx.core.app.NotificationManagerCompat
 import com.trivox.client.core.ConnectionRuntime
 import com.trivox.client.core.CoreManager
 import com.trivox.client.core.CoreStartRequest
@@ -66,9 +65,18 @@ class ConnectionService : Service() {
                 if (ConnectionRuntime.current().state != ConnectionState.CONNECTED) return
                 if (!core.isRunning()) { fail("Xray stopped unexpectedly"); return }
                 val current = ConnectionRuntime.current()
-                NotificationManagerCompat.from(this@ConnectionService).notify(NotificationSupport.ID,
-                    NotificationSupport.build(this@ConnectionService, current.profileName, startedElapsed,
-                        Intent(this@ConnectionService, ConnectionService::class.java).setAction(ACTION_STOP)))
+                NotificationSupport.notifyIfAllowed(
+    this@ConnectionService,
+    NotificationSupport.build(
+        this@ConnectionService,
+        current.profileName,
+        startedElapsed,
+        Intent(
+            this@ConnectionService,
+            ConnectionService::class.java
+        ).setAction(ACTION_STOP)
+    )
+)
                 handler.postDelayed(this, 1000)
             }
         })
