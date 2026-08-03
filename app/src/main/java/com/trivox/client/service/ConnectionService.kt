@@ -34,10 +34,14 @@ class ConnectionService : Service() {
     private val ownsCore =
         AtomicBoolean(false)
 
-    private lateinit var core: CoreManager
-    private var profileId: String? = null
+    private lateinit var core:
+        CoreManager
+    private var profileId:
+        String? = null
     private var profileName = ""
     private var startedElapsed = 0L
+    private var restoredStartedElapsed =
+        0L
     private var sessionId = 0L
 
     override fun onCreate() {
@@ -52,18 +56,32 @@ class ConnectionService : Service() {
         flags: Int,
         startId: Int
     ): Int {
-        if (
-            intent?.action ==
-            ACTION_STOP
-        ) {
+        val restored =
+            ConnectionSessionStore
+                .load(this)
+                ?.takeIf {
+                    it.mode ==
+                        ConnectionMode.PROXY
+                }
+
+        val action =
+            intent?.action
+                ?: if (
+                    restored != null
+                ) {
+                    ACTION_START
+                } else {
+                    null
+                }
+
+        if (action == ACTION_STOP) {
+            ConnectionSessionStore
+                .clear(this)
             requestStop()
             return START_NOT_STICKY
         }
 
-        if (
-            intent?.action !=
-            ACTION_START
-        ) {
+        if (action != ACTION_START) {
             stopSelf(startId)
             return START_NOT_STICKY
         }
@@ -75,55 +93,116 @@ class ConnectionService : Service() {
                     true
                 )
         ) {
-            return START_NOT_STICKY
+            return START_REDELIVER_INTENT
         }
 
         val current =
             ConnectionRuntime.current()
 
         if (
-            current.state !in setOf(
+            current.state !in
+            setOf(
                 ConnectionState.DISCONNECTED,
                 ConnectionState.ERROR
             )
         ) {
-            sessionAccepted.set(false)
-            stopSelf(startId)
-            return START_NOT_STICKY
+            val staleRestoredState =
+                restored != null &&
+                    current.mode ==
+                    ConnectionMode.PROXY &&
+                    current.profileId ==
+                    restored.profileId
+
+            if (staleRestoredState) {
+                ConnectionRuntime.update(
+                    ConnectionRuntime.Snapshot()
+                )
+            } else {
+                sessionAccepted.set(false)
+                stopSelf(startId)
+                return START_REDELIVER_INTENT
+            }
         }
 
         stopRequested.set(false)
         cleanupStarted.set(false)
         ownsCore.set(false)
-        startedElapsed = 0L
         sessionId =
             ConnectionRuntime
                 .nextSessionId()
 
+        val explicitProfileId =
+            intent
+                ?.getStringExtra(
+                    EXTRA_PROFILE_ID
+                )
         profileId =
-            intent.getStringExtra(
-                EXTRA_PROFILE_ID
-            ) ?: ConfigRepository(this)
-                .selectedId()
+            explicitProfileId
+                ?: restored?.profileId
+                ?: ConfigRepository(this)
+                    .selectedId()
+
+        val requestedProfileId =
+            profileId
+
+        if (
+            requestedProfileId
+                .isNullOrBlank()
+        ) {
+            sessionAccepted.set(false)
+            ConnectionSessionStore
+                .clear(this)
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+
+        val matchingRestored =
+            restored
+                ?.takeIf {
+                    explicitProfileId == null ||
+                        it.profileId ==
+                        requestedProfileId
+                }
+
+        restoredStartedElapsed =
+            matchingRestored
+                ?.startedElapsed
+                ?.takeIf {
+                    it > 0L &&
+                        it <=
+                        SystemClock
+                            .elapsedRealtime()
+                }
+                ?: 0L
+
+        profileName =
+            matchingRestored
+                ?.profileName
+                .orEmpty()
+
+        ConnectionSessionStore
+            .markDesired(
+                context = this,
+                mode =
+                    ConnectionMode.PROXY,
+                profileId =
+                    requestedProfileId,
+                profileName =
+                    profileName,
+                startedElapsed =
+                    restoredStartedElapsed
+            )
 
         startForeground(
             NotificationSupport.ID,
-            NotificationSupport.build(
-                this,
-                "Trivox",
-                0,
-                Intent(
-                    this,
-                    ConnectionService::class.java
-                ).setAction(ACTION_STOP)
-            )
+            buildNotification()
         )
 
         executeSafely {
             startConnection()
         }
 
-        return START_NOT_STICKY
+        return START_REDELIVER_INTENT
     }
 
     private fun startConnection() {
@@ -148,7 +227,26 @@ class ConnectionService : Service() {
             return
         }
 
-        profileName = profile.name
+        profileName =
+            profile.name
+
+        ConnectionSessionStore
+            .markDesired(
+                context = this,
+                mode =
+                    ConnectionMode.PROXY,
+                profileId =
+                    profile.id,
+                profileName =
+                    profileName,
+                startedElapsed =
+                    restoredStartedElapsed
+            )
+
+        startForeground(
+            NotificationSupport.ID,
+            buildNotification()
+        )
 
         if (!core.adapter.isAvailable()) {
             fail(
@@ -179,7 +277,8 @@ class ConnectionService : Service() {
                 state =
                     ConnectionState.PREPARING,
                 profileId = profile.id,
-                profileName = profile.name,
+                profileName =
+                    profile.name,
                 mode =
                     ConnectionMode.PROXY,
                 sessionId = sessionId
@@ -198,7 +297,8 @@ class ConnectionService : Service() {
         ) {
             it.copy(
                 state =
-                    ConnectionState.CONNECTING
+                    ConnectionState
+                        .CONNECTING
             )
         }
 
@@ -223,19 +323,46 @@ class ConnectionService : Service() {
         }
 
         startedElapsed =
-            SystemClock.elapsedRealtime()
+            restoredStartedElapsed
+                .takeIf {
+                    it > 0L &&
+                        it <=
+                        SystemClock
+                            .elapsedRealtime()
+                }
+                ?: SystemClock
+                    .elapsedRealtime()
 
         ConnectionRuntime.updateSession(
             sessionId
         ) {
             it.copy(
                 state =
-                    ConnectionState.CONNECTED,
+                    ConnectionState
+                        .CONNECTED,
                 startedElapsed =
                     startedElapsed,
                 error = ""
             )
         }
+
+        ConnectionSessionStore
+            .markConnected(
+                context = this,
+                mode =
+                    ConnectionMode.PROXY,
+                profileId =
+                    profile.id,
+                profileName =
+                    profile.name,
+                startedElapsed =
+                    startedElapsed
+            )
+
+        startForeground(
+            NotificationSupport.ID,
+            buildNotification()
+        )
 
         Diagnostics.info(
             "Mixed proxy started for " +
@@ -245,13 +372,15 @@ class ConnectionService : Service() {
         handler.postDelayed(
             {
                 val current =
-                    ConnectionRuntime.current()
+                    ConnectionRuntime
+                        .current()
 
                 if (
                     current.sessionId ==
                     sessionId &&
                     current.state ==
-                    ConnectionState.CONNECTED
+                    ConnectionState
+                        .CONNECTED
                 ) {
                     Diagnostics
                         .markNativeSessionStable()
@@ -276,7 +405,8 @@ class ConnectionService : Service() {
                         current.sessionId !=
                         sessionId ||
                         current.state !=
-                        ConnectionState.CONNECTED
+                        ConnectionState
+                            .CONNECTED
                     ) {
                         return
                     }
@@ -296,20 +426,7 @@ class ConnectionService : Service() {
                     NotificationSupport
                         .notifyIfAllowed(
                             this@ConnectionService,
-                            NotificationSupport
-                                .build(
-                                    this@ConnectionService,
-                                    current
-                                        .profileName,
-                                    startedElapsed,
-                                    Intent(
-                                        this@ConnectionService,
-                                        ConnectionService::
-                                            class.java
-                                    ).setAction(
-                                        ACTION_STOP
-                                    )
-                                )
+                            buildNotification()
                         )
 
                     handler.postDelayed(
@@ -321,8 +438,35 @@ class ConnectionService : Service() {
         )
     }
 
+    private fun buildNotification() =
+        NotificationSupport.build(
+            service = this,
+            title =
+                profileName.ifBlank {
+                    "Trivox"
+                },
+            mode =
+                ConnectionMode.PROXY,
+            startedElapsed =
+                startedElapsed
+                    .takeIf {
+                        it > 0L
+                    }
+                    ?: restoredStartedElapsed,
+            stopIntent =
+                Intent(
+                    this,
+                    ConnectionService::
+                        class.java
+                ).setAction(
+                    ACTION_STOP
+                )
+        )
+
     private fun requestStop() {
         if (!sessionAccepted.get()) {
+            ConnectionSessionStore
+                .clear(this)
             stopSelf()
             return
         }
@@ -330,17 +474,22 @@ class ConnectionService : Service() {
         stopRequested.set(true)
 
         ConnectionRuntime
-            .updateSession(sessionId) {
+            .updateSession(
+                sessionId
+            ) {
                 it.copy(
                     state =
-                        ConnectionState.STOPPING
+                        ConnectionState
+                            .STOPPING
                 )
             }
 
         finishSession(null)
     }
 
-    private fun fail(message: String) {
+    private fun fail(
+        message: String
+    ) {
         Diagnostics.error(message)
         stopRequested.set(true)
         finishSession(message)
@@ -358,6 +507,9 @@ class ConnectionService : Service() {
         ) {
             return
         }
+
+        ConnectionSessionStore
+            .clear(this)
 
         executeSafely {
             handler
@@ -391,14 +543,16 @@ class ConnectionService : Service() {
                         ConnectionRuntime
                             .Snapshot(
                                 state =
-                                    ConnectionState.ERROR,
+                                    ConnectionState
+                                        .ERROR,
                                 profileId =
                                     profileId,
                                 profileName =
                                     profileName,
                                 error = error,
                                 mode =
-                                    ConnectionMode.PROXY
+                                    ConnectionMode
+                                        .PROXY
                             )
                     }
                 )
@@ -419,19 +573,23 @@ class ConnectionService : Service() {
 
         val repository =
             ConfigRepository(this)
-        val profile =
-            repository.find(profileId)
-                ?: return
         val duration =
-            SystemClock
-                .elapsedRealtime() -
-                startedElapsed
+            (
+                SystemClock
+                    .elapsedRealtime() -
+                    startedElapsed
+                ).coerceAtLeast(0L)
 
-        profile.lastSessionMs =
-            duration
-        profile.cumulativeSessionMs +=
-            duration
-        repository.save(profile)
+        repository.update(
+            profileId ?: return
+        ) { profile ->
+            profile.lastSessionMs =
+                duration
+            profile
+                .cumulativeSessionMs +=
+                duration
+        }
+
         startedElapsed = 0L
     }
 
@@ -490,12 +648,86 @@ class ConnectionService : Service() {
             false
         }
 
+    override fun onTaskRemoved(
+        rootIntent: Intent?
+    ) {
+        val current =
+            ConnectionRuntime.current()
+
+        if (
+            current.sessionId ==
+            sessionId &&
+            current.state ==
+            ConnectionState.CONNECTED
+        ) {
+            startForeground(
+                NotificationSupport.ID,
+                buildNotification()
+            )
+            Diagnostics.info(
+                "App task removed; mixed proxy " +
+                    "foreground service remains active"
+            )
+        }
+
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
         handler
             .removeCallbacksAndMessages(
                 null
             )
-        executor.shutdown()
+
+        val restartExpected =
+            sessionAccepted.get() &&
+                !cleanupStarted.get() &&
+                !stopRequested.get() &&
+                ConnectionSessionStore
+                    .load(this)
+                    ?.mode ==
+                ConnectionMode.PROXY
+
+        if (restartExpected) {
+            ConnectionRuntime.update(
+                ConnectionRuntime.Snapshot(
+                    state =
+                        ConnectionState.RECONNECTING,
+                    profileId = profileId,
+                    profileName = profileName,
+                    startedElapsed =
+                        startedElapsed
+                            .takeIf { it > 0L }
+                            ?: restoredStartedElapsed,
+                    mode =
+                        ConnectionMode.PROXY,
+                    sessionId = sessionId
+                )
+            )
+            Diagnostics.warning(
+                "Mixed proxy service was destroyed; " +
+                    "Android restart is expected"
+            )
+        }
+
+        if (
+            ownsCore.compareAndSet(
+                true,
+                false
+            )
+        ) {
+            val stopped =
+                core.stop()
+
+            if (!stopped.success) {
+                Diagnostics.error(
+                    "Proxy destroy stop failed: " +
+                        stopped.error
+                )
+            }
+        }
+
+        executor.shutdownNow()
         super.onDestroy()
     }
 
@@ -512,8 +744,10 @@ class ConnectionService : Service() {
                 "PROXY_STOP"
         const val EXTRA_PROFILE_ID =
             "profile_id"
+
         private const val
-            MONITOR_INTERVAL_MS = 1500L
+            MONITOR_INTERVAL_MS =
+                5_000L
         private const val
             NATIVE_STABILITY_WINDOW_MS =
                 30_000L

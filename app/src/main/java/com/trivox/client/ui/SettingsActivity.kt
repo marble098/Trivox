@@ -1,5 +1,6 @@
 package com.trivox.client.ui
 
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -24,6 +25,7 @@ import com.trivox.client.data.DnsMode
 import com.trivox.client.data.PingMethod
 import com.trivox.client.data.ProfileSortMode
 import com.trivox.client.data.SettingsRepository
+import com.trivox.client.data.SubscriptionRepository
 import org.json.JSONObject
 import java.net.URI
 import java.security.MessageDigest
@@ -287,21 +289,16 @@ class SettingsActivity :
             )
 
         pingAttempts.adapter =
-            compactAdapter(
-                attempts
-            )
+            compactAdapter(attempts)
         pingAttempts.setSelection(
-            (
-                settings
-                    .testAttempts
-                    .coerceIn(2, 5) -
-                    2
-                )
+            settings
+                .testAttempts
+                .coerceIn(2, 5) -
+                2
         )
         testUrl.setText(
             settings.testUrl
         )
-
         mixedPort.setText(
             settings.socksPort
                 .toString()
@@ -364,6 +361,31 @@ class SettingsActivity :
                 )
                 .coerceAtLeast(0)
         )
+
+        val subscriptionCount =
+            SubscriptionRepository(this)
+                .all()
+                .size
+
+        findViewById<Button>(
+            R.id.manageSubscriptionsButton
+        ).apply {
+            text =
+                getString(
+                    R.string
+                        .manage_subscriptions_count,
+                    subscriptionCount
+                )
+            setOnClickListener {
+                startActivity(
+                    Intent(
+                        this@SettingsActivity,
+                        SubscriptionManagementActivity::
+                            class.java
+                    )
+                )
+            }
+        }
 
         renderAbout()
 
@@ -454,8 +476,7 @@ class SettingsActivity :
                 ipv6.isChecked
             settings.dnsMode =
                 dnsModes[
-                    dns
-                        .selectedItemPosition
+                    dns.selectedItemPosition
                 ]
             settings.customDns =
                 dnsValues
@@ -486,9 +507,7 @@ class SettingsActivity :
             settings.testUrl =
                 testUrlValue
 
-            repository.save(
-                settings
-            )
+            repository.save(settings)
 
             val localeTags =
                 when (
@@ -528,14 +547,32 @@ class SettingsActivity :
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+
+        val button =
+            findViewById<Button>(
+                R.id.manageSubscriptionsButton
+            )
+        val count =
+            SubscriptionRepository(this)
+                .all()
+                .size
+        button.text =
+            getString(
+                R.string
+                    .manage_subscriptions_count,
+                count
+            )
+    }
+
     private fun validTestUrl(
         value: String
     ): Boolean =
         runCatching {
             URI(value)
         }.getOrNull()
-            ?.let {
-                uri ->
+            ?.let { uri ->
                 uri.scheme
                     ?.lowercase() in
                     setOf(
@@ -654,8 +691,7 @@ class SettingsActivity :
                     @Suppress(
                         "DEPRECATION"
                     )
-                    packageInfo
-                        .signatures
+                    packageInfo.signatures
                 }
 
             val certificate =
@@ -670,12 +706,8 @@ class SettingsActivity :
                 .getInstance(
                     "SHA-256"
                 )
-                .digest(
-                    certificate
-                )
-                .joinToString(
-                    ":"
-                ) {
+                .digest(certificate)
+                .joinToString(":") {
                     "%02X".format(
                         it.toInt() and
                             0xff

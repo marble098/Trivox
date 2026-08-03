@@ -10,40 +10,29 @@ class ConfigRepository(context: Context) {
             "profiles",
             Context.MODE_PRIVATE
         )
+
     companion object {
-        private val GLOBAL_LOCK =
-            Any()
+        private val GLOBAL_LOCK = Any()
     }
 
     fun all(): MutableList<ConfigProfile> =
         synchronized(GLOBAL_LOCK) {
-            val array = runCatching {
-                JSONArray(
-                    prefs.getString("items", "[]")
-                )
-            }.getOrDefault(JSONArray())
-
-            (0 until array.length()).mapNotNull {
-                runCatching {
-                    ConfigProfile.fromJson(
-                        array.getJSONObject(it)
-                    )
-                }.getOrNull()
-            }.toMutableList()
+            read()
         }
 
     fun find(id: String?): ConfigProfile? =
         id?.let { target ->
-            all().firstOrNull { it.id == target }
+            synchronized(GLOBAL_LOCK) {
+                read().firstOrNull { it.id == target }
+            }
         }
 
     fun update(
         id: String,
-        transform:
-            (ConfigProfile) -> Unit
+        transform: (ConfigProfile) -> Unit
     ): ConfigProfile? =
         synchronized(GLOBAL_LOCK) {
-            val items = all()
+            val items = read()
             val index =
                 items.indexOfFirst {
                     it.id == id
@@ -52,19 +41,19 @@ class ConfigRepository(context: Context) {
             if (index < 0) {
                 null
             } else {
-                transform(
-                    items[index]
-                )
+                transform(items[index])
                 write(items)
                 items[index]
             }
         }
 
-    fun save(profile: ConfigProfile) =
+    fun save(profile: ConfigProfile) {
         synchronized(GLOBAL_LOCK) {
-            val items = all()
+            val items = read()
             val index =
-                items.indexOfFirst { it.id == profile.id }
+                items.indexOfFirst {
+                    it.id == profile.id
+                }
 
             if (index >= 0) {
                 items[index] = profile
@@ -74,163 +63,234 @@ class ConfigRepository(context: Context) {
 
             write(items)
         }
+    }
 
-    fun saveAll(profiles: Collection<ConfigProfile>) =
+    fun saveAll(
+        profiles: Collection<ConfigProfile>
+    ) {
         synchronized(GLOBAL_LOCK) {
-            val items = all()
+            val items = read()
 
             profiles.forEach { profile ->
-                val duplicate = items.indexOfFirst {
-                    it.raw.trim() == profile.raw.trim()
-                }
+                val duplicate =
+                    items.indexOfFirst {
+                        it.raw.trim() ==
+                            profile.raw.trim()
+                    }
 
                 if (duplicate < 0) {
                     items += profile
-                } else if (profile.subscriptionId != null) {
-                    val old = items[duplicate]
+                } else if (
+                    profile.subscriptionId !=
+                    null
+                ) {
+                    val old =
+                        items[duplicate]
+
                     items[duplicate] =
-                        profile.copy(
-                            id = old.id,
-                            enabled =
-                                old.enabled,
-                            favorite =
-                                old.favorite,
-                            latencyMs =
-                                old.latencyMs,
-                            latencyJitterMs =
-                                old.latencyJitterMs,
-                            latencySuccessRatio =
-                                old.latencySuccessRatio,
-                            latencyMethod =
-                                old.latencyMethod,
-                            testStatus =
-                                old.testStatus,
-                            lastTestAt =
-                                old.lastTestAt,
-                            cumulativeSessionMs =
-                                old.cumulativeSessionMs,
-                            lastSessionMs =
-                                old.lastSessionMs,
-                            exitIp =
-                                old.exitIp,
-                            exitCountry =
-                                old.exitCountry,
-                            exitCountryCode =
-                                old.exitCountryCode,
-                            exitFlag =
-                                old.exitFlag,
-                            exitIsp =
-                                old.exitIsp,
-                            lastExitCheckAt =
-                                old.lastExitCheckAt
+                        mergePreserved(
+                            incoming =
+                                profile.copy(
+                                    id = old.id
+                                ),
+                            old = old
                         )
                 }
             }
 
             write(items)
         }
+    }
 
     fun replaceSubscription(
         subscriptionId: String,
         profiles: Collection<ConfigProfile>
-    ) = synchronized(GLOBAL_LOCK) {
-        val existing = all()
-        val previous =
-            existing
-                .filter {
-                    it.subscriptionId ==
-                        subscriptionId
-                }
-                .associateBy {
-                    it.raw.trim()
-                }
-        val retained =
-            existing
-                .filterNot {
-                    it.subscriptionId ==
-                        subscriptionId
-                }
-                .toMutableList()
+    ) {
+        synchronized(GLOBAL_LOCK) {
+            val existing = read()
+            val previous =
+                existing
+                    .filter {
+                        it.subscriptionId ==
+                            subscriptionId
+                    }
+                    .associateBy {
+                        it.raw.trim()
+                    }
 
-        profiles.forEach {
-                profile ->
-            val incoming =
-                profile.copy(
-                    subscriptionId =
-                        subscriptionId
-                )
-            val old =
-                previous[
-                    incoming.raw.trim()
-                ]
+            val retained =
+                existing
+                    .filterNot {
+                        it.subscriptionId ==
+                            subscriptionId
+                    }
+                    .toMutableList()
 
-            val merged =
-                if (old == null) {
-                    incoming
-                } else {
-                    incoming.copy(
-                        id = old.id,
-                        enabled =
-                            old.enabled,
-                        favorite =
-                            old.favorite,
-                        latencyMs =
-                            old.latencyMs,
-                        latencyJitterMs =
-                            old.latencyJitterMs,
-                        latencySuccessRatio =
-                            old.latencySuccessRatio,
-                        latencyMethod =
-                            old.latencyMethod,
-                        testStatus =
-                            old.testStatus,
-                        lastTestAt =
-                            old.lastTestAt,
-                        cumulativeSessionMs =
-                            old.cumulativeSessionMs,
-                        lastSessionMs =
-                            old.lastSessionMs,
-                        exitIp =
-                            old.exitIp,
-                        exitCountry =
-                            old.exitCountry,
-                        exitCountryCode =
-                            old.exitCountryCode,
-                        exitFlag =
-                            old.exitFlag,
-                        exitIsp =
-                            old.exitIsp,
-                        lastExitCheckAt =
-                            old.lastExitCheckAt
+            profiles.forEach { profile ->
+                val incoming =
+                    profile.copy(
+                        subscriptionId =
+                            subscriptionId
                     )
-                }
+                val old =
+                    previous[
+                        incoming.raw.trim()
+                    ]
 
-            val duplicate =
-                retained.indexOfFirst {
-                    it.raw.trim() ==
-                        merged.raw.trim()
-                }
+                val merged =
+                    if (old == null) {
+                        incoming
+                    } else {
+                        mergePreserved(
+                            incoming =
+                                incoming.copy(
+                                    id = old.id
+                                ),
+                            old = old
+                        )
+                    }
 
-            if (duplicate < 0) {
-                retained += merged
+                val duplicate =
+                    retained.indexOfFirst {
+                        it.raw.trim() ==
+                            merged.raw.trim()
+                    }
+
+                if (duplicate < 0) {
+                    retained += merged
+                }
+            }
+
+            write(retained)
+        }
+    }
+
+    fun renameSubscription(
+        subscriptionId: String,
+        groupName: String
+    ): Int =
+        synchronized(GLOBAL_LOCK) {
+            val items = read()
+            var changed = 0
+
+            items.forEach { profile ->
+                if (
+                    profile.subscriptionId ==
+                    subscriptionId &&
+                    profile.group != groupName
+                ) {
+                    profile.group = groupName
+                    changed += 1
+                }
+            }
+
+            if (changed > 0) {
+                write(items)
+            }
+
+            changed
+        }
+
+    fun deleteSubscription(
+        subscriptionId: String
+    ): Int =
+        synchronized(GLOBAL_LOCK) {
+            val items = read()
+            val removedIds =
+                items
+                    .filter {
+                        it.subscriptionId ==
+                            subscriptionId
+                    }
+                    .mapTo(
+                        mutableSetOf()
+                    ) {
+                        it.id
+                    }
+
+            if (removedIds.isEmpty()) {
+                return@synchronized 0
+            }
+
+            write(
+                items.filterNot {
+                    it.id in removedIds
+                }
+            )
+
+            if (
+                selectedId() in
+                removedIds
+            ) {
+                select(null)
+            }
+
+            removedIds.size
+        }
+
+    fun countForSubscription(
+        subscriptionId: String
+    ): Int =
+        synchronized(GLOBAL_LOCK) {
+            read().count {
+                it.subscriptionId ==
+                    subscriptionId
             }
         }
 
-        write(retained)
+    fun delete(id: String) {
+        synchronized(GLOBAL_LOCK) {
+            val items =
+                read().filterNot {
+                    it.id == id
+                }
+
+            write(items)
+
+            if (selectedId() == id) {
+                select(null)
+            }
+        }
     }
 
-    fun delete(id: String) =
-        synchronized(GLOBAL_LOCK) {
-            write(all().filterNot { it.id == id })
-        }
-
     fun selectedId(): String? =
-        prefs.getString("selected", null)
+        prefs.getString(
+            "selected",
+            null
+        )
 
     fun select(id: String?) {
         prefs.edit()
-            .putString("selected", id)
+            .putString(
+                "selected",
+                id
+            )
             .apply()
+    }
+
+    private fun read():
+        MutableList<ConfigProfile> {
+        val array =
+            runCatching {
+                JSONArray(
+                    prefs.getString(
+                        "items",
+                        "[]"
+                    )
+                )
+            }.getOrDefault(
+                JSONArray()
+            )
+
+        return (
+            0 until array.length()
+        ).mapNotNull {
+            runCatching {
+                ConfigProfile.fromJson(
+                    array.getJSONObject(it)
+                )
+            }.getOrNull()
+        }.toMutableList()
     }
 
     private fun write(
@@ -247,6 +307,39 @@ class ConfigRepository(context: Context) {
             )
             .apply()
     }
+
+    private fun mergePreserved(
+        incoming: ConfigProfile,
+        old: ConfigProfile
+    ): ConfigProfile =
+        incoming.copy(
+            enabled = old.enabled,
+            favorite = old.favorite,
+            latencyMs = old.latencyMs,
+            latencyJitterMs =
+                old.latencyJitterMs,
+            latencySuccessRatio =
+                old.latencySuccessRatio,
+            latencyMethod =
+                old.latencyMethod,
+            testStatus =
+                old.testStatus,
+            lastTestAt =
+                old.lastTestAt,
+            cumulativeSessionMs =
+                old.cumulativeSessionMs,
+            lastSessionMs =
+                old.lastSessionMs,
+            exitIp = old.exitIp,
+            exitCountry =
+                old.exitCountry,
+            exitCountryCode =
+                old.exitCountryCode,
+            exitFlag = old.exitFlag,
+            exitIsp = old.exitIsp,
+            lastExitCheckAt =
+                old.lastExitCheckAt
+        )
 }
 
 class SettingsRepository(context: Context) {
@@ -257,27 +350,41 @@ class SettingsRepository(context: Context) {
         )
 
     fun load(): AppSettings {
-        val raw = runCatching {
-            JSONObject(
-                prefs.getString("value", "{}")!!
+        val raw =
+            runCatching {
+                JSONObject(
+                    prefs.getString(
+                        "value",
+                        "{}"
+                    )!!
+                )
+            }.getOrDefault(
+                JSONObject()
             )
-        }.getOrDefault(JSONObject())
 
-        val storedSocksPort = raw.optInt(
-            "socksPort",
-            AppSettings.DEFAULT_MIXED_PORT
-        )
-        val storedHttpPort = raw.optInt(
-            "httpPort",
-            storedSocksPort
-        )
-        val settings = runCatching {
-            AppSettings.fromJson(raw)
-        }.getOrDefault(AppSettings())
+        val storedSocksPort =
+            raw.optInt(
+                "socksPort",
+                AppSettings
+                    .DEFAULT_MIXED_PORT
+            )
+        val storedHttpPort =
+            raw.optInt(
+                "httpPort",
+                storedSocksPort
+            )
+        val settings =
+            runCatching {
+                AppSettings.fromJson(raw)
+            }.getOrDefault(
+                AppSettings()
+            )
 
         if (
-            storedSocksPort != settings.socksPort ||
-            storedHttpPort != settings.socksPort
+            storedSocksPort !=
+            settings.socksPort ||
+            storedHttpPort !=
+            settings.socksPort
         ) {
             save(settings)
         }
@@ -287,51 +394,131 @@ class SettingsRepository(context: Context) {
 
     fun save(settings: AppSettings) {
         settings.normalize()
+
         prefs.edit()
             .putString(
                 "value",
-                settings.toJson().toString()
+                settings
+                    .toJson()
+                    .toString()
             )
             .apply()
     }
 }
 
-class SubscriptionRepository(context: Context) {
+class SubscriptionRepository(
+    context: Context
+) {
     private val prefs =
-        context.applicationContext.getSharedPreferences(
-            "subscriptions",
-            Context.MODE_PRIVATE
-        )
-
-    @Synchronized
-    fun all(): MutableList<SubscriptionSource> {
-        val array = runCatching {
-            JSONArray(
-                prefs.getString("items", "[]")
+        context.applicationContext
+            .getSharedPreferences(
+                "subscriptions",
+                Context.MODE_PRIVATE
             )
-        }.getOrDefault(JSONArray())
 
-        return (0 until array.length()).mapNotNull {
+    companion object {
+        private val GLOBAL_LOCK = Any()
+    }
+
+    fun all():
+        MutableList<SubscriptionSource> =
+        synchronized(GLOBAL_LOCK) {
+            read()
+        }
+
+    fun find(
+        id: String?
+    ): SubscriptionSource? =
+        id?.let { target ->
+            synchronized(GLOBAL_LOCK) {
+                read().firstOrNull {
+                    it.id == target
+                }
+            }
+        }
+
+    fun save(
+        source: SubscriptionSource
+    ) {
+        synchronized(GLOBAL_LOCK) {
+            val items = read()
+            val index =
+                items.indexOfFirst {
+                    it.id == source.id
+                }
+
+            if (index >= 0) {
+                items[index] = source
+            } else {
+                items += source
+            }
+
+            write(items)
+        }
+    }
+
+    fun update(
+        id: String,
+        transform:
+            (SubscriptionSource) -> Unit
+    ): SubscriptionSource? =
+        synchronized(GLOBAL_LOCK) {
+            val items = read()
+            val index =
+                items.indexOfFirst {
+                    it.id == id
+                }
+
+            if (index < 0) {
+                null
+            } else {
+                transform(items[index])
+                write(items)
+                items[index]
+            }
+        }
+
+    fun delete(id: String) {
+        synchronized(GLOBAL_LOCK) {
+            write(
+                read().filterNot {
+                    it.id == id
+                }
+            )
+        }
+    }
+
+    private fun read():
+        MutableList<SubscriptionSource> {
+        val array =
             runCatching {
-                SubscriptionSource.fromJson(
-                    array.getJSONObject(it)
+                JSONArray(
+                    prefs.getString(
+                        "items",
+                        "[]"
+                    )
                 )
+            }.getOrDefault(
+                JSONArray()
+            )
+
+        return (
+            0 until array.length()
+        ).mapNotNull {
+            runCatching {
+                SubscriptionSource
+                    .fromJson(
+                        array
+                            .getJSONObject(it)
+                    )
             }.getOrNull()
         }.toMutableList()
     }
 
-    @Synchronized
-    fun save(source: SubscriptionSource) {
-        val items = all()
-        val index =
-            items.indexOfFirst { it.id == source.id }
-
-        if (index >= 0) {
-            items[index] = source
-        } else {
-            items += source
-        }
-
+    private fun write(
+        items:
+            Collection<SubscriptionSource>
+    ) {
         prefs.edit()
             .putString(
                 "items",
@@ -339,22 +526,6 @@ class SubscriptionRepository(context: Context) {
                     items.forEach {
                         put(it.toJson())
                     }
-                }.toString()
-            )
-            .apply()
-    }
-
-    @Synchronized
-    fun delete(id: String) {
-        prefs.edit()
-            .putString(
-                "items",
-                JSONArray().apply {
-                    all()
-                        .filterNot { it.id == id }
-                        .forEach {
-                            put(it.toJson())
-                        }
                 }.toString()
             )
             .apply()

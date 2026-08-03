@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layoutDirection="locale"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:textDirection="locale">
+
+    <TextView
+        style="@style/Widget.Trivox.FieldLabel"
+        android:text="@string/subscription_name" />
+
+    <EditText
+        android:id="@+id/subscriptionNameInput"
+        style="@style/Widget.Trivox.Input"
+        android:layout_marginTop="4dp"
+        android:hint="@string/subscription_name_hint"
+        android:inputType="textCapSentences"
+        android:maxLines="1" />
+
+    <TextView
+        style="@style/Widget.Trivox.FieldLabel"
+        android:layout_marginTop="10dp"
+        android:text="@string/subscription_url" />
+
+    <EditText
+        android:id="@+id/subscriptionUrlInput"
+        style="@style/Widget.Trivox.Input"
+        android:layout_marginTop="4dp"
+        android:hint="@string/subscription_url_hint"
+        android:inputType="textUri"
+        android:maxLines="2"
+        android:textDirection="ltr" />
+
+    <CheckBox
+        android:id="@+id/subscriptionEnabledCheck"
+        style="@style/Widget.Trivox.CheckBox"
+        android:layout_marginTop="8dp"
+        android:checked="true"
+        android:text="@string/subscription_enabled" />
+</LinearLayout>

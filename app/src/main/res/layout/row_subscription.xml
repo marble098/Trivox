@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="8dp"
+    android:background="@drawable/panel_background"
+    android:orientation="vertical"
+    android:padding="11dp">
+
+    <TextView
+        android:id="@+id/subscriptionName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/text_primary"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/subscriptionUrl"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="3dp"
+        android:ellipsize="middle"
+        android:maxLines="1"
+        android:textColor="@color/muted"
+        android:textDirection="ltr"
+        android:textIsSelectable="true"
+        android:textSize="10sp" />
+
+    <TextView
+        android:id="@+id/subscriptionSummary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:textColor="@color/text_secondary"
+        android:textSize="11sp" />
+
+    <TextView
+        android:id="@+id/subscriptionError"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:textColor="@color/red"
+        android:textSize="10sp"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/subscriptionUpdateButton"
+            style="@style/Widget.Trivox.Button.Secondary"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginEnd="3dp"
+            android:layout_weight="1"
+            android:text="@string/update" />
+
+        <Button
+            android:id="@+id/subscriptionEditButton"
+            style="@style/Widget.Trivox.Button.Secondary"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="3dp"
+            android:layout_marginEnd="3dp"
+            android:layout_weight="1"
+            android:text="@string/edit_subscription" />
+
+        <Button
+            android:id="@+id/subscriptionEnableButton"
+            style="@style/Widget.Trivox.Button.Secondary"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="3dp"
+            android:layout_weight="1"
+            android:text="@string/disable" />
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/subscriptionDeleteButton"
+        style="@style/Widget.Trivox.Button.Secondary"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:layout_marginTop="6dp"
+        android:text="@string/delete_subscription" />
+</LinearLayout>

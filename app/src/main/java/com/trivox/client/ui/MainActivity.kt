@@ -14,10 +14,12 @@ import android.os.Looper
 import android.os.SystemClock
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.Gravity
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
@@ -80,6 +82,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var modeSpinner: Spinner
     private lateinit var refreshExitButton: Button
     private lateinit var copySummaryButton: Button
+    private lateinit var subscriptionTabs: LinearLayout
 
     private val worker = Executors.newSingleThreadExecutor()
     private val handler = Handler(Looper.getMainLooper())
@@ -100,6 +103,8 @@ class MainActivity : AppCompatActivity() {
     private var importDialogInput: EditText? = null
     private var pendingVpnProfile: String? = null
     private var lastInfoProfileId: String? = null
+    private var activeSubscriptionId: String? = null
+    private var subscriptionTabsSignature = ""
 
     private val filePicker =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -179,6 +184,7 @@ class MainActivity : AppCompatActivity() {
         modeSpinner = findViewById(R.id.modeSpinner)
         refreshExitButton = findViewById(R.id.refreshExitButton)
         copySummaryButton = findViewById(R.id.copySummaryButton)
+        subscriptionTabs = findViewById(R.id.subscriptionTabs)
     }
 
     private fun setupToolbar() {
@@ -275,6 +281,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupControls() {
+        activeSubscriptionId =
+            getSharedPreferences(
+                MAIN_UI_PREFS,
+                MODE_PRIVATE
+            ).getString(
+                KEY_ACTIVE_SUBSCRIPTION,
+                null
+            )
+
+        renderSubscriptionTabs(
+            force = true
+        )
+
+        livePingText
+            .setOnClickListener {
+                requestLivePingNow()
+            }
+
         modeSpinner.adapter = compactAdapter(
             arrayOf(
                 getString(R.string.proxy_mode),
@@ -327,6 +351,232 @@ class MainActivity : AppCompatActivity() {
         copySummaryButton.setOnClickListener { copyConnectionSummary() }
     }
 
+
+    private fun requestLivePingNow() {
+        val snapshot =
+            ConnectionRuntime.current()
+
+        if (
+            snapshot.state !=
+            ConnectionState.CONNECTED
+        ) {
+            toast(
+                getString(
+                    R.string.connect_first
+                )
+            )
+            return
+        }
+
+        if (livePingBusy.get()) {
+            toast(
+                getString(
+                    R.string
+                        .live_ping_in_progress
+                )
+            )
+            return
+        }
+
+        livePingResult = null
+        livePingText.setText(
+            R.string
+                .live_ping_measuring
+        )
+        handler.removeCallbacks(
+            livePingTick
+        )
+        handler.post(
+            livePingTick
+        )
+    }
+
+    private fun renderSubscriptionTabs(
+        force: Boolean = false
+    ) {
+        val sources =
+            SubscriptionRepository(this)
+                .all()
+                .sortedBy {
+                    it.name.lowercase(
+                        Locale.ROOT
+                    )
+                }
+        val profiles =
+            repository.all()
+        val availableIds =
+            sources
+                .mapTo(
+                    mutableSetOf()
+                ) {
+                    it.id
+                }
+
+        val selectedSourceId =
+            activeSubscriptionId
+
+        if (
+            selectedSourceId != null &&
+            selectedSourceId !in
+            availableIds
+        ) {
+            activeSubscriptionId = null
+            storeActiveSubscription()
+        }
+
+        val counts =
+            profiles
+                .groupingBy {
+                    it.subscriptionId
+                }
+                .eachCount()
+        val signature =
+            buildString {
+                append(
+                    activeSubscriptionId
+                        .orEmpty()
+                )
+                append('|')
+                append(profiles.size)
+                sources.forEach {
+                    append('|')
+                    append(it.id)
+                    append(':')
+                    append(it.name)
+                    append(':')
+                    append(
+                        counts[it.id] ?: 0
+                    )
+                }
+            }
+
+        if (
+            !force &&
+            signature ==
+            subscriptionTabsSignature
+        ) {
+            return
+        }
+
+        subscriptionTabsSignature =
+            signature
+        subscriptionTabs.removeAllViews()
+
+        addSubscriptionTab(
+            id = null,
+            label =
+                getString(
+                    R.string
+                        .subscription_all_count,
+                    profiles.size
+                )
+        )
+
+        sources.forEach { source ->
+            addSubscriptionTab(
+                id = source.id,
+                label =
+                    getString(
+                        R.string
+                            .subscription_tab_count,
+                        source.name,
+                        counts[source.id] ?: 0
+                    )
+            )
+        }
+    }
+
+    private fun addSubscriptionTab(
+        id: String?,
+        label: String
+    ) {
+        val selected =
+            activeSubscriptionId ==
+                id
+        val tab =
+            TextView(this).apply {
+                text = label
+                gravity = Gravity.CENTER
+                minHeight = dp(38)
+                setPadding(
+                    dp(14),
+                    0,
+                    dp(14),
+                    0
+                )
+                textSize = 11f
+                setTextColor(
+                    ContextCompat.getColor(
+                        this@MainActivity,
+                        if (selected) {
+                            R.color.blue
+                        } else {
+                            R.color
+                                .text_primary
+                        }
+                    )
+                )
+                setBackgroundResource(
+                    if (selected) {
+                        R.drawable
+                            .subscription_tab_selected
+                    } else {
+                        R.drawable
+                            .subscription_tab_normal
+                    }
+                )
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    if (
+                        activeSubscriptionId !=
+                        id
+                    ) {
+                        activeSubscriptionId = id
+                        storeActiveSubscription()
+                        subscriptionTabsSignature =
+                            ""
+                        renderSubscriptionTabs(
+                            force = true
+                        )
+                        refresh()
+                    }
+                }
+            }
+
+        subscriptionTabs.addView(
+            tab,
+            LinearLayout.LayoutParams(
+                LinearLayout
+                    .LayoutParams
+                    .WRAP_CONTENT,
+                dp(38)
+            ).apply {
+                marginEnd = dp(6)
+            }
+        )
+    }
+
+    private fun storeActiveSubscription() {
+        getSharedPreferences(
+            MAIN_UI_PREFS,
+            MODE_PRIVATE
+        ).edit()
+            .putString(
+                KEY_ACTIVE_SUBSCRIPTION,
+                activeSubscriptionId
+            )
+            .apply()
+    }
+
+    private fun dp(value: Int): Int =
+        (
+            value *
+                resources
+                    .displayMetrics
+                    .density
+            ).toInt()
+
     private fun compactAdapter(values: Array<String>): ArrayAdapter<String> =
         ArrayAdapter(this, R.layout.spinner_item, values).also {
             it.setDropDownViewResource(R.layout.spinner_dropdown_item)
@@ -335,36 +585,50 @@ class MainActivity : AppCompatActivity() {
     private fun refresh() {
         val selectedId = repository.selectedId()
         val current = ConnectionRuntime.current()
+        renderSubscriptionTabs()
         val values = repository.all()
             .asSequence()
             .filter { profile ->
+                val sourceMatches =
+                    activeSubscriptionId ==
+                        null ||
+                        profile
+                            .subscriptionId ==
+                        activeSubscriptionId
+
+                val searchMatches =
+                    filter.isBlank() ||
+                        profile.name
+                            .contains(
+                                filter,
+                                true
+                            ) ||
+                        profile.server
+                            .contains(
+                                filter,
+                                true
+                            ) ||
+                        profile.protocol
+                            .contains(
+                                filter,
+                                true
+                            ) ||
+                        profile.exitCountry
+                            .contains(
+                                filter,
+                                true
+                            ) ||
+                        profile.exitIp
+                            .contains(
+                                filter,
+                                true
+                            )
+
                 profile.id ==
                     current.profileId ||
-                    filter.isBlank() ||
-                    profile.name
-                        .contains(
-                            filter,
-                            true
-                        ) ||
-                    profile.server
-                        .contains(
-                            filter,
-                            true
-                        ) ||
-                    profile.protocol
-                        .contains(
-                            filter,
-                            true
-                        ) ||
-                    profile.exitCountry
-                        .contains(
-                            filter,
-                            true
-                        ) ||
-                    profile.exitIp
-                        .contains(
-                            filter,
-                            true
+                    (
+                        sourceMatches &&
+                            searchMatches
                         )
             }
             .sortedWith(
@@ -414,6 +678,14 @@ class MainActivity : AppCompatActivity() {
             if (connectedProfile == null) {
                 getString(
                     R.string.live_ping_off
+                )
+            } else if (
+                livePingBusy.get() &&
+                live == null
+            ) {
+                getString(
+                    R.string
+                        .live_ping_measuring
                 )
             } else if (
                 live?.success == true &&
@@ -551,6 +823,9 @@ class MainActivity : AppCompatActivity() {
             }.onSuccess { count ->
                 runOnUiThread {
                     toast(getString(R.string.import_success, count))
+                    renderSubscriptionTabs(
+                        force = true
+                    )
                     refresh()
                 }
             }.onFailure { error ->
@@ -1146,11 +1421,23 @@ class MainActivity : AppCompatActivity() {
         val profiles = JSONArray().apply {
             repository.all().forEach { put(it.toJson()) }
         }
+        val subscriptions =
+            JSONArray().apply {
+                SubscriptionRepository(
+                    this@MainActivity
+                ).all().forEach {
+                    put(it.toJson())
+                }
+            }
         val backup = JSONObject()
-            .put("format", "trivox-backup-v1")
+            .put("format", "trivox-backup-v2")
             .put("createdAt", System.currentTimeMillis())
             .put("settings", settingsRepository.load().toJson())
             .put("profiles", profiles)
+            .put(
+                "subscriptions",
+                subscriptions
+            )
             .toString(2)
         shareText(getString(R.string.export_backup), backup)
     }
@@ -1801,6 +2088,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        renderSubscriptionTabs(
+            force = true
+        )
         refresh()
     }
 
@@ -1830,6 +2120,9 @@ class MainActivity : AppCompatActivity() {
         private const val MENU_DIAGNOSTICS = 107
         private const val LIVE_PING_INTERVAL_MS = 5_000L
         private const val CONNECTION_ACTION_COOLDOWN_MS = 1_500L
+        private const val MAIN_UI_PREFS = "main_ui"
+        private const val KEY_ACTIVE_SUBSCRIPTION =
+            "active_subscription_id"
         private const val EXIT_CACHE_MS = 10 * 60 * 1_000L
 
         private val SHARE_SCHEMES = setOf(

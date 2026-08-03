@@ -47,6 +47,7 @@ class TrivoxVpnService : VpnService() {
     private var profileId: String? = null
     private var profileName = ""
     private var startedElapsed = 0L
+    private var restoredStartedElapsed = 0L
     private var sessionId = 0L
     private var networkCallback:
         ConnectivityManager
@@ -64,16 +65,35 @@ class TrivoxVpnService : VpnService() {
         flags: Int,
         startId: Int
     ): Int {
+        val restored =
+            ConnectionSessionStore
+                .load(this)
+                ?.takeIf {
+                    it.mode ==
+                        ConnectionMode.VPN
+                }
+        val action =
+            intent?.action
+                ?: if (
+                    restored != null
+                ) {
+                    ACTION_START
+                } else {
+                    null
+                }
+
         if (
-            intent?.action ==
+            action ==
             ACTION_STOP
         ) {
+            ConnectionSessionStore
+                .clear(this)
             requestStop()
             return START_NOT_STICKY
         }
 
         if (
-            intent?.action !=
+            action !=
             ACTION_START
         ) {
             stopSelf(startId)
@@ -87,7 +107,7 @@ class TrivoxVpnService : VpnService() {
                     true
                 )
         ) {
-            return START_NOT_STICKY
+            return START_REDELIVER_INTENT
         }
 
         val current =
@@ -99,9 +119,22 @@ class TrivoxVpnService : VpnService() {
                 ConnectionState.ERROR
             )
         ) {
-            sessionAccepted.set(false)
-            stopSelf(startId)
-            return START_NOT_STICKY
+            val staleRestoredState =
+                restored != null &&
+                    current.mode ==
+                    ConnectionMode.VPN &&
+                    current.profileId ==
+                    restored.profileId
+
+            if (staleRestoredState) {
+                ConnectionRuntime.update(
+                    ConnectionRuntime.Snapshot()
+                )
+            } else {
+                sessionAccepted.set(false)
+                stopSelf(startId)
+                return START_REDELIVER_INTENT
+            }
         }
 
         stopRequested.set(false)
@@ -112,18 +145,76 @@ class TrivoxVpnService : VpnService() {
             ConnectionRuntime
                 .nextSessionId()
 
+        val explicitProfileId =
+            intent
+                ?.getStringExtra(
+                    EXTRA_PROFILE_ID
+                )
         profileId =
-            intent.getStringExtra(
-                EXTRA_PROFILE_ID
-            ) ?: ConfigRepository(this)
-                .selectedId()
+            explicitProfileId
+                ?: restored?.profileId
+                ?: ConfigRepository(this)
+                    .selectedId()
+
+        val requestedProfileId =
+            profileId
+
+        if (
+            requestedProfileId
+                .isNullOrBlank()
+        ) {
+            sessionAccepted.set(false)
+            ConnectionSessionStore
+                .clear(this)
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+
+        val matchingRestored =
+            restored
+                ?.takeIf {
+                    explicitProfileId == null ||
+                        it.profileId ==
+                        requestedProfileId
+                }
+
+        restoredStartedElapsed =
+            matchingRestored
+                ?.startedElapsed
+                ?.takeIf {
+                    it > 0L &&
+                        it <=
+                        SystemClock
+                            .elapsedRealtime()
+                }
+                ?: 0L
+        profileName =
+            matchingRestored
+                ?.profileName
+                .orEmpty()
+
+        ConnectionSessionStore
+            .markDesired(
+                context = this,
+                mode =
+                    ConnectionMode.VPN,
+                profileId =
+                    requestedProfileId,
+                profileName =
+                    profileName,
+                startedElapsed =
+                    restoredStartedElapsed
+            )
 
         startForeground(
             NotificationSupport.ID,
             NotificationSupport.build(
                 this,
-                "Trivox VPN",
-                0,
+                profileName.ifBlank {
+                    "Trivox VPN"
+                },
+                ConnectionMode.VPN,
+                restoredStartedElapsed,
                 Intent(
                     this,
                     TrivoxVpnService::
@@ -136,7 +227,7 @@ class TrivoxVpnService : VpnService() {
             startConnection()
         }
 
-        return START_NOT_STICKY
+        return START_REDELIVER_INTENT
     }
 
     private fun startConnection() {
@@ -162,6 +253,19 @@ class TrivoxVpnService : VpnService() {
         }
 
         profileName = profile.name
+
+        ConnectionSessionStore
+            .markDesired(
+                context = this,
+                mode =
+                    ConnectionMode.VPN,
+                profileId =
+                    profile.id,
+                profileName =
+                    profileName,
+                startedElapsed =
+                    restoredStartedElapsed
+            )
 
         if (!core.adapter.isAvailable()) {
             fail(
@@ -336,7 +440,15 @@ class TrivoxVpnService : VpnService() {
         }
 
         startedElapsed =
-            SystemClock.elapsedRealtime()
+            restoredStartedElapsed
+                .takeIf {
+                    it > 0L &&
+                        it <=
+                        SystemClock
+                            .elapsedRealtime()
+                }
+                ?: SystemClock
+                    .elapsedRealtime()
 
         ConnectionRuntime
             .updateSession(sessionId) {
@@ -348,6 +460,36 @@ class TrivoxVpnService : VpnService() {
                     error = ""
                 )
             }
+
+        ConnectionSessionStore
+            .markConnected(
+                context = this,
+                mode =
+                    ConnectionMode.VPN,
+                profileId =
+                    profile.id,
+                profileName =
+                    profile.name,
+                startedElapsed =
+                    startedElapsed
+            )
+
+        startForeground(
+            NotificationSupport.ID,
+            NotificationSupport.build(
+                this,
+                profile.name,
+                ConnectionMode.VPN,
+                startedElapsed,
+                Intent(
+                    this,
+                    TrivoxVpnService::
+                        class.java
+                ).setAction(
+                    ACTION_STOP
+                )
+            )
+        )
 
         Diagnostics.info(
             "VPN started for " +
@@ -644,6 +786,7 @@ class TrivoxVpnService : VpnService() {
                                 .build(
                                     this@TrivoxVpnService,
                                     current.profileName,
+                                    ConnectionMode.VPN,
                                     startedElapsed,
                                     Intent(
                                         this@TrivoxVpnService,
@@ -666,6 +809,8 @@ class TrivoxVpnService : VpnService() {
 
     private fun requestStop() {
         if (!sessionAccepted.get()) {
+            ConnectionSessionStore
+                .clear(this)
             stopSelf()
             return
         }
@@ -703,6 +848,8 @@ class TrivoxVpnService : VpnService() {
         }
 
         reconnectQueued.set(false)
+        ConnectionSessionStore
+            .clear(this)
 
         executeSafely {
             handler
@@ -840,13 +987,87 @@ class TrivoxVpnService : VpnService() {
             false
         }
 
+
+    override fun onTaskRemoved(
+        rootIntent: Intent?
+    ) {
+        val current =
+            ConnectionRuntime.current()
+
+        if (
+            current.sessionId ==
+            sessionId &&
+            current.state in
+            setOf(
+                ConnectionState.CONNECTED,
+                ConnectionState.RECONNECTING
+            )
+        ) {
+            startForeground(
+                NotificationSupport.ID,
+                NotificationSupport.build(
+                    this,
+                    current.profileName,
+                    ConnectionMode.VPN,
+                    startedElapsed,
+                    Intent(
+                        this,
+                        TrivoxVpnService::
+                            class.java
+                    ).setAction(
+                        ACTION_STOP
+                    )
+                )
+            )
+            Diagnostics.info(
+                "App task removed; VPN " +
+                    "foreground service remains active"
+            )
+        }
+
+        super.onTaskRemoved(
+            rootIntent
+        )
+    }
+
     override fun onRevoke() {
         requestStop()
     }
 
     override fun onDestroy() {
+        val restartExpected =
+            sessionAccepted.get() &&
+                !cleanupStarted.get() &&
+                !stopRequested.get() &&
+                ConnectionSessionStore
+                    .load(this)
+                    ?.mode ==
+                ConnectionMode.VPN
+
         stopRequested.set(true)
         reconnectQueued.set(false)
+
+        if (restartExpected) {
+            ConnectionRuntime.update(
+                ConnectionRuntime.Snapshot(
+                    state =
+                        ConnectionState.RECONNECTING,
+                    profileId = profileId,
+                    profileName = profileName,
+                    startedElapsed =
+                        startedElapsed
+                            .takeIf { it > 0L }
+                            ?: restoredStartedElapsed,
+                    mode =
+                        ConnectionMode.VPN,
+                    sessionId = sessionId
+                )
+            )
+            Diagnostics.warning(
+                "VPN service was destroyed; " +
+                    "Android restart is expected"
+            )
+        }
         unregisterNetworkCallback()
         handler
             .removeCallbacksAndMessages(
@@ -893,7 +1114,7 @@ class TrivoxVpnService : VpnService() {
         const val EXTRA_PROFILE_ID =
             "profile_id"
         private const val
-            MONITOR_INTERVAL_MS = 1500L
+            MONITOR_INTERVAL_MS = 5_000L
         private const val
             NATIVE_STABILITY_WINDOW_MS =
                 30_000L

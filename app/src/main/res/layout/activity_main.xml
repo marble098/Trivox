@@ -84,8 +84,15 @@
             <TextView
                 android:id="@+id/livePingText"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="94dp"
+                android:layout_height="38dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:contentDescription="@string/live_ping_click_hint"
+                android:focusable="true"
+                android:gravity="center"
+                android:minWidth="112dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
                 android:text="@string/live_ping_off"
                 android:textColor="@color/blue"
                 android:textDirection="ltr"
@@ -160,6 +167,24 @@
             android:inputType="text"
             android:maxLines="1" />
     </LinearLayout>
+
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="7dp"
+        android:fillViewport="false"
+        android:overScrollMode="never"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/subscriptionTabs"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="1dp"
+            android:paddingEnd="1dp" />
+    </HorizontalScrollView>
 
     <TextView
         style="@style/Widget.Trivox.SectionTitle"
