@@ -10,10 +10,13 @@ class ConfigRepository(context: Context) {
             "profiles",
             Context.MODE_PRIVATE
         )
-    private val lock = Any()
+    companion object {
+        private val GLOBAL_LOCK =
+            Any()
+    }
 
     fun all(): MutableList<ConfigProfile> =
-        synchronized(lock) {
+        synchronized(GLOBAL_LOCK) {
             val array = runCatching {
                 JSONArray(
                     prefs.getString("items", "[]")
@@ -34,8 +37,31 @@ class ConfigRepository(context: Context) {
             all().firstOrNull { it.id == target }
         }
 
+    fun update(
+        id: String,
+        transform:
+            (ConfigProfile) -> Unit
+    ): ConfigProfile? =
+        synchronized(GLOBAL_LOCK) {
+            val items = all()
+            val index =
+                items.indexOfFirst {
+                    it.id == id
+                }
+
+            if (index < 0) {
+                null
+            } else {
+                transform(
+                    items[index]
+                )
+                write(items)
+                items[index]
+            }
+        }
+
     fun save(profile: ConfigProfile) =
-        synchronized(lock) {
+        synchronized(GLOBAL_LOCK) {
             val items = all()
             val index =
                 items.indexOfFirst { it.id == profile.id }
@@ -50,7 +76,7 @@ class ConfigRepository(context: Context) {
         }
 
     fun saveAll(profiles: Collection<ConfigProfile>) =
-        synchronized(lock) {
+        synchronized(GLOBAL_LOCK) {
             val items = all()
 
             profiles.forEach { profile ->
@@ -62,14 +88,42 @@ class ConfigRepository(context: Context) {
                     items += profile
                 } else if (profile.subscriptionId != null) {
                     val old = items[duplicate]
-                    items[duplicate] = profile.copy(
-                        id = old.id,
-                        favorite = old.favorite,
-                        cumulativeSessionMs =
-                            old.cumulativeSessionMs,
-                        lastSessionMs =
-                            old.lastSessionMs
-                    )
+                    items[duplicate] =
+                        profile.copy(
+                            id = old.id,
+                            enabled =
+                                old.enabled,
+                            favorite =
+                                old.favorite,
+                            latencyMs =
+                                old.latencyMs,
+                            latencyJitterMs =
+                                old.latencyJitterMs,
+                            latencySuccessRatio =
+                                old.latencySuccessRatio,
+                            latencyMethod =
+                                old.latencyMethod,
+                            testStatus =
+                                old.testStatus,
+                            lastTestAt =
+                                old.lastTestAt,
+                            cumulativeSessionMs =
+                                old.cumulativeSessionMs,
+                            lastSessionMs =
+                                old.lastSessionMs,
+                            exitIp =
+                                old.exitIp,
+                            exitCountry =
+                                old.exitCountry,
+                            exitCountryCode =
+                                old.exitCountryCode,
+                            exitFlag =
+                                old.exitFlag,
+                            exitIsp =
+                                old.exitIsp,
+                            lastExitCheckAt =
+                                old.lastExitCheckAt
+                        )
                 }
             }
 
@@ -79,35 +133,94 @@ class ConfigRepository(context: Context) {
     fun replaceSubscription(
         subscriptionId: String,
         profiles: Collection<ConfigProfile>
-    ) = synchronized(lock) {
-        val retained = all()
-            .filterNot {
-                it.subscriptionId == subscriptionId
-            }
-            .toMutableList()
-
-        profiles
-            .map {
-                it.copy(
-                    subscriptionId = subscriptionId
-                )
-            }
-            .forEach { incoming ->
-                if (
-                    retained.none {
-                        it.raw.trim() ==
-                            incoming.raw.trim()
-                    }
-                ) {
-                    retained += incoming
+    ) = synchronized(GLOBAL_LOCK) {
+        val existing = all()
+        val previous =
+            existing
+                .filter {
+                    it.subscriptionId ==
+                        subscriptionId
                 }
+                .associateBy {
+                    it.raw.trim()
+                }
+        val retained =
+            existing
+                .filterNot {
+                    it.subscriptionId ==
+                        subscriptionId
+                }
+                .toMutableList()
+
+        profiles.forEach {
+                profile ->
+            val incoming =
+                profile.copy(
+                    subscriptionId =
+                        subscriptionId
+                )
+            val old =
+                previous[
+                    incoming.raw.trim()
+                ]
+
+            val merged =
+                if (old == null) {
+                    incoming
+                } else {
+                    incoming.copy(
+                        id = old.id,
+                        enabled =
+                            old.enabled,
+                        favorite =
+                            old.favorite,
+                        latencyMs =
+                            old.latencyMs,
+                        latencyJitterMs =
+                            old.latencyJitterMs,
+                        latencySuccessRatio =
+                            old.latencySuccessRatio,
+                        latencyMethod =
+                            old.latencyMethod,
+                        testStatus =
+                            old.testStatus,
+                        lastTestAt =
+                            old.lastTestAt,
+                        cumulativeSessionMs =
+                            old.cumulativeSessionMs,
+                        lastSessionMs =
+                            old.lastSessionMs,
+                        exitIp =
+                            old.exitIp,
+                        exitCountry =
+                            old.exitCountry,
+                        exitCountryCode =
+                            old.exitCountryCode,
+                        exitFlag =
+                            old.exitFlag,
+                        exitIsp =
+                            old.exitIsp,
+                        lastExitCheckAt =
+                            old.lastExitCheckAt
+                    )
+                }
+
+            val duplicate =
+                retained.indexOfFirst {
+                    it.raw.trim() ==
+                        merged.raw.trim()
+                }
+
+            if (duplicate < 0) {
+                retained += merged
             }
+        }
 
         write(retained)
     }
 
     fun delete(id: String) =
-        synchronized(lock) {
+        synchronized(GLOBAL_LOCK) {
             write(all().filterNot { it.id == id })
         }
 

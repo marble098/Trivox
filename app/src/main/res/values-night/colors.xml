@@ -1,13 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="surface">#0E1420</color>
-    <color name="panel">#141C2A</color>
-    <color name="field">#111927</color>
-    <color name="text_primary">#EEF4FF</color>
-    <color name="text_secondary">#B8C2D1</color>
-    <color name="muted">#8F9BAD</color>
-    <color name="divider">#273346</color>
-    <color name="selected">#1A2D4C</color>
-    <color name="selected_stroke">#4D8DFF</color>
-    <color name="button_secondary">#202B3C</color>
+    <color name="navy">#08111F</color>
+    <color name="blue">#6EA8FE</color>
+    <color name="blue_pressed">#4C8DF6</color>
+    <color name="green">#4ADE80</color>
+    <color name="red">#FB7185</color>
+    <color name="surface">#090F1A</color>
+    <color name="surface_dark">#090F1A</color>
+    <color name="panel">#111A29</color>
+    <color name="field">#0D1624</color>
+    <color name="text_primary">#F3F7FF</color>
+    <color name="text_primary_dark">#F3F7FF</color>
+    <color name="text_secondary">#BAC6D8</color>
+    <color name="muted">#8997AB</color>
+    <color name="divider">#243247</color>
+    <color name="selected">#142C50</color>
+    <color name="selected_stroke">#6EA8FE</color>
+    <color name="button_secondary">#1A273A</color>
+    <color name="white">#FFFFFF</color>
+    <color name="transparent">#00000000</color>
 </resources>

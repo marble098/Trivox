@@ -29,6 +29,43 @@ enum class AppRoutingMode {
     BYPASS_SELECTED
 }
 
+enum class PingMethod {
+    TCP_CONNECT,
+    XRAY_HTTP;
+
+    companion object {
+        fun fromStored(
+            value: String?
+        ): PingMethod =
+            entries.firstOrNull {
+                it.name.equals(
+                    value,
+                    ignoreCase = true
+                )
+            } ?: TCP_CONNECT
+    }
+}
+
+enum class ProfileSortMode {
+    SMART,
+    LOWEST_LATENCY,
+    NAME,
+    LAST_TESTED,
+    GROUP;
+
+    companion object {
+        fun fromStored(
+            value: String?
+        ): ProfileSortMode =
+            entries.firstOrNull {
+                it.name.equals(
+                    value,
+                    ignoreCase = true
+                )
+            } ?: SMART
+    }
+}
+
 data class ConfigProfile(
     val id: String = UUID.randomUUID().toString(),
     var name: String,
@@ -43,6 +80,9 @@ data class ConfigProfile(
     var group: String = "Default",
     var subscriptionId: String? = null,
     var latencyMs: Long? = null,
+    var latencyJitterMs: Long? = null,
+    var latencySuccessRatio: Double = 0.0,
+    var latencyMethod: String = "",
     var testStatus: TestStatus = TestStatus.UNTESTED,
     var lastTestAt: Long = 0,
     var lastSessionMs: Long = 0,
@@ -68,6 +108,18 @@ data class ConfigProfile(
         .put("group", group)
         .put("subscriptionId", subscriptionId)
         .put("latencyMs", latencyMs)
+        .put(
+            "latencyJitterMs",
+            latencyJitterMs
+        )
+        .put(
+            "latencySuccessRatio",
+            latencySuccessRatio
+        )
+        .put(
+            "latencyMethod",
+            latencyMethod
+        )
         .put("testStatus", testStatus.name)
         .put("lastTestAt", lastTestAt)
         .put("lastSessionMs", lastSessionMs)
@@ -99,16 +151,59 @@ data class ConfigProfile(
             subscriptionId =
                 json.optString("subscriptionId").ifBlank { null },
             latencyMs =
-                if (json.isNull("latencyMs")) {
+                if (
+                    json.isNull(
+                        "latencyMs"
+                    )
+                ) {
                     null
                 } else {
-                    json.optLong("latencyMs")
+                    json.optLong(
+                        "latencyMs"
+                    )
                 },
+            latencyJitterMs =
+                if (
+                    json.isNull(
+                        "latencyJitterMs"
+                    )
+                ) {
+                    null
+                } else {
+                    json.optLong(
+                        "latencyJitterMs"
+                    )
+                },
+            latencySuccessRatio =
+                json.optDouble(
+                    "latencySuccessRatio",
+                    0.0
+                ).coerceIn(
+                    0.0,
+                    1.0
+                ),
+            latencyMethod =
+                json.optString(
+                    "latencyMethod"
+                ),
             testStatus = runCatching {
                 TestStatus.valueOf(
-                    json.optString("testStatus")
+                    json.optString(
+                        "testStatus"
+                    )
                 )
-            }.getOrDefault(TestStatus.UNTESTED),
+            }.getOrDefault(
+                TestStatus.UNTESTED
+            ).let {
+                if (
+                    it ==
+                    TestStatus.TESTING
+                ) {
+                    TestStatus.UNTESTED
+                } else {
+                    it
+                }
+            },
             lastTestAt = json.optLong("lastTestAt"),
             lastSessionMs = json.optLong("lastSessionMs"),
             cumulativeSessionMs =
@@ -175,7 +270,13 @@ data class AppSettings(
     var reconnectOnBoot: Boolean = false,
     var blocking: Boolean = true,
     var gridMode: Boolean = false,
-    var testUrl: String = "https://cp.cloudflare.com/",
+    var pingMethod: PingMethod =
+        PingMethod.XRAY_HTTP,
+    var sortMode: ProfileSortMode =
+        ProfileSortMode.SMART,
+    var darkMode: Boolean = false,
+    var testUrl: String =
+        "https://cp.cloudflare.com/",
     var testAttempts: Int = 3
 ) {
     fun normalize(): AppSettings {
@@ -186,6 +287,17 @@ data class AppSettings(
             socksPort = DEFAULT_MIXED_PORT
         }
         httpPort = socksPort
+        testAttempts =
+            testAttempts.coerceIn(
+                2,
+                5
+            )
+
+        if (testUrl.isBlank()) {
+            testUrl =
+                "https://cp.cloudflare.com/"
+        }
+
         return this
     }
 
@@ -210,6 +322,18 @@ data class AppSettings(
         .put("reconnectOnBoot", reconnectOnBoot)
         .put("blocking", blocking)
         .put("gridMode", gridMode)
+        .put(
+            "pingMethod",
+            pingMethod.name
+        )
+        .put(
+            "sortMode",
+            sortMode.name
+        )
+        .put(
+            "darkMode",
+            darkMode
+        )
         .put("testUrl", testUrl)
         .put("testAttempts", testAttempts)
 
@@ -267,15 +391,40 @@ data class AppSettings(
                 blocking =
                     json.optBoolean("blocking", true),
                 gridMode =
-                    json.optBoolean("gridMode"),
-                testUrl = json.optString(
-                    "testUrl",
-                    "https://cp.cloudflare.com/"
-                ),
-                testAttempts = json.optInt(
-                    "testAttempts",
-                    3
-                ).coerceIn(1, 5)
+                    json.optBoolean(
+                        "gridMode"
+                    ),
+                pingMethod =
+                    PingMethod.fromStored(
+                        json.optString(
+                            "pingMethod"
+                        )
+                    ),
+                sortMode =
+                    ProfileSortMode
+                        .fromStored(
+                            json.optString(
+                                "sortMode"
+                            )
+                        ),
+                darkMode =
+                    json.optBoolean(
+                        "darkMode",
+                        false
+                    ),
+                testUrl =
+                    json.optString(
+                        "testUrl",
+                        "https://cp.cloudflare.com/"
+                    ),
+                testAttempts =
+                    json.optInt(
+                        "testAttempts",
+                        3
+                    ).coerceIn(
+                        2,
+                        5
+                    )
             ).normalize()
         }
     }

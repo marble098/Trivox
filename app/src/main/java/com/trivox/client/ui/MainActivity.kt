@@ -39,6 +39,9 @@ import com.trivox.client.data.ConfigProfile
 import com.trivox.client.data.ConfigRepository
 import com.trivox.client.data.ConnectionMode
 import com.trivox.client.data.ConnectionState
+import com.trivox.client.data.PingMethod
+import com.trivox.client.data.PingResult
+import com.trivox.client.data.ProfileSortMode
 import com.trivox.client.data.SettingsRepository
 import com.trivox.client.data.SubscriptionRepository
 import com.trivox.client.data.SubscriptionSource
@@ -49,12 +52,16 @@ import com.trivox.client.network.SubscriptionManager
 import com.trivox.client.service.ConnectionService
 import com.trivox.client.service.NotificationSupport
 import com.trivox.client.service.TrivoxVpnService
+import com.trivox.client.util.Diagnostics
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URI
 import java.util.UUID
+import java.util.Locale
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 class MainActivity : AppCompatActivity() {
     private lateinit var repository: ConfigRepository
@@ -76,8 +83,18 @@ class MainActivity : AppCompatActivity() {
 
     private val worker = Executors.newSingleThreadExecutor()
     private val handler = Handler(Looper.getMainLooper())
-    private val livePingBusy = AtomicBoolean(false)
-    private val connectionActionBusy = AtomicBoolean(false)
+    private val livePingBusy =
+        AtomicBoolean(false)
+    private val connectionActionBusy =
+        AtomicBoolean(false)
+    private val pingGeneration =
+        AtomicLong(0)
+    private val pingTasks =
+        mutableListOf<Future<*>>()
+
+    @Volatile
+    private var livePingResult:
+        PingResult? = null
 
     private var filter = ""
     private var importDialogInput: EditText? = null
@@ -130,7 +147,10 @@ class MainActivity : AppCompatActivity() {
 
         repository = ConfigRepository(this)
         settingsRepository = SettingsRepository(this)
-        pingManager = PingManager()
+        pingManager =
+            PingManager(
+                CoreManager(this).adapter
+            )
 
         bindViews()
         setupToolbar()
@@ -318,17 +338,43 @@ class MainActivity : AppCompatActivity() {
         val values = repository.all()
             .asSequence()
             .filter { profile ->
-                filter.isBlank() ||
-                    profile.name.contains(filter, true) ||
-                    profile.server.contains(filter, true) ||
-                    profile.protocol.contains(filter, true) ||
-                    profile.exitCountry.contains(filter, true) ||
-                    profile.exitIp.contains(filter, true)
+                profile.id ==
+                    current.profileId ||
+                    filter.isBlank() ||
+                    profile.name
+                        .contains(
+                            filter,
+                            true
+                        ) ||
+                    profile.server
+                        .contains(
+                            filter,
+                            true
+                        ) ||
+                    profile.protocol
+                        .contains(
+                            filter,
+                            true
+                        ) ||
+                    profile.exitCountry
+                        .contains(
+                            filter,
+                            true
+                        ) ||
+                    profile.exitIp
+                        .contains(
+                            filter,
+                            true
+                        )
             }
             .sortedWith(
-                compareByDescending<ConfigProfile> { it.favorite }
-                    .thenBy { it.latencyMs ?: Long.MAX_VALUE }
-                    .thenBy { it.name.lowercase() }
+                profileComparator(
+                    settings =
+                        settingsRepository
+                            .load(),
+                    connectedId =
+                        current.profileId
+                )
             )
             .toList()
 
@@ -361,24 +407,37 @@ class MainActivity : AppCompatActivity() {
                 null
             }
 
+        val live =
+            livePingResult
+
         livePingText.text =
-            connectedProfile
-                ?.latencyMs
-                ?.let { latency ->
-                    getString(
-                        R.string.live_ping_value,
-                        latency
+            if (connectedProfile == null) {
+                getString(
+                    R.string.live_ping_off
+                )
+            } else if (
+                live?.success == true &&
+                live.latencyMs != null
+            ) {
+                getString(
+                    R.string
+                        .live_ping_value_method,
+                    live.latencyMs,
+                    pingMethodLabel(
+                        PingMethod.fromStored(
+                            live.method
+                        )
                     )
-                }
-                ?: if (connectedProfile != null) {
-                    getString(
-                        R.string.live_ping_waiting
-                    )
-                } else {
-                    getString(
-                        R.string.live_ping_off
-                    )
-                }
+                )
+            } else if (live != null) {
+                getString(
+                    R.string.live_ping_failed
+                )
+            } else {
+                getString(
+                    R.string.live_ping_waiting
+                )
+            }
 
         exitInfoText.text =
             connectedProfile
@@ -565,70 +624,219 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    private fun testSingleProfile(profile: ConfigProfile) {
-        if (profile.testStatus == TestStatus.TESTING) return
-
-        profile.testStatus = TestStatus.TESTING
-        repository.save(profile)
-        refresh()
-
-        worker.execute {
-            val result = pingManager.tcp(profile, attempts = 1, timeoutMs = 4_000)
-            val latest = ConfigRepository(this).find(profile.id) ?: return@execute
-            latest.latencyMs = result.latencyMs
-            latest.testStatus =
-                if (result.success) TestStatus.ALIVE else TestStatus.DEAD
-            latest.lastTestAt = result.timestamp
-            ConfigRepository(this).save(latest)
-            runOnUiThread(::refresh)
-        }
-    }
-
-    private fun testProfiles() {
-        val profiles = repository.all().filter { it.enabled }
-        if (profiles.isEmpty()) return
-
-        profiles.forEach {
-            it.testStatus = TestStatus.TESTING
-            repository.save(it)
-        }
-        refresh()
-
-        pingManager.batchTcp(
-            profiles,
-            settingsRepository.load().testAttempts
-        ) { profile, result ->
-            val latest = ConfigRepository(this).find(profile.id) ?: return@batchTcp
-            latest.latencyMs = result.latencyMs
-            latest.testStatus =
-                if (result.success) TestStatus.ALIVE else TestStatus.DEAD
-            latest.lastTestAt = result.timestamp
-            ConfigRepository(this).save(latest)
-            runOnUiThread(::refresh)
-        }
-    }
-
-    private fun selectFastestProfile() {
-        val fastest = repository.all()
-            .filter {
-                it.enabled &&
-                    it.testStatus == TestStatus.ALIVE &&
-                    it.latencyMs != null
-            }
-            .minByOrNull { it.latencyMs ?: Long.MAX_VALUE }
-
-        if (fastest == null) {
-            toast(getString(R.string.no_ping_results))
+    private fun testSingleProfile(
+        profile: ConfigProfile
+    ) {
+        if (
+            profile.testStatus ==
+            TestStatus.TESTING
+        ) {
             return
         }
 
-        repository.select(fastest.id)
+        val settings =
+            settingsRepository.load()
+
+        if (
+            settings.pingMethod ==
+            PingMethod.XRAY_HTTP &&
+            ConnectionRuntime
+                .current()
+                .state !in
+                setOf(
+                    ConnectionState
+                        .DISCONNECTED,
+                    ConnectionState.ERROR
+                )
+        ) {
+            toast(
+                getString(
+                    R.string
+                        .xray_ping_requires_disconnect
+                )
+            )
+            return
+        }
+
+        cancelPingTasks()
+        val generation =
+            pingGeneration
+                .incrementAndGet()
+
+        repository.update(
+            profile.id
+        ) {
+            it.testStatus =
+                TestStatus.TESTING
+        }
+        refresh()
+
+        val task =
+            worker.submit {
+                val result =
+                    runCatching {
+                        pingManager.measure(
+                            profile =
+                                profile,
+                            settings =
+                                settings,
+                            workDir =
+                                cacheDir
+                        )
+                    }.getOrElse {
+                        Diagnostics
+                            .recordThrowable(
+                                "Single ping test",
+                                it
+                            )
+                        failedPingResult(
+                            settings
+                                .pingMethod,
+                            it
+                        )
+                    }
+
+                if (
+                    pingGeneration.get() ==
+                    generation
+                ) {
+                    applyPingResult(
+                        profile.id,
+                        result
+                    )
+                    runOnUiThread(
+                        ::refresh
+                    )
+                }
+            }
+
+        trackPingTasks(
+            listOf(task)
+        )
+    }
+
+    private fun testProfiles() {
+        val profiles =
+            repository.all()
+                .filter {
+                    it.enabled
+                }
+
+        if (profiles.isEmpty()) {
+            return
+        }
+
+        val settings =
+            settingsRepository.load()
+        val runtime =
+            ConnectionRuntime.current()
+
+        if (
+            settings.pingMethod ==
+            PingMethod.XRAY_HTTP &&
+            runtime.state !in
+                setOf(
+                    ConnectionState
+                        .DISCONNECTED,
+                    ConnectionState.ERROR
+                )
+        ) {
+            toast(
+                getString(
+                    R.string
+                        .xray_ping_requires_disconnect
+                )
+            )
+            return
+        }
+
+        cancelPingTasks()
+        val generation =
+            pingGeneration
+                .incrementAndGet()
+
+        profiles.forEach {
+            repository.update(
+                it.id
+            ) {
+                value ->
+                value.testStatus =
+                    TestStatus.TESTING
+            }
+        }
+        refresh()
+
+        val tasks =
+            pingManager.batch(
+                profiles =
+                    profiles,
+                settings =
+                    settings,
+                workDir =
+                    cacheDir
+            ) {
+                    profile,
+                    result ->
+                if (
+                    pingGeneration.get() ==
+                    generation
+                ) {
+                    applyPingResult(
+                        profile.id,
+                        result
+                    )
+                    runOnUiThread(
+                        ::refresh
+                    )
+                }
+            }
+
+        trackPingTasks(tasks)
+    }
+
+    private fun selectFastestProfile() {
+        val selectedMethod =
+            settingsRepository
+                .load()
+                .pingMethod
+                .name
+        val fastest =
+            repository.all()
+                .filter {
+                    it.enabled &&
+                        it.testStatus ==
+                        TestStatus.ALIVE &&
+                        it.latencyMs !=
+                        null &&
+                        it.latencyMethod ==
+                        selectedMethod
+                }
+                .minByOrNull {
+                    it.latencyMs
+                        ?: Long.MAX_VALUE
+                }
+
+        if (fastest == null) {
+            toast(
+                getString(
+                    R.string
+                        .no_ping_results
+                )
+            )
+            return
+        }
+
+        repository.select(
+            fastest.id
+        )
         refresh()
         toast(
             getString(
-                R.string.fastest_selected,
+                R.string
+                    .fastest_selected,
                 fastest.name,
-                fastest.latencyMs ?: 0
+                fastest.latencyMs
+                    ?: 0
             )
         )
     }
@@ -649,7 +857,44 @@ class MainActivity : AppCompatActivity() {
             appendLine("${profile.protocol.uppercase()} • $network • $security")
             appendLine("${profile.server}:${profile.port}")
             profile.latencyMs?.let {
-                appendLine(getString(R.string.live_ping_value, it))
+                    latency ->
+                appendLine(
+                    getString(
+                        R.string
+                            .latency_method_format,
+                        pingMethodLabel(
+                            PingMethod
+                                .fromStored(
+                                    profile
+                                        .latencyMethod
+                                )
+                        ),
+                        latency
+                    )
+                )
+                profile
+                    .latencyJitterMs
+                    ?.let {
+                        jitter ->
+                        appendLine(
+                            getString(
+                                R.string
+                                    .ping_jitter_value,
+                                jitter
+                            )
+                        )
+                    }
+                appendLine(
+                    getString(
+                        R.string
+                            .ping_success_value,
+                        (
+                            profile
+                                .latencySuccessRatio *
+                                100.0
+                            ).toInt()
+                    )
+                )
             }
             profileExitLine(profile).takeIf(String::isNotBlank)?.let {
                 appendLine(it)
@@ -736,7 +981,44 @@ class MainActivity : AppCompatActivity() {
             appendLine(profile.name)
             appendLine("${profile.protocol.uppercase()} • ${profile.server}:${profile.port}")
             profile.latencyMs?.let {
-                appendLine(getString(R.string.live_ping_value, it))
+                    latency ->
+                appendLine(
+                    getString(
+                        R.string
+                            .latency_method_format,
+                        pingMethodLabel(
+                            PingMethod
+                                .fromStored(
+                                    profile
+                                        .latencyMethod
+                                )
+                        ),
+                        latency
+                    )
+                )
+                profile
+                    .latencyJitterMs
+                    ?.let {
+                        jitter ->
+                        appendLine(
+                            getString(
+                                R.string
+                                    .ping_jitter_value,
+                                jitter
+                            )
+                        )
+                    }
+                appendLine(
+                    getString(
+                        R.string
+                            .ping_success_value,
+                        (
+                            profile
+                                .latencySuccessRatio *
+                                100.0
+                            ).toInt()
+                    )
+                )
             }
             profileExitLine(profile).takeIf(String::isNotBlank)?.let {
                 appendLine(it)
@@ -1082,16 +1364,34 @@ class MainActivity : AppCompatActivity() {
         handler.removeCallbacks(durationTick)
         handler.removeCallbacks(livePingTick)
 
-        if (snapshot.state == ConnectionState.CONNECTED) {
-            handler.postDelayed(durationTick, 1_000)
-            handler.post(livePingTick)
-
-            if (lastInfoProfileId != snapshot.profileId) {
-                lastInfoProfileId = snapshot.profileId
-                refreshExitInfo(force = false, showError = false)
+        if (
+            snapshot.state ==
+            ConnectionState.CONNECTED
+        ) {
+            if (
+                lastInfoProfileId !=
+                snapshot.profileId
+            ) {
+                livePingResult = null
+                lastInfoProfileId =
+                    snapshot.profileId
+                refreshExitInfo(
+                    force = false,
+                    showError = false
+                )
             }
+
+            handler.postDelayed(
+                durationTick,
+                1_000
+            )
+            handler.post(
+                livePingTick
+            )
         } else {
             lastInfoProfileId = null
+            livePingResult = null
+            livePingBusy.set(false)
         }
 
         refresh()
@@ -1117,42 +1417,146 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private val livePingTick = object : Runnable {
-        override fun run() {
-            val snapshot = ConnectionRuntime.current()
-            if (snapshot.state != ConnectionState.CONNECTED) return
+    private val livePingTick =
+        object : Runnable {
+            override fun run() {
+                val snapshot =
+                    ConnectionRuntime
+                        .current()
 
-            val profile = repository.find(snapshot.profileId)
-            if (profile == null) return
+                if (
+                    snapshot.state !=
+                    ConnectionState.CONNECTED
+                ) {
+                    return
+                }
 
-            if (!livePingBusy.compareAndSet(false, true)) {
-                handler.postDelayed(this, LIVE_PING_INTERVAL_MS)
-                return
-            }
+                val profile =
+                    repository.find(
+                        snapshot.profileId
+                    ) ?: return
+                val sessionId =
+                    snapshot.sessionId
 
-            worker.execute {
-                try {
-                    val result = pingManager.tcp(
-                        profile,
-                        attempts = 1,
-                        timeoutMs = 2_500
+                if (
+                    !livePingBusy
+                        .compareAndSet(
+                            false,
+                            true
+                        )
+                ) {
+                    handler.postDelayed(
+                        this,
+                        LIVE_PING_INTERVAL_MS
                     )
-                    val latest = ConfigRepository(this@MainActivity)
-                        .find(profile.id)
-                    if (latest != null) {
-                        latest.latencyMs = result.latencyMs
-                        latest.testStatus =
-                            if (result.success) TestStatus.ALIVE else TestStatus.DEAD
-                        latest.lastTestAt = result.timestamp
-                        ConfigRepository(this@MainActivity).save(latest)
+                    return
+                }
+
+                worker.execute {
+                    val settings =
+                        settingsRepository
+                            .load()
+                    val result =
+                        runCatching {
+                            when (
+                                settings.pingMethod
+                            ) {
+                                PingMethod
+                                    .TCP_CONNECT ->
+                                    pingManager.tcp(
+                                        profile =
+                                            profile,
+                                        attempts = 2,
+                                        timeoutMs =
+                                            2_500
+                                    )
+
+                                PingMethod
+                                    .XRAY_HTTP ->
+                                    pingManager
+                                        .httpViaLocalProxy(
+                                            settings =
+                                                settings,
+                                            attempts = 2,
+                                            timeoutMs =
+                                                5_000
+                                        )
+                            }
+                        }.getOrElse {
+                            Diagnostics
+                                .recordThrowable(
+                                    "Live ping",
+                                    it
+                                )
+                            failedPingResult(
+                                settings
+                                    .pingMethod,
+                                it
+                            )
+                        }
+
+                    val latest =
+                        ConnectionRuntime
+                            .current()
+
+                    if (
+                        latest.state ==
+                        ConnectionState
+                            .CONNECTED &&
+                        latest.sessionId ==
+                        sessionId &&
+                        latest.profileId ==
+                        profile.id
+                    ) {
+                        livePingResult =
+                            result
+
+                        if (
+                            result.success &&
+                            result.latencyMs !=
+                            null
+                        ) {
+                            repository.update(
+                                profile.id
+                            ) {
+                                value ->
+                                value.latencyMs =
+                                    result
+                                        .latencyMs
+                                value
+                                    .latencyJitterMs =
+                                    result
+                                        .jitterMs
+                                value
+                                    .latencySuccessRatio =
+                                    result
+                                        .successRatio
+                                value
+                                    .latencyMethod =
+                                    result.method
+                                value.testStatus =
+                                    TestStatus.ALIVE
+                                value.lastTestAt =
+                                    result.timestamp
+                            }
+                        }
                     }
-                } finally {
+
                     livePingBusy.set(false)
+
                     runOnUiThread {
                         refresh()
+
+                        val current =
+                            ConnectionRuntime
+                                .current()
+
                         if (
-                            ConnectionRuntime.current().state ==
-                            ConnectionState.CONNECTED
+                            current.state ==
+                            ConnectionState
+                                .CONNECTED &&
+                            current.sessionId ==
+                            sessionId
                         ) {
                             handler.postDelayed(
                                 this,
@@ -1163,7 +1567,226 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+
+    private fun applyPingResult(
+        profileId: String,
+        result: PingResult
+    ) {
+        repository.update(
+            profileId
+        ) {
+            profile ->
+            profile.latencyMs =
+                result.latencyMs
+            profile.latencyJitterMs =
+                result.jitterMs
+            profile.latencySuccessRatio =
+                result.successRatio
+            profile.latencyMethod =
+                result.method
+            profile.lastTestAt =
+                result.timestamp
+            profile.testStatus =
+                when {
+                    result.success ->
+                        TestStatus.ALIVE
+
+                    result.errorCategory ==
+                        "cancelled" ->
+                        TestStatus.UNTESTED
+
+                    result.errorCategory in
+                        setOf(
+                            "core_unavailable",
+                            "invalid_test_url"
+                        ) ->
+                        TestStatus.ERROR
+
+                    else ->
+                        TestStatus.DEAD
+                }
+        }
     }
+
+    private fun failedPingResult(
+        method: PingMethod,
+        throwable: Throwable
+    ) =
+        PingResult(
+            method = method.name,
+            success = false,
+            latencyMs = null,
+            jitterMs = null,
+            successRatio = 0.0,
+            resolvedIp = null,
+            errorCategory =
+                throwable
+                    .javaClass
+                    .simpleName
+        )
+
+    private fun trackPingTasks(
+        tasks: Collection<Future<*>>
+    ) {
+        synchronized(pingTasks) {
+            pingTasks.clear()
+            pingTasks.addAll(tasks)
+        }
+    }
+
+    private fun cancelPingTasks() {
+        pingGeneration
+            .incrementAndGet()
+
+        val tasks =
+            synchronized(pingTasks) {
+                pingTasks
+                    .toList()
+                    .also {
+                        pingTasks.clear()
+                    }
+            }
+
+        pingManager.cancel(tasks)
+    }
+
+    private fun profileComparator(
+        settings:
+            com.trivox.client.data
+                .AppSettings,
+        connectedId: String?
+    ): Comparator<ConfigProfile> {
+        val selectedMethod =
+            settings.pingMethod.name
+
+        val base =
+            when (settings.sortMode) {
+                ProfileSortMode.SMART ->
+                    compareByDescending<
+                        ConfigProfile
+                        > {
+                        it.favorite
+                    }
+                        .thenBy {
+                            if (
+                                it.latencyMethod ==
+                                selectedMethod
+                            ) {
+                                0
+                            } else {
+                                1
+                            }
+                        }
+                        .thenBy {
+                            it.latencyMs
+                                ?: Long.MAX_VALUE
+                        }
+                        .thenBy {
+                            it.name.lowercase(
+                                Locale.ROOT
+                            )
+                        }
+
+                ProfileSortMode
+                    .LOWEST_LATENCY ->
+                    compareBy<
+                        ConfigProfile
+                        > {
+                        if (
+                            it.latencyMethod ==
+                            selectedMethod
+                        ) {
+                            0
+                        } else {
+                            1
+                        }
+                    }
+                        .thenBy {
+                            it.latencyMs
+                                ?: Long.MAX_VALUE
+                        }
+                        .thenBy {
+                            it.name.lowercase(
+                                Locale.ROOT
+                            )
+                        }
+
+                ProfileSortMode.NAME ->
+                    compareBy {
+                        it.name.lowercase(
+                            Locale.ROOT
+                        )
+                    }
+
+                ProfileSortMode
+                    .LAST_TESTED ->
+                    compareByDescending<
+                        ConfigProfile
+                        > {
+                        it.lastTestAt
+                    }
+                        .thenBy {
+                            it.name.lowercase(
+                                Locale.ROOT
+                            )
+                        }
+
+                ProfileSortMode.GROUP ->
+                    compareBy<
+                        ConfigProfile
+                        > {
+                        it.group.lowercase(
+                            Locale.ROOT
+                        )
+                    }
+                        .thenBy {
+                            it.name.lowercase(
+                                Locale.ROOT
+                            )
+                        }
+            }
+
+        return Comparator {
+                left,
+                right ->
+            when {
+                left.id ==
+                    connectedId &&
+                    right.id !=
+                    connectedId ->
+                    -1
+
+                right.id ==
+                    connectedId &&
+                    left.id !=
+                    connectedId ->
+                    1
+
+                else ->
+                    base.compare(
+                        left,
+                        right
+                    )
+            }
+        }
+    }
+
+    private fun pingMethodLabel(
+        method: PingMethod
+    ): String =
+        when (method) {
+            PingMethod.TCP_CONNECT ->
+                getString(
+                    R.string
+                        .ping_method_tcp_short
+                )
+
+            PingMethod.XRAY_HTTP ->
+                getString(
+                    R.string
+                        .ping_method_xray_short
+                )
+        }
 
     private fun handleShareIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND) {
@@ -1182,8 +1805,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        ConnectionRuntime.removeListener(runtimeListener)
-        handler.removeCallbacksAndMessages(null)
+        ConnectionRuntime
+            .removeListener(
+                runtimeListener
+            )
+        handler
+            .removeCallbacksAndMessages(
+                null
+            )
+        cancelPingTasks()
         pingManager.close()
         worker.shutdownNow()
         super.onDestroy()
@@ -1198,7 +1828,7 @@ class MainActivity : AppCompatActivity() {
         private const val MENU_SETTINGS = 105
         private const val MENU_ROUTING = 106
         private const val MENU_DIAGNOSTICS = 107
-        private const val LIVE_PING_INTERVAL_MS = 3_000L
+        private const val LIVE_PING_INTERVAL_MS = 5_000L
         private const val CONNECTION_ACTION_COOLDOWN_MS = 1_500L
         private const val EXIT_CACHE_MS = 10 * 60 * 1_000L
 

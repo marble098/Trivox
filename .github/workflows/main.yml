@@ -134,6 +134,15 @@ jobs:
             app/src/main/java/com/trivox/client/util/Diagnostics.kt
           grep -Fq 'MARBLE098' app/src/main/res/values/strings.xml
           grep -Fq 'PCPAPC172' app/src/main/res/values/strings.xml
+          grep -Fq 'enum class PingMethod'             app/src/main/java/com/trivox/client/data/Models.kt
+          grep -Fq 'PingStatistics.summarize'             app/src/main/java/com/trivox/client/network/PingManager.kt
+          grep -Fq 'connectedId'             app/src/main/java/com/trivox/client/ui/MainActivity.kt
+          grep -Fq 'darkModeSwitch'             app/src/main/res/layout/activity_settings.xml
+          grep -Fq 'sortModeSpinner'             app/src/main/res/layout/activity_settings.xml
+          if grep -Fq 'attempts = 1'             app/src/main/java/com/trivox/client/ui/MainActivity.kt; then
+            echo "Single-sample ping regression detected." >&2
+            exit 1
+          fi
 
       - name: Set up Java
         uses: actions/setup-java@v5

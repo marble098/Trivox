@@ -3,6 +3,8 @@ package com.trivox.client.ui
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.View
+import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
@@ -12,21 +14,28 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.appcompat.widget.SwitchCompat
 import androidx.appcompat.widget.Toolbar
 import androidx.core.os.LocaleListCompat
 import com.trivox.client.BuildConfig
 import com.trivox.client.R
 import com.trivox.client.config.Validators
 import com.trivox.client.data.DnsMode
+import com.trivox.client.data.PingMethod
+import com.trivox.client.data.ProfileSortMode
 import com.trivox.client.data.SettingsRepository
 import org.json.JSONObject
+import java.net.URI
 import java.security.MessageDigest
 
-class SettingsActivity : AppCompatActivity() {
+class SettingsActivity :
+    AppCompatActivity() {
     override fun onCreate(
         savedInstanceState: Bundle?
     ) {
-        super.onCreate(savedInstanceState)
+        super.onCreate(
+            savedInstanceState
+        )
         setContentView(
             R.layout.activity_settings
         )
@@ -45,6 +54,30 @@ class SettingsActivity : AppCompatActivity() {
         val language =
             findViewById<Spinner>(
                 R.id.languageSpinner
+            )
+        val darkMode =
+            findViewById<SwitchCompat>(
+                R.id.darkModeSwitch
+            )
+        val sortMode =
+            findViewById<Spinner>(
+                R.id.sortModeSpinner
+            )
+        val pingMethod =
+            findViewById<Spinner>(
+                R.id.pingMethodSpinner
+            )
+        val pingSummary =
+            findViewById<TextView>(
+                R.id.pingMethodSummary
+            )
+        val pingAttempts =
+            findViewById<Spinner>(
+                R.id.pingAttemptsSpinner
+            )
+        val testUrl =
+            findViewById<EditText>(
+                R.id.testUrlInput
             )
         val mixedPort =
             findViewById<EditText>(
@@ -83,13 +116,16 @@ class SettingsActivity : AppCompatActivity() {
             compactAdapter(
                 arrayOf(
                     getString(
-                        R.string.language_system
+                        R.string
+                            .language_system
                     ),
                     getString(
-                        R.string.language_persian
+                        R.string
+                            .language_persian
                     ),
                     getString(
-                        R.string.language_english
+                        R.string
+                            .language_english
                     )
                 )
             )
@@ -104,18 +140,175 @@ class SettingsActivity : AppCompatActivity() {
         language.setSelection(
             when {
                 currentTag
-                    .startsWith("fa") -> 1
+                    .startsWith("fa") ->
+                    1
+
                 currentTag
-                    .startsWith("en") -> 2
+                    .startsWith("en") ->
+                    2
+
                 else -> 0
             }
         )
 
+        darkMode.isChecked =
+            settings.darkMode
+
+        darkMode
+            .setOnCheckedChangeListener {
+                    _,
+                    checked ->
+                val latest =
+                    repository.load()
+
+                if (
+                    latest.darkMode !=
+                    checked
+                ) {
+                    latest.darkMode =
+                        checked
+                    repository.save(
+                        latest
+                    )
+
+                    AppCompatDelegate
+                        .setDefaultNightMode(
+                            if (checked) {
+                                AppCompatDelegate
+                                    .MODE_NIGHT_YES
+                            } else {
+                                AppCompatDelegate
+                                    .MODE_NIGHT_NO
+                            }
+                        )
+                }
+            }
+
+        val sortModes =
+            ProfileSortMode.entries
+
+        sortMode.adapter =
+            compactAdapter(
+                arrayOf(
+                    getString(
+                        R.string
+                            .sort_smart
+                    ),
+                    getString(
+                        R.string
+                            .sort_latency
+                    ),
+                    getString(
+                        R.string
+                            .sort_name
+                    ),
+                    getString(
+                        R.string
+                            .sort_recent
+                    ),
+                    getString(
+                        R.string
+                            .sort_group
+                    )
+                )
+            )
+        sortMode.setSelection(
+            sortModes
+                .indexOf(
+                    settings.sortMode
+                )
+                .coerceAtLeast(0)
+        )
+
+        val pingMethods =
+            PingMethod.entries
+
+        pingMethod.adapter =
+            compactAdapter(
+                arrayOf(
+                    getString(
+                        R.string
+                            .ping_method_tcp
+                    ),
+                    getString(
+                        R.string
+                            .ping_method_xray
+                    )
+                )
+            )
+        pingMethod.setSelection(
+            pingMethods
+                .indexOf(
+                    settings.pingMethod
+                )
+                .coerceAtLeast(0)
+        )
+        pingMethod
+            .onItemSelectedListener =
+            object :
+                AdapterView
+                    .OnItemSelectedListener {
+                override fun onItemSelected(
+                    parent:
+                        AdapterView<*>?,
+                    view: View?,
+                    position: Int,
+                    id: Long
+                ) {
+                    pingSummary.setText(
+                        if (
+                            pingMethods[
+                                position
+                            ] ==
+                            PingMethod
+                                .TCP_CONNECT
+                        ) {
+                            R.string
+                                .ping_method_tcp_summary
+                        } else {
+                            R.string
+                                .ping_method_xray_summary
+                        }
+                    )
+                }
+
+                override fun onNothingSelected(
+                    parent:
+                        AdapterView<*>?
+                ) = Unit
+            }
+
+        val attempts =
+            arrayOf(
+                "2",
+                "3",
+                "4",
+                "5"
+            )
+
+        pingAttempts.adapter =
+            compactAdapter(
+                attempts
+            )
+        pingAttempts.setSelection(
+            (
+                settings
+                    .testAttempts
+                    .coerceIn(2, 5) -
+                    2
+                )
+        )
+        testUrl.setText(
+            settings.testUrl
+        )
+
         mixedPort.setText(
-            settings.socksPort.toString()
+            settings.socksPort
+                .toString()
         )
         mtu.setText(
-            settings.mtu.toString()
+            settings.mtu
+                .toString()
         )
         ipv6.isChecked =
             settings.ipv6
@@ -131,36 +324,45 @@ class SettingsActivity : AppCompatActivity() {
         blocking.isChecked =
             settings.blocking
 
-        val modes = DnsMode.entries
+        val dnsModes =
+            DnsMode.entries
 
         dns.adapter =
             compactAdapter(
                 arrayOf(
                     getString(
-                        R.string.dns_imported
+                        R.string
+                            .dns_imported
                     ),
                     getString(
-                        R.string.dns_default
+                        R.string
+                            .dns_default
                     ),
                     getString(
-                        R.string.dns_custom
+                        R.string
+                            .dns_custom
                     ),
                     getString(
-                        R.string.dns_system
+                        R.string
+                            .dns_system
                     ),
                     getString(
-                        R.string.dns_direct
+                        R.string
+                            .dns_direct
                     ),
                     getString(
-                        R.string.dns_proxy
+                        R.string
+                            .dns_proxy
                     )
                 )
             )
 
         dns.setSelection(
-            modes.indexOf(
-                settings.dnsMode
-            )
+            dnsModes
+                .indexOf(
+                    settings.dnsMode
+                )
+                .coerceAtLeast(0)
         )
 
         renderAbout()
@@ -176,11 +378,17 @@ class SettingsActivity : AppCompatActivity() {
                 mtu.text
                     .toString()
                     .toIntOrNull()
+            val testUrlValue =
+                testUrl.text
+                    .toString()
+                    .trim()
 
             val dnsValues =
                 custom.text
                     .lineSequence()
-                    .map(String::trim)
+                    .map(
+                        String::trim
+                    )
                     .filter(
                         String::isNotEmpty
                     )
@@ -190,7 +398,8 @@ class SettingsActivity : AppCompatActivity() {
                 port == null ||
                 !Validators
                     .validPort(port) ||
-                mtuValue !in 576..9000
+                mtuValue !in
+                576..9000
             ) {
                 Toast.makeText(
                     this,
@@ -201,13 +410,29 @@ class SettingsActivity : AppCompatActivity() {
             }
 
             if (
-                modes[
+                !validTestUrl(
+                    testUrlValue
+                )
+            ) {
+                Toast.makeText(
+                    this,
+                    R.string
+                        .invalid_test_url,
+                    Toast.LENGTH_LONG
+                ).show()
+                return@setOnClickListener
+            }
+
+            if (
+                dnsModes[
                     dns.selectedItemPosition
-                ] == DnsMode.CUSTOM &&
+                ] ==
+                DnsMode.CUSTOM &&
                 (
                     dnsValues.isEmpty() ||
                         !dnsValues.all(
-                            Validators::validateDns
+                            Validators::
+                                validateDns
                         )
                     )
             ) {
@@ -219,14 +444,18 @@ class SettingsActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            settings.socksPort = port
-            settings.httpPort = port
-            settings.mtu = mtuValue!!
+            settings.socksPort =
+                port
+            settings.httpPort =
+                port
+            settings.mtu =
+                mtuValue!!
             settings.ipv6 =
                 ipv6.isChecked
             settings.dnsMode =
-                modes[
-                    dns.selectedItemPosition
+                dnsModes[
+                    dns
+                        .selectedItemPosition
                 ]
             settings.customDns =
                 dnsValues
@@ -237,8 +466,29 @@ class SettingsActivity : AppCompatActivity() {
                 boot.isChecked
             settings.blocking =
                 blocking.isChecked
+            settings.darkMode =
+                darkMode.isChecked
+            settings.sortMode =
+                sortModes[
+                    sortMode
+                        .selectedItemPosition
+                ]
+            settings.pingMethod =
+                pingMethods[
+                    pingMethod
+                        .selectedItemPosition
+                ]
+            settings.testAttempts =
+                attempts[
+                    pingAttempts
+                        .selectedItemPosition
+                ].toInt()
+            settings.testUrl =
+                testUrlValue
 
-            repository.save(settings)
+            repository.save(
+                settings
+            )
 
             val localeTags =
                 when (
@@ -278,19 +528,40 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
+    private fun validTestUrl(
+        value: String
+    ): Boolean =
+        runCatching {
+            URI(value)
+        }.getOrNull()
+            ?.let {
+                uri ->
+                uri.scheme
+                    ?.lowercase() in
+                    setOf(
+                        "http",
+                        "https"
+                    ) &&
+                    !uri.host
+                        .isNullOrBlank() &&
+                    uri.userInfo == null
+            } == true
+
     private fun renderAbout() {
         findViewById<TextView>(
             R.id.aboutCreators
         ).text =
             getString(
-                R.string.about_creators_value
+                R.string
+                    .about_creators_value
             )
 
         findViewById<TextView>(
             R.id.aboutAppVersion
         ).text =
             getString(
-                R.string.about_app_version_value,
+                R.string
+                    .about_app_version_value,
                 BuildConfig.VERSION_NAME,
                 BuildConfig.VERSION_CODE,
                 BuildConfig.BUILD_TYPE,
@@ -301,7 +572,8 @@ class SettingsActivity : AppCompatActivity() {
             R.id.aboutCoreVersion
         ).text =
             getString(
-                R.string.about_core_version_value,
+                R.string
+                    .about_core_version_value,
                 readCoreVersion()
             )
 
@@ -309,7 +581,8 @@ class SettingsActivity : AppCompatActivity() {
             R.id.aboutSigning
         ).text =
             getString(
-                R.string.about_signing_value,
+                R.string
+                    .about_signing_value,
                 signingCertificateSha256()
             )
 
@@ -317,12 +590,14 @@ class SettingsActivity : AppCompatActivity() {
             R.id.aboutPackage
         ).text =
             getString(
-                R.string.about_package_value,
+                R.string
+                    .about_package_value,
                 packageName
             )
     }
 
-    private fun readCoreVersion(): String =
+    private fun readCoreVersion():
+        String =
         runCatching {
             assets
                 .open(
@@ -337,7 +612,9 @@ class SettingsActivity : AppCompatActivity() {
                         "unknown"
                     )
                 }
-        }.getOrDefault("unknown")
+        }.getOrDefault(
+            "unknown"
+        )
 
     private fun signingCertificateSha256():
         String =
@@ -354,7 +631,9 @@ class SettingsActivity : AppCompatActivity() {
                                 .GET_SIGNING_CERTIFICATES
                         )
                 } else {
-                    @Suppress("DEPRECATION")
+                    @Suppress(
+                        "DEPRECATION"
+                    )
                     packageManager
                         .getPackageInfo(
                             packageName,
@@ -372,8 +651,11 @@ class SettingsActivity : AppCompatActivity() {
                         .signingInfo
                         ?.apkContentsSigners
                 } else {
-                    @Suppress("DEPRECATION")
-                    packageInfo.signatures
+                    @Suppress(
+                        "DEPRECATION"
+                    )
+                    packageInfo
+                        .signatures
                 }
 
             val certificate =
@@ -385,16 +667,24 @@ class SettingsActivity : AppCompatActivity() {
                     )
 
             MessageDigest
-                .getInstance("SHA-256")
-                .digest(certificate)
-                .joinToString(":") {
+                .getInstance(
+                    "SHA-256"
+                )
+                .digest(
+                    certificate
+                )
+                .joinToString(
+                    ":"
+                ) {
                     "%02X".format(
-                        it.toInt() and 0xff
+                        it.toInt() and
+                            0xff
                     )
                 }
         }.getOrDefault(
             getString(
-                R.string.about_unavailable
+                R.string
+                    .about_unavailable
             )
         )
 

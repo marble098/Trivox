@@ -3,12 +3,30 @@ package com.trivox.client
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
+import androidx.appcompat.app.AppCompatDelegate
+import com.trivox.client.data.SettingsRepository
 import com.trivox.client.ui.UiInsets
 import com.trivox.client.util.Diagnostics
 
 class TrivoxApp : Application() {
     override fun onCreate() {
         super.onCreate()
+
+        val darkMode =
+            SettingsRepository(this)
+                .load()
+                .darkMode
+
+        AppCompatDelegate
+            .setDefaultNightMode(
+                if (darkMode) {
+                    AppCompatDelegate
+                        .MODE_NIGHT_YES
+                } else {
+                    AppCompatDelegate
+                        .MODE_NIGHT_NO
+                }
+            )
 
         Diagnostics.initialize(this)
 
@@ -92,15 +110,19 @@ class TrivoxApp : Application() {
         )
     }
 
-    override fun onTrimMemory(level: Int) {
+    override fun onTrimMemory(
+        level: Int
+    ) {
         when {
-            level >= TRIM_MEMORY_COMPLETE ->
+            level >=
+                TRIM_MEMORY_COMPLETE ->
                 Diagnostics.warning(
                     "Critical memory trim: " +
                         level
                 )
 
-            level >= TRIM_MEMORY_BACKGROUND ->
+            level >=
+                TRIM_MEMORY_BACKGROUND ->
                 Diagnostics.info(
                     "Background memory trim: " +
                         level
