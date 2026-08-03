@@ -64,10 +64,6 @@ class SettingsActivity :
             findViewById<SwitchCompat>(
                 R.id.darkModeSwitch
             )
-        val hideIpOnMain =
-            findViewById<CheckBox>(
-                R.id.hideIpOnMainCheck
-            )
         val localProxyInVpn =
             findViewById<CheckBox>(
                 R.id.localProxyInVpnCheck
@@ -338,8 +334,6 @@ class SettingsActivity :
             settings.reconnectOnBoot
         blocking.isChecked =
             settings.blocking
-        hideIpOnMain.isChecked =
-            settings.hideIpOnMain
         localProxyInVpn.isChecked =
             settings.localProxyInVpn
         autoUpdate.isChecked =
@@ -571,8 +565,6 @@ class SettingsActivity :
                 }
             settings.darkMode =
                 darkMode.isChecked
-            settings.hideIpOnMain =
-                hideIpOnMain.isChecked
             settings.localProxyInVpn =
                 localProxyInVpn.isChecked
             settings.autoUpdateCheck =

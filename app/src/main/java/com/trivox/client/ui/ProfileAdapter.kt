@@ -4,8 +4,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import androidx.recyclerview.widget.AsyncListDiffer
-import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.trivox.client.R
 import com.trivox.client.data.ConfigProfile
@@ -22,31 +20,10 @@ class ProfileAdapter(
     private val onPing:
         (ConfigProfile) -> Unit
 ) : RecyclerView.Adapter<ProfileAdapter.Holder>() {
-    private data class Row(
-        val profile: ConfigProfile,
-        val selected: Boolean,
-        val connected: Boolean,
-        val hideIp: Boolean
-    )
-
-    private val differ =
-        AsyncListDiffer(
-            this,
-            object : DiffUtil.ItemCallback<Row>() {
-                override fun areItemsTheSame(
-                    oldItem: Row,
-                    newItem: Row
-                ): Boolean =
-                    oldItem.profile.id ==
-                        newItem.profile.id
-
-                override fun areContentsTheSame(
-                    oldItem: Row,
-                    newItem: Row
-                ): Boolean =
-                    oldItem == newItem
-            }
-        )
+    private val items =
+        mutableListOf<ConfigProfile>()
+    private var selectedId: String? = null
+    private var connectedId: String? = null
 
     init {
         setHasStableIds(true)
@@ -55,29 +32,17 @@ class ProfileAdapter(
     fun submit(
         values: List<ConfigProfile>,
         selected: String?,
-        connected: String?,
-        hideIp: Boolean
+        connected: String?
     ) {
-        differ.submitList(
-            values.map { profile ->
-                Row(
-                    profile = profile,
-                    selected =
-                        profile.id == selected,
-                    connected =
-                        profile.id == connected,
-                    hideIp = hideIp
-                )
-            }
-        )
+        items.clear()
+        items.addAll(values)
+        selectedId = selected
+        connectedId = connected
+        notifyDataSetChanged()
     }
 
-    override fun getItemId(
-        position: Int
-    ): Long =
-        differ.currentList[
-            position
-        ].profile.id.hashCode().toLong()
+    override fun getItemId(position: Int): Long =
+        items[position].id.hashCode().toLong()
 
     override fun onCreateViewHolder(
         parent: ViewGroup,
@@ -96,13 +61,10 @@ class ProfileAdapter(
         holder: Holder,
         position: Int
     ) {
-        holder.bind(
-            differ.currentList[position]
-        )
+        holder.bind(items[position])
     }
 
-    override fun getItemCount(): Int =
-        differ.currentList.size
+    override fun getItemCount() = items.size
 
     inner class Holder(view: View) :
         RecyclerView.ViewHolder(view) {
@@ -139,10 +101,12 @@ class ProfileAdapter(
                 R.id.actionText
             )
 
-        fun bind(row: Row) {
-            val profile = row.profile
+        fun bind(profile: ConfigProfile) {
+            val connected =
+                profile.id == connectedId
 
-            itemView.isActivated = row.selected
+            itemView.isActivated =
+                profile.id == selectedId
             itemView.alpha =
                 if (profile.enabled) 1f else 0.52f
 
@@ -150,21 +114,13 @@ class ProfileAdapter(
                 if (profile.favorite) "★" else "☆"
             name.text = profile.name
             detail.text =
-                if (row.hideIp) {
-                    itemView.context.getString(
-                        R.string.profile_detail_private,
-                        profile.protocol.uppercase(),
-                        profile.group
-                    )
-                } else {
-                    itemView.context.getString(
-                        R.string.profile_detail,
-                        profile.protocol.uppercase(),
-                        profile.server,
-                        profile.port,
-                        profile.group
-                    )
-                }
+                itemView.context.getString(
+                    R.string.profile_detail,
+                    profile.protocol.uppercase(),
+                    profile.server,
+                    profile.port,
+                    profile.group
+                )
 
             val locationValue =
                 buildString {
@@ -178,13 +134,8 @@ class ProfileAdapter(
                         .takeIf(String::isNotBlank)
                         ?.let(::append)
 
-                    if (
-                        !row.hideIp &&
-                        profile.exitIp.isNotBlank()
-                    ) {
-                        if (isNotBlank()) {
-                            append(" • ")
-                        }
+                    if (profile.exitIp.isNotBlank()) {
+                        if (isNotBlank()) append(" • ")
                         append(profile.exitIp)
                     }
                 }
@@ -199,7 +150,7 @@ class ProfileAdapter(
 
             val statusValue =
                 when {
-                    row.connected ->
+                    connected ->
                         itemView.context.getString(
                             R.string.state_connected
                         )
@@ -241,9 +192,10 @@ class ProfileAdapter(
                 ) {
                     "…"
                 } else {
-                    "⚡"
+                    itemView.context.getString(
+                        R.string.ping_short
+                    )
                 }
-            action.text = "⋮"
 
             action.contentDescription =
                 itemView.context.getString(

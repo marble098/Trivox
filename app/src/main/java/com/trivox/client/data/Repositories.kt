@@ -13,13 +13,6 @@ class ConfigRepository(context: Context) {
 
     companion object {
         private val GLOBAL_LOCK = Any()
-
-        @Volatile
-        private var cachedRaw: String? = null
-
-        @Volatile
-        private var cachedItems:
-            List<ConfigProfile>? = null
     }
 
     fun all(): MutableList<ConfigProfile> =
@@ -30,9 +23,7 @@ class ConfigRepository(context: Context) {
     fun find(id: String?): ConfigProfile? =
         id?.let { target ->
             synchronized(GLOBAL_LOCK) {
-                read().firstOrNull {
-                    it.id == target
-                }
+                read().firstOrNull { it.id == target }
             }
         }
 
@@ -52,35 +43,9 @@ class ConfigRepository(context: Context) {
             } else {
                 transform(items[index])
                 write(items)
-                items[index].copy()
+                items[index]
             }
         }
-
-    fun updateMany(
-        ids: Collection<String>,
-        transform: (ConfigProfile) -> Unit
-    ): Int = synchronized(GLOBAL_LOCK) {
-        if (ids.isEmpty()) {
-            return@synchronized 0
-        }
-
-        val wanted = ids.toHashSet()
-        val items = read()
-        var changed = 0
-
-        items.forEach { profile ->
-            if (profile.id in wanted) {
-                transform(profile)
-                changed += 1
-            }
-        }
-
-        if (changed > 0) {
-            write(items)
-        }
-
-        changed
-    }
 
     fun save(profile: ConfigProfile) {
         synchronized(GLOBAL_LOCK) {
@@ -91,9 +56,9 @@ class ConfigRepository(context: Context) {
                 }
 
             if (index >= 0) {
-                items[index] = profile.copy()
+                items[index] = profile
             } else {
-                items += profile.copy()
+                items += profile
             }
 
             write(items)
@@ -114,11 +79,13 @@ class ConfigRepository(context: Context) {
                     }
 
                 if (duplicate < 0) {
-                    items += profile.copy()
+                    items += profile
                 } else if (
-                    profile.subscriptionId != null
+                    profile.subscriptionId !=
+                    null
                 ) {
-                    val old = items[duplicate]
+                    val old =
+                        items[duplicate]
 
                     items[duplicate] =
                         mergePreserved(
@@ -251,7 +218,10 @@ class ConfigRepository(context: Context) {
                 }
             )
 
-            if (selectedId() in removedIds) {
+            if (
+                selectedId() in
+                removedIds
+            ) {
                 select(null)
             }
 
@@ -269,33 +239,18 @@ class ConfigRepository(context: Context) {
         }
 
     fun delete(id: String) {
-        deleteMany(listOf(id))
-    }
+        synchronized(GLOBAL_LOCK) {
+            val items =
+                read().filterNot {
+                    it.id == id
+                }
 
-    fun deleteMany(
-        ids: Collection<String>
-    ): Int = synchronized(GLOBAL_LOCK) {
-        if (ids.isEmpty()) {
-            return@synchronized 0
-        }
-
-        val wanted = ids.toHashSet()
-        val items = read()
-        val before = items.size
-        items.removeAll {
-            it.id in wanted
-        }
-        val removed = before - items.size
-
-        if (removed > 0) {
             write(items)
-        }
 
-        if (selectedId() in wanted) {
-            select(null)
+            if (selectedId() == id) {
+                select(null)
+            }
         }
-
-        removed
     }
 
     fun selectedId(): String? =
@@ -315,65 +270,40 @@ class ConfigRepository(context: Context) {
 
     private fun read():
         MutableList<ConfigProfile> {
-        val raw =
-            prefs.getString(
-                "items",
-                "[]"
-            ) ?: "[]"
-        val cached = cachedItems
-
-        if (
-            cachedRaw == raw &&
-            cached != null
-        ) {
-            return cached
-                .map { it.copy() }
-                .toMutableList()
-        }
-
         val array =
             runCatching {
-                JSONArray(raw)
+                JSONArray(
+                    prefs.getString(
+                        "items",
+                        "[]"
+                    )
+                )
             }.getOrDefault(
                 JSONArray()
             )
-        val parsed =
-            (0 until array.length())
-                .mapNotNull {
-                    runCatching {
-                        ConfigProfile.fromJson(
-                            array.getJSONObject(it)
-                        )
-                    }.getOrNull()
-                }
-                .toMutableList()
 
-        cachedRaw = raw
-        cachedItems =
-            parsed.map { it.copy() }
-
-        return parsed
+        return (
+            0 until array.length()
+        ).mapNotNull {
+            runCatching {
+                ConfigProfile.fromJson(
+                    array.getJSONObject(it)
+                )
+            }.getOrNull()
+        }.toMutableList()
     }
 
     private fun write(
         items: Collection<ConfigProfile>
     ) {
-        val snapshot =
-            items.map { it.copy() }
-        val raw =
-            JSONArray().apply {
-                snapshot.forEach {
-                    put(it.toJson())
-                }
-            }.toString()
-
-        cachedRaw = raw
-        cachedItems = snapshot
-
         prefs.edit()
             .putString(
                 "items",
-                raw
+                JSONArray().apply {
+                    items.forEach {
+                        put(it.toJson())
+                    }
+                }.toString()
             )
             .apply()
     }
@@ -392,13 +322,17 @@ class ConfigRepository(context: Context) {
                 old.latencySuccessRatio,
             latencyMethod =
                 old.latencyMethod,
-            testStatus = old.testStatus,
-            lastTestAt = old.lastTestAt,
+            testStatus =
+                old.testStatus,
+            lastTestAt =
+                old.lastTestAt,
             cumulativeSessionMs =
                 old.cumulativeSessionMs,
-            lastSessionMs = old.lastSessionMs,
+            lastSessionMs =
+                old.lastSessionMs,
             exitIp = old.exitIp,
-            exitCountry = old.exitCountry,
+            exitCountry =
+                old.exitCountry,
             exitCountryCode =
                 old.exitCountryCode,
             exitFlag = old.exitFlag,

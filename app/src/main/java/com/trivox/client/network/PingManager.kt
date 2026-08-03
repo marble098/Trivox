@@ -18,7 +18,6 @@ import java.net.SocketTimeoutException
 import java.net.URI
 import java.net.UnknownHostException
 import java.util.concurrent.Callable
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.ThreadFactory
@@ -49,8 +48,6 @@ class PingManager(
             MAX_DNS_WORKERS,
             namedFactory("trivox-dns")
         )
-    private val dnsCache =
-        ConcurrentHashMap<String, CachedAddresses>()
 
     fun measure(
         profile: ConfigProfile,
@@ -89,36 +86,10 @@ class PingManager(
                 MAX_TIMEOUT_MS
             )
 
-        val targetHost =
-            profile.probeServer
-                .trim()
-                .ifBlank {
-                    profile.server
-                }
-        val targetPort =
-            profile.probePort
-                .takeIf {
-                    it in 1..65535
-                }
-                ?: profile.port
-
-        if (
-            targetHost.isBlank() ||
-            targetPort !in 1..65535
-        ) {
-            return failure(
-                method = PingMethod.TCP_CONNECT.name,
-                timestamp = timestamp,
-                throwable = IllegalArgumentException(
-                    "TCP probe endpoint is unavailable"
-                )
-            )
-        }
-
         val addresses =
             try {
                 resolveAll(
-                    targetHost,
+                    profile.server,
                     boundedTimeout
                 )
             } catch (
@@ -145,7 +116,7 @@ class PingManager(
             try {
                 connectOnce(
                     address = address,
-                    port = targetPort,
+                    port = profile.port,
                     timeoutMs =
                         boundedTimeout.coerceAtMost(
                             ADDRESS_PROBE_TIMEOUT_MS
@@ -182,7 +153,7 @@ class PingManager(
                     samples +=
                         connectOnce(
                             address = address,
-                            port = targetPort,
+                            port = profile.port,
                             timeoutMs = boundedTimeout
                         )
                 } catch (throwable: Throwable) {
@@ -925,17 +896,18 @@ class PingManager(
                 PingResult
             ) -> Unit
     ): List<Future<*>> =
-        submitBounded(
-            profiles = profiles,
-            executor = tcpExecutor,
-            workers = MAX_TCP_WORKERS
-        ) { profile ->
-            callback(
-                profile,
-                tcp(
-                    profile,
-                    attempts
-                )
+        profiles.map {
+                profile ->
+            tcpExecutor.submit(
+                Callable {
+                    callback(
+                        profile,
+                        tcp(
+                            profile,
+                            attempts
+                        )
+                    )
+                }
             )
         }
 
@@ -959,69 +931,19 @@ class PingManager(
                 PingMethod.XRAY_HTTP ->
                     xrayExecutor
             }
-        val workers =
-            if (
-                settings.pingMethod ==
-                PingMethod.TCP_CONNECT
-            ) {
-                MAX_TCP_WORKERS
-            } else {
-                1
-            }
 
-        return submitBounded(
-            profiles = profiles,
-            executor = executor,
-            workers = workers
-        ) { profile ->
-            callback(
-                profile,
-                measure(
-                    profile,
-                    settings,
-                    workDir
-                )
-            )
-        }
-    }
-
-    private fun submitBounded(
-        profiles: List<ConfigProfile>,
-        executor:
-            java.util.concurrent.ExecutorService,
-        workers: Int,
-        action: (ConfigProfile) -> Unit
-    ): List<Future<*>> {
-        if (profiles.isEmpty()) {
-            return emptyList()
-        }
-
-        val cursor =
-            AtomicInteger(0)
-        val count =
-            workers
-                .coerceAtLeast(1)
-                .coerceAtMost(
-                    profiles.size
-                )
-
-        return List(count) {
+        return profiles.map {
+                profile ->
             executor.submit(
                 Callable {
-                    while (
-                        !Thread.currentThread()
-                            .isInterrupted
-                    ) {
-                        val index =
-                            cursor
-                                .getAndIncrement()
-
-                        if (index >= profiles.size) {
-                            break
-                        }
-
-                        action(profiles[index])
-                    }
+                    callback(
+                        profile,
+                        measure(
+                            profile,
+                            settings,
+                            workDir
+                        )
+                    )
                 }
             )
         }
@@ -1039,28 +961,12 @@ class PingManager(
         tcpExecutor.shutdownNow()
         xrayExecutor.shutdownNow()
         resolverExecutor.shutdownNow()
-        dnsCache.clear()
     }
 
     private fun resolveAll(
         host: String,
         timeoutMs: Int
     ): List<InetAddress> {
-        val normalized =
-            host.trim().lowercase()
-        val now =
-            System.currentTimeMillis()
-        val cached =
-            dnsCache[normalized]
-
-        if (
-            cached != null &&
-            now - cached.storedAt <
-            DNS_CACHE_TTL_MS
-        ) {
-            return cached.addresses
-        }
-
         val task =
             resolverExecutor.submit<
                 List<InetAddress>
@@ -1086,13 +992,6 @@ class PingManager(
             ).takeIf {
                 it.isNotEmpty()
             }
-                ?.also {
-                    dnsCache[normalized] =
-                        CachedAddresses(
-                            addresses = it,
-                            storedAt = now
-                        )
-                }
                 ?: throw UnknownHostException(
                     host
                 )
@@ -1267,11 +1166,6 @@ class PingManager(
         }
     }
 
-    private data class CachedAddresses(
-        val addresses: List<InetAddress>,
-        val storedAt: Long
-    )
-
     companion object {
         private const val
             MAX_TCP_WORKERS = 4
@@ -1293,8 +1187,6 @@ class PingManager(
             LOW_LATENCY_RECHECK_ATTEMPTS = 3
         private const val
             DNS_TIMEOUT_MS = 3_000
-        private const val
-            DNS_CACHE_TTL_MS = 60_000L
         private const val
             NANOS_PER_MILLISECOND =
                 1_000_000L

@@ -102,57 +102,11 @@ class SubscriptionManagementActivity : ThemedActivity() {
             }
 
         render()
-        handleLaunchIntent()
     }
 
     override fun onResume() {
         super.onResume()
         render()
-    }
-
-    private fun handleLaunchIntent() {
-        val sourceId =
-            intent.getStringExtra(
-                EXTRA_SOURCE_ID
-            )
-        val kindValue =
-            intent.getStringExtra(
-                EXTRA_ADD_KIND
-            )
-
-        intent.removeExtra(EXTRA_SOURCE_ID)
-        intent.removeExtra(EXTRA_ADD_KIND)
-
-        if (!sourceId.isNullOrBlank()) {
-            SubscriptionRepository(this)
-                .find(sourceId)
-                ?.let { source ->
-                    if (
-                        source.kind ==
-                        SubscriptionKind.NORDVPN
-                    ) {
-                        showNordVpnEditor(source)
-                    } else {
-                        showEditor(source)
-                    }
-                }
-            return
-        }
-
-        if (kindValue == null) {
-            return
-        }
-
-        when (
-            SubscriptionKind.fromStored(
-                kindValue
-            )
-        ) {
-            SubscriptionKind.NORDVPN ->
-                showNordVpnEditor(null)
-            SubscriptionKind.URL ->
-                showEditor(null)
-        }
     }
 
     private fun render() {
@@ -974,13 +928,6 @@ class SubscriptionManagementActivity : ThemedActivity() {
             message,
             Toast.LENGTH_LONG
         ).show()
-    }
-
-    companion object {
-        const val EXTRA_SOURCE_ID =
-            "subscription_source_id"
-        const val EXTRA_ADD_KIND =
-            "subscription_add_kind"
     }
 
     override fun onDestroy() {

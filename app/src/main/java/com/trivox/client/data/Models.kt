@@ -53,8 +53,6 @@ data class ConfigProfile(
     val raw: String,
     val outboundJson: String,
     val originalDnsJson: String? = null,
-    val probeServer: String = "",
-    val probePort: Int = 0,
     var enabled: Boolean = true,
     var favorite: Boolean = false,
     var group: String = "Default",
@@ -78,7 +76,6 @@ data class ConfigProfile(
         .put("id", id).put("name", name).put("protocol", protocol)
         .put("server", server).put("port", port).put("raw", raw)
         .put("outboundJson", outboundJson).put("originalDnsJson", originalDnsJson)
-        .put("probeServer", probeServer).put("probePort", probePort)
         .put("enabled", enabled).put("favorite", favorite).put("group", group)
         .put("subscriptionId", subscriptionId).put("latencyMs", latencyMs)
         .put("latencyJitterMs", latencyJitterMs).put("latencySuccessRatio", latencySuccessRatio)
@@ -93,9 +90,7 @@ data class ConfigProfile(
             id = json.optString("id", UUID.randomUUID().toString()), name = json.optString("name", "Unnamed"),
             protocol = json.optString("protocol", "unknown"), server = json.optString("server"), port = json.optInt("port"),
             raw = json.optString("raw"), outboundJson = json.getString("outboundJson"),
-            originalDnsJson = json.optString("originalDnsJson").ifBlank { null },
-            probeServer = json.optString("probeServer"), probePort = json.optInt("probePort"),
-            enabled = json.optBoolean("enabled", true),
+            originalDnsJson = json.optString("originalDnsJson").ifBlank { null }, enabled = json.optBoolean("enabled", true),
             favorite = json.optBoolean("favorite"), group = json.optString("group", "Default"),
             subscriptionId = json.optString("subscriptionId").ifBlank { null },
             latencyMs = if (json.isNull("latencyMs")) null else json.optLong("latencyMs"),
@@ -162,7 +157,6 @@ data class AppSettings(
     var gridMode: Boolean = false,
     var pingMethod: PingMethod = PingMethod.XRAY_HTTP,
     var livePingMethod: PingMethod = PingMethod.XRAY_HTTP,
-    var hideIpOnMain: Boolean = false,
     var sortMode: ProfileSortMode = ProfileSortMode.SMART,
     var darkMode: Boolean = false,
     var themeMode: ThemeMode = ThemeMode.LIGHT,
@@ -185,7 +179,7 @@ data class AppSettings(
         .put("showSystemApps", showSystemApps).put("reconnectOnNetworkChange", reconnectOnNetworkChange)
         .put("reconnectOnBoot", reconnectOnBoot).put("blocking", blocking).put("gridMode", gridMode)
         .put("pingMethod", pingMethod.name).put("livePingMethod", livePingMethod.name)
-        .put("hideIpOnMain", hideIpOnMain).put("sortMode", sortMode.name).put("darkMode", darkMode)
+        .put("sortMode", sortMode.name).put("darkMode", darkMode)
         .put("themeMode", themeMode.name).put("localProxyInVpn", localProxyInVpn)
         .put("autoUpdateCheck", autoUpdateCheck).put("testUrl", testUrl).put("testAttempts", testAttempts)
 
@@ -214,7 +208,6 @@ data class AppSettings(
                     json.optString("livePingMethod"),
                     legacyPingMethod
                 ),
-                hideIpOnMain = json.optBoolean("hideIpOnMain", false),
                 sortMode = ProfileSortMode.fromStored(json.optString("sortMode")),
                 darkMode = legacyDark, themeMode = ThemeMode.fromStored(json.optString("themeMode"), legacyDark),
                 localProxyInVpn = json.optBoolean("localProxyInVpn", true), autoUpdateCheck = json.optBoolean("autoUpdateCheck", true),

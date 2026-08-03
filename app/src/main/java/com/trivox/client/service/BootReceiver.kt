@@ -25,13 +25,6 @@ class BootReceiver : BroadcastReceiver() {
         Diagnostics.initialize(context)
 
         if (
-            ConnectionPauseController
-                .restoreOrResume(context)
-        ) {
-            return
-        }
-
-        if (
             Diagnostics
                 .hasRecentNativeCrash()
         ) {

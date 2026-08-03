@@ -84,27 +84,6 @@
                     android:text="@string/dark_theme_summary"
                     android:textColor="@color/muted"
                     android:textSize="10sp" />
-
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginTop="9dp"
-                    android:layout_marginBottom="5dp"
-                    android:background="@color/divider" />
-
-                <CheckBox
-                    android:id="@+id/hideIpOnMainCheck"
-                    style="@style/Widget.Trivox.CheckBox"
-                    android:text="@string/hide_ip_on_main" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="-3dp"
-                    android:text="@string/hide_ip_on_main_summary"
-                    android:textColor="@color/muted"
-                    android:textSize="10sp" />
             </LinearLayout>
 
             <TextView

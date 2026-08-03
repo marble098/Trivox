@@ -313,20 +313,4 @@
     <string name="nordvpn_token_keep">New token; leave blank to keep the saved token</string>
     <string name="invalid_nordvpn_token">Enter a name and a valid NordVPN access token.</string>
     <string name="secure_store_failed">The token could not be protected by Android Keystore.</string>
-
-    <string name="profile_detail_private">%1$s • %2$s • endpoint hidden</string>
-    <string name="hide_ip_on_main">Hide IP addresses on the main screen</string>
-    <string name="hide_ip_on_main_summary">Hides server and exit IP addresses in the main list and status panel. Copy and export remain complete.</string>
-    <string name="tcp_ping_icon">⚡ TCP Ping</string>
-    <string name="real_delay_all_icon">◉ Real Delay All</string>
-    <string name="toggle_connection_tools">Show or hide connection tools</string>
-    <string name="add_url_subscription">Add URL subscription</string>
-    <string name="add_nordvpn_subscription">Add NordVPN token</string>
-    <string name="pause_connection">Pause connection</string>
-    <string name="pause_15_minutes">Pause for 15 minutes</string>
-    <string name="pause_30_minutes">Pause for 30 minutes</string>
-    <string name="pause_custom">Custom pause</string>
-    <string name="pause_minutes_hint">Minutes, 1–1440</string>
-    <string name="invalid_pause_minutes">Enter a pause duration from 1 to 1440 minutes.</string>
-    <string name="pause_scheduled">Connection paused for %1$d minutes and will resume automatically.</string>
 </resources>
