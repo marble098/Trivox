@@ -643,9 +643,11 @@ class MainActivity : ThemedActivity() {
                                     getString(
                                         R.string
                                             .subscription_progress_format,
-                                        progress.completed +
-                                            1,
-                                        progress.total,
+                                        (
+                                            progress.completed +
+                                                1
+                                        ).toString(),
+                                        progress.total.toString(),
                                         progress.sourceName
                                     )
                             }

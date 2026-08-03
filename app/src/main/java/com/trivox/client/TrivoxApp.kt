@@ -119,14 +119,14 @@ class TrivoxApp : Application() {
     ) {
         when {
             level >=
-                TRIM_MEMORY_BACKGROUND ->
+                MEMORY_TRIM_BACKGROUND ->
                 Diagnostics.warning(
                     "Background memory trim: " +
                         level
                 )
 
             level >=
-                TRIM_MEMORY_RUNNING_CRITICAL ->
+                MEMORY_TRIM_RUNNING_CRITICAL ->
                 Diagnostics.warning(
                     "Critical running memory trim: " +
                         level
@@ -147,5 +147,12 @@ class TrivoxApp : Application() {
             "System reported low memory"
         )
         super.onLowMemory()
+    }
+
+    private companion object {
+        // Stable ComponentCallbacks2 levels. Android deprecated the symbolic
+        // constants but still delivers these numeric levels to onTrimMemory.
+        const val MEMORY_TRIM_RUNNING_CRITICAL = 15
+        const val MEMORY_TRIM_BACKGROUND = 40
     }
 }

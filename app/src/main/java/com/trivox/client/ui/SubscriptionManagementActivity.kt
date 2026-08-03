@@ -887,8 +887,8 @@ class SubscriptionManagementActivity : ThemedActivity() {
                             getString(
                                 R.string
                                     .subscription_progress_format,
-                                index + 1,
-                                sources.size,
+                                (index + 1).toString(),
+                                sources.size.toString(),
                                 source.name
                             )
                     }

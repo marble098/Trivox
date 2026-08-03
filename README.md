@@ -97,6 +97,15 @@ The v4.3 follow-up replaces the brittle text-only CI guard with a semantic
 validator and places `ApplicationExitInfo` access behind an explicit Android 11
 API boundary. No lint baseline or suppression is used.
 
+
+## Localized progress formatting v4.4
+
+The v4.4 follow-up gives subscription progress strings a single explicit
+string-argument contract in every locale, adds a repository-level formatter
+validator, upgrades failed-Lint artifact upload to the Node.js 24 action, and
+removes the remaining memory-trim compiler deprecation. No Lint baseline or
+suppression is used.
+
 ## License
 
 Trivox source is Apache-2.0. Xray-core is MPL-2.0 and libXray is MIT. The core binary is downloaded separately from its official release and remains under its upstream license. See [LICENSES.md](LICENSES.md).

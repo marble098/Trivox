@@ -335,7 +335,7 @@
     <string name="subscription_header_empty">No subscription sources</string>
     <string name="subscription_header_hint">Updates are isolated, cancellable, and preserve the previous working profiles if a provider returns only partial data.</string>
     <string name="subscription_header_summary">%1$d sources • %2$d enabled • %3$d configurations</string>
-    <string name="subscription_progress_format">%1$d/%2$d • Updating %3$s</string>
+    <string name="subscription_progress_format">%1$s/%2$s • Updating %3$s</string>
     <string name="subscription_update_result_detailed">%1$d configurations loaded • %2$d partial sources • %3$d failed</string>
     <string name="subscription_update_done_detailed">%1$d sources updated • %2$d configurations loaded • %3$d partial • %4$d failed</string>
     <string name="url_subscription_short">URL</string>

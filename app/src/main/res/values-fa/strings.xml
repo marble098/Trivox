@@ -335,7 +335,7 @@
     <string name="subscription_header_empty">هنوز منبع سابی اضافه نشده است</string>
     <string name="subscription_header_hint">به‌روزرسانی‌ها قابل لغو و ایزوله هستند و اگر سرویس‌دهنده فقط بخشی از داده‌ها را برگرداند، کانفیگ‌های سالم قبلی حفظ می‌شوند.</string>
     <string name="subscription_header_summary">%1$d منبع • %2$d فعال • %3$d کانفیگ</string>
-    <string name="subscription_progress_format">%1$d از %2$d • به‌روزرسانی %3$s</string>
+    <string name="subscription_progress_format">%1$s از %2$s • به‌روزرسانی %3$s</string>
     <string name="subscription_update_result_detailed">%1$d کانفیگ دریافت شد • %2$d منبع ناقص • %3$d ناموفق</string>
     <string name="subscription_update_done_detailed">%1$d منبع به‌روزرسانی شد • %2$d کانفیگ • %3$d ناقص • %4$d ناموفق</string>
     <string name="url_subscription_short">URL</string>
