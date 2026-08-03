@@ -183,7 +183,7 @@
     <string name="about_package_value">Package: %1$s</string>
     <string name="about_unavailable">Unavailable</string>
     <string name="dark_theme">Dark theme</string>
-    <string name="dark_theme_summary">Use Trivox's low-glare night palette.</string>
+    <string name="dark_theme_summary">Use the low-glare Trivox night palette.</string>
     <string name="profile_sorting_section">Configuration order</string>
     <string name="sort_mode">Sorting method</string>
     <string name="sort_smart">Smart: favorites and latency</string>
@@ -197,7 +197,7 @@
     <string name="ping_method_tcp">TCP endpoint median</string>
     <string name="ping_method_xray">Xray HTTP real delay</string>
     <string name="ping_method_tcp_summary">Resolves DNS once, performs 2–5 bounded TCP connections, and shows the median. It measures the server endpoint, not the complete proxy route.</string>
-    <string name="ping_method_xray_summary">Runs Xray's HTTP delay test through the complete configuration. It is slower but represents the real route.</string>
+    <string name="ping_method_xray_summary">Runs the Xray HTTP delay test through the complete configuration. It is slower but represents the real route.</string>
     <string name="ping_attempts">Samples per test</string>
     <string name="ping_test_url">HTTP test URL</string>
     <string name="ping_test_url_hint">https://cp.cloudflare.com/</string>
