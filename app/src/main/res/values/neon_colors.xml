@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <color name="neon_surface">#080A16</color>
-    <color name="neon_panel">#111429</color>
-    <color name="neon_cyan">#00F5FF</color>
-    <color name="neon_magenta">#FF2BD6</color>
-    <color name="neon_lime">#A8FF3E</color>
-    <color name="neon_text">#F6F8FF</color>
-</resources>

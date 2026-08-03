@@ -26,14 +26,13 @@ internal object PingStatistics {
                 .sorted()
         val required =
             max(
-                1,
-                ceil(total * 0.60)
+                if (total > 1) 2 else 1,
+                ceil(total * REQUIRED_SUCCESS_RATIO)
                     .toInt()
-            )
+            ).coerceAtMost(total)
         val ratio =
             (
-                samples.size
-                    .toDouble() /
+                samples.size.toDouble() /
                     total.toDouble()
                 ).coerceIn(0.0, 1.0)
         val successful =
@@ -50,13 +49,13 @@ internal object PingStatistics {
             )
         }
 
-        val median =
+        val center =
             median(samples)
         val deviations =
             if (samples.size > 1) {
                 samples
                     .map {
-                        abs(it - median)
+                        abs(it - center)
                     }
                     .sorted()
             } else {
@@ -66,9 +65,7 @@ internal object PingStatistics {
         return PingSummary(
             latencyMs =
                 if (successful) {
-                    nanosToDisplayMs(
-                        median
-                    )
+                    nanosToDisplayMs(center)
                 } else {
                     null
                 },
@@ -84,21 +81,16 @@ internal object PingStatistics {
                         )
                     },
             successRatio = ratio,
-            successfulSamples =
-                samples.size,
-            requiredSamples =
-                required,
-            success =
-                successful
+            successfulSamples = samples.size,
+            requiredSamples = required,
+            success = successful
         )
     }
 
     internal fun median(
         sortedValues: List<Long>
     ): Long {
-        require(
-            sortedValues.isNotEmpty()
-        ) {
+        require(sortedValues.isNotEmpty()) {
             "Median requires samples"
         }
 
@@ -132,7 +124,7 @@ internal object PingStatistics {
             .toLong()
             .coerceAtLeast(1L)
 
-    private const val
-        NANOS_PER_MILLISECOND =
-            1_000_000.0
+    private const val REQUIRED_SUCCESS_RATIO = 0.67
+    private const val NANOS_PER_MILLISECOND =
+        1_000_000.0
 }

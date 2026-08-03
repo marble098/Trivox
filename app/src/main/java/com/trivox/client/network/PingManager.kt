@@ -16,7 +16,6 @@ import java.net.Proxy
 import java.net.Socket
 import java.net.SocketTimeoutException
 import java.net.URI
-import java.net.URL
 import java.net.UnknownHostException
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
@@ -97,76 +96,102 @@ class PingManager(
                 throwable: Throwable
             ) {
                 return failure(
-                    method =
-                        PingMethod
-                            .TCP_CONNECT
-                            .name,
+                    method = PingMethod.TCP_CONNECT.name,
                     timestamp = timestamp,
                     throwable = throwable
                 )
             }
 
-        val samples =
-            mutableListOf<Long>()
-        var lastFailure:
-            Throwable? = null
+        var selectedAddress: InetAddress? = null
+        var lastFailure: Throwable? = null
 
-        repeat(count) {
-            if (
-                Thread.currentThread()
-                    .isInterrupted
-            ) {
+        for (address in addresses) {
+            if (Thread.currentThread().isInterrupted) {
                 return cancelled(
-                    PingMethod
-                        .TCP_CONNECT
-                        .name,
+                    PingMethod.TCP_CONNECT.name,
                     timestamp
                 )
             }
 
-            val address =
-                addresses[
-                    it % addresses.size
-                ]
-
             try {
-                samples +=
-                    connectOnce(
-                        address,
-                        profile.port,
-                        boundedTimeout
-                    )
-            } catch (
-                throwable: Throwable
-            ) {
-                lastFailure =
-                    throwable
+                connectOnce(
+                    address = address,
+                    port = profile.port,
+                    timeoutMs =
+                        boundedTimeout.coerceAtMost(
+                            ADDRESS_PROBE_TIMEOUT_MS
+                        )
+                )
+                selectedAddress = address
+                break
+            } catch (throwable: Throwable) {
+                lastFailure = throwable
             }
         }
 
-        val summary =
+        val address =
+            selectedAddress
+                ?: return failure(
+                    method = PingMethod.TCP_CONNECT.name,
+                    timestamp = timestamp,
+                    throwable =
+                        lastFailure
+                            ?: ConnectException(
+                                "No resolved address accepted the TCP connection"
+                            )
+                )
+
+        val samples = mutableListOf<Long>()
+
+        fun collect(sampleCount: Int) {
+            repeat(sampleCount) {
+                if (Thread.currentThread().isInterrupted) {
+                    return
+                }
+
+                try {
+                    samples +=
+                        connectOnce(
+                            address = address,
+                            port = profile.port,
+                            timeoutMs = boundedTimeout
+                        )
+                } catch (throwable: Throwable) {
+                    lastFailure = throwable
+                }
+            }
+        }
+
+        collect(count)
+        var totalAttempts = count
+        var summary =
             PingStatistics.summarize(
                 samples,
-                count
+                totalAttempts
             )
 
+        if (
+            summary.success &&
+            (summary.latencyMs ?: Long.MAX_VALUE) <
+                LOW_LATENCY_RECHECK_THRESHOLD_MS
+        ) {
+            collect(LOW_LATENCY_RECHECK_ATTEMPTS)
+            totalAttempts +=
+                LOW_LATENCY_RECHECK_ATTEMPTS
+            summary =
+                PingStatistics.summarize(
+                    samples,
+                    totalAttempts
+                )
+        }
+
         return PingResult(
-            method =
-                PingMethod
-                    .TCP_CONNECT
-                    .name,
-            success =
-                summary.success,
-            latencyMs =
-                summary.latencyMs,
-            jitterMs =
-                summary.jitterMs,
-            successRatio =
-                summary.successRatio,
-            resolvedIp =
-                addresses
-                    .firstOrNull()
-                    ?.hostAddress,
+            method = PingMethod.TCP_CONNECT.name,
+            success = summary.success,
+            latencyMs = summary.latencyMs,
+            jitterMs = summary.jitterMs,
+            successRatio = summary.successRatio,
+            resolvedIp = address.hostAddress,
             timestamp = timestamp,
             errorCategory =
                 if (summary.success) {
@@ -175,7 +200,7 @@ class PingManager(
                     classify(
                         lastFailure
                             ?: SocketTimeoutException(
-                                "Insufficient TCP samples"
+                                "Insufficient verified TCP samples"
                             )
                     )
                 }
@@ -237,7 +262,7 @@ class PingManager(
         }
 
         val count =
-            attempts.coerceIn(2, 5)
+            attempts.coerceIn(3, 5)
         val boundedTimeout =
             timeoutSeconds.coerceIn(3, 15)
         val configFile =
@@ -273,52 +298,73 @@ class PingManager(
                 Charsets.UTF_8
             )
 
-            repeat(count) {
-                if (
-                    Thread.currentThread()
-                        .isInterrupted
-                ) {
-                    return cancelled(
-                        PingMethod
-                            .XRAY_HTTP
-                            .name,
-                        timestamp
-                    )
-                }
+            fun collect(sampleCount: Int) {
+                repeat(sampleCount) { index ->
+                    if (
+                        Thread.currentThread()
+                            .isInterrupted
+                    ) {
+                        return
+                    }
 
-                val result =
-                    adapter.realDelay(
-                        configFile.absolutePath,
-                        boundedTimeout,
-                        settings.testUrl
-                    )
-                val delay =
-                    parseXrayDelay(
-                        result.data,
-                        boundedTimeout
-                    )
+                    val xrayRequestUrl =
+                        cacheBustedUrl(
+                            settings.testUrl,
+                            timestamp +
+                                samples.size +
+                                index
+                        )
+                    val result =
+                        adapter.realDelay(
+                            configFile.absolutePath,
+                            boundedTimeout,
+                            xrayRequestUrl
+                        )
+                    val delay =
+                        parseXrayDelay(
+                            result.data,
+                            boundedTimeout
+                        )
 
-                if (
-                    result.success &&
-                    delay != null
-                ) {
-                    samples +=
-                        delay *
-                            NANOS_PER_MILLISECOND
-                } else {
-                    lastError =
-                        result.error
-                            .ifBlank {
-                                "xray_test_failure"
-                            }
+                    if (
+                        result.success &&
+                        delay != null
+                    ) {
+                        samples +=
+                            delay *
+                                NANOS_PER_MILLISECOND
+                    } else {
+                        lastError =
+                            result.error
+                                .ifBlank {
+                                    "xray_test_failure"
+                                }
+                    }
                 }
             }
 
-            val summary =
+            collect(count)
+            var totalAttempts = count
+            var summary =
                 PingStatistics.summarize(
                     samples,
-                    count
+                    totalAttempts
                 )
+
+            if (
+                summary.success &&
+                (summary.latencyMs ?: Long.MAX_VALUE) <
+                    LOW_LATENCY_RECHECK_THRESHOLD_MS
+            ) {
+                collect(LOW_LATENCY_RECHECK_ATTEMPTS)
+                totalAttempts +=
+                    LOW_LATENCY_RECHECK_ATTEMPTS
+                summary =
+                    PingStatistics.summarize(
+                        samples,
+                        totalAttempts
+                    )
+            }
 
             PingResult(
                 method =
@@ -419,14 +465,14 @@ class PingManager(
 
     fun httpViaLocalProxy(
         settings: AppSettings,
-        attempts: Int = 2,
+        attempts: Int = 3,
         timeoutMs: Int = 5_000,
         url: String = settings.testUrl
     ): PingResult {
         val timestamp =
             System.currentTimeMillis()
         val count =
-            attempts.coerceIn(2, 4)
+            attempts.coerceIn(3, 5)
         val boundedTimeout =
             timeoutMs.coerceIn(
                 1_500,
@@ -445,39 +491,33 @@ class PingManager(
                 setOf("http", "https")
         ) {
             return PingResult(
-                method =
-                    PingMethod
-                        .XRAY_HTTP
-                        .name,
+                method = PingMethod.XRAY_HTTP.name,
                 success = false,
                 latencyMs = null,
                 jitterMs = null,
                 successRatio = 0.0,
                 resolvedIp = "127.0.0.1",
                 timestamp = timestamp,
-                errorCategory =
-                    "invalid_test_url"
+                errorCategory = "invalid_test_url"
             )
         }
 
-        var samples =
-            mutableListOf<Long>()
-        var lastFailure:
-            Throwable? = null
+        var samples = mutableListOf<Long>()
+        var lastFailure: Throwable? = null
+        var activeProxyType = Proxy.Type.HTTP
 
         fun runSamples(
-            proxyType: Proxy.Type
+            proxyType: Proxy.Type,
+            sampleCount: Int
         ) {
-            repeat(count) {
-                if (
-                    Thread.currentThread()
-                        .isInterrupted
-                ) {
+            activeProxyType = proxyType
+
+            repeat(sampleCount) { index ->
+                if (Thread.currentThread().isInterrupted) {
                     return
                 }
 
-                var connection:
-                    HttpURLConnection? = null
+                var connection: HttpURLConnection? = null
 
                 try {
                     val proxy =
@@ -488,11 +528,17 @@ class PingManager(
                                 settings.socksPort
                             )
                         )
+                    val requestUrl =
+                        cacheBustedUrl(
+                            url,
+                            timestamp +
+                                samples.size +
+                                index
+                        )
                     connection =
-                        URL(url)
-                            .openConnection(
-                                proxy
-                            ) as
+                        URI(requestUrl)
+                            .toURL()
+                            .openConnection(proxy) as
                             HttpURLConnection
                     connection.connectTimeout =
                         boundedTimeout
@@ -501,14 +547,17 @@ class PingManager(
                     connection.instanceFollowRedirects =
                         false
                     connection.useCaches = false
-                    connection.requestMethod =
-                        "GET"
+                    connection.requestMethod = "GET"
                     connection.setRequestProperty(
                         "Connection",
                         "close"
                     )
                     connection.setRequestProperty(
                         "Cache-Control",
+                        "no-cache, no-store, max-age=0"
+                    )
+                    connection.setRequestProperty(
+                        "Pragma",
                         "no-cache"
                     )
                     connection.setRequestProperty(
@@ -517,7 +566,11 @@ class PingManager(
                     )
                     connection.setRequestProperty(
                         "User-Agent",
-                        "Trivox-LivePing/2"
+                        "Trivox-AlivePing/3"
+                    )
+                    connection.setRequestProperty(
+                        "X-Trivox-Ping",
+                        (timestamp + index).toString()
                     )
 
                     val startNanos =
@@ -525,72 +578,80 @@ class PingManager(
                     val code =
                         connection.responseCode
                     val elapsed =
-                        System.nanoTime() -
-                            startNanos
+                        System.nanoTime() - startNanos
 
-                    if (code in 200..399) {
+                    if (isExpectedHttpResponse(uri, code)) {
                         samples += elapsed
                     } else {
                         lastFailure =
                             IllegalStateException(
-                                "HTTP $code"
+                                "Unexpected HTTP status $code"
                             )
                     }
-                } catch (
-                    throwable: Throwable
-                ) {
+                } catch (throwable: Throwable) {
                     lastFailure = throwable
                 } finally {
                     runCatching {
-                        connection
-                            ?.inputStream
-                            ?.close()
+                        connection?.inputStream?.close()
                     }
                     runCatching {
-                        connection
-                            ?.errorStream
-                            ?.close()
+                        connection?.errorStream?.close()
                     }
-                    connection
-                        ?.disconnect()
+                    connection?.disconnect()
                 }
             }
         }
 
         runSamples(
-            Proxy.Type.HTTP
+            Proxy.Type.HTTP,
+            count
         )
+        var totalAttempts = count
         var summary =
             PingStatistics.summarize(
                 samples,
-                count
+                totalAttempts
             )
 
         if (!summary.success) {
             samples = mutableListOf()
+            lastFailure = null
             runSamples(
-                Proxy.Type.SOCKS
+                Proxy.Type.SOCKS,
+                count
             )
+            totalAttempts = count
             summary =
                 PingStatistics.summarize(
                     samples,
-                    count
+                    totalAttempts
+                )
+        }
+
+        if (
+            summary.success &&
+            (summary.latencyMs ?: Long.MAX_VALUE) <
+                LOW_LATENCY_RECHECK_THRESHOLD_MS
+        ) {
+            runSamples(
+                activeProxyType,
+                LOW_LATENCY_RECHECK_ATTEMPTS
+            )
+            totalAttempts +=
+                LOW_LATENCY_RECHECK_ATTEMPTS
+            summary =
+                PingStatistics.summarize(
+                    samples,
+                    totalAttempts
                 )
         }
 
         return PingResult(
-            method =
-                PingMethod
-                    .XRAY_HTTP
-                    .name,
-            success =
-                summary.success,
-            latencyMs =
-                summary.latencyMs,
-            jitterMs =
-                summary.jitterMs,
-            successRatio =
-                summary.successRatio,
+            method = PingMethod.XRAY_HTTP.name,
+            success = summary.success,
+            latencyMs = summary.latencyMs,
+            jitterMs = summary.jitterMs,
+            successRatio = summary.successRatio,
             resolvedIp = "127.0.0.1",
             timestamp = timestamp,
             errorCategory =
@@ -600,11 +661,39 @@ class PingManager(
                     classify(
                         lastFailure
                             ?: SocketTimeoutException(
-                                "Local mixed proxy did not answer"
+                                "Local mixed proxy did not return a verified response"
                             )
                     )
                 }
         )
+    }
+
+    private fun cacheBustedUrl(
+        url: String,
+        nonce: Long
+    ): String {
+        val separator =
+            if ('?' in url) '&' else '?'
+
+        return "$url${separator}trivox_ping=$nonce"
+    }
+
+    private fun isExpectedHttpResponse(
+        uri: URI,
+        statusCode: Int
+    ): Boolean {
+        val googleGenerate204 =
+            uri.host.equals(
+                "www.google.com",
+                ignoreCase = true
+            ) &&
+                uri.path == "/gen_204"
+
+        return if (googleGenerate204) {
+            statusCode == 204
+        } else {
+            statusCode in 200..399
+        }
     }
 
     fun tlsHandshake(
@@ -927,6 +1016,8 @@ class PingManager(
         Socket().use {
             socket ->
             socket.tcpNoDelay = true
+            socket.keepAlive = false
+            socket.reuseAddress = false
             socket.connect(
                 InetSocketAddress(
                     address,
@@ -1088,6 +1179,12 @@ class PingManager(
             MAX_TIMEOUT_MS = 15_000
         private const val
             DEFAULT_TCP_TIMEOUT_MS = 4_000
+        private const val
+            ADDRESS_PROBE_TIMEOUT_MS = 1_500
+        private const val
+            LOW_LATENCY_RECHECK_THRESHOLD_MS = 10L
+        private const val
+            LOW_LATENCY_RECHECK_ATTEMPTS = 3
         private const val
             DNS_TIMEOUT_MS = 3_000
         private const val

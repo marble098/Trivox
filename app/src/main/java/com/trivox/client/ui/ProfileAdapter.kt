@@ -9,8 +9,6 @@ import com.trivox.client.R
 import com.trivox.client.data.ConfigProfile
 import com.trivox.client.data.PingMethod
 import com.trivox.client.data.TestStatus
-import java.text.DateFormat
-import java.util.Date
 
 class ProfileAdapter(
     private val onClick:
@@ -21,16 +19,11 @@ class ProfileAdapter(
         (ConfigProfile) -> Unit,
     private val onPing:
         (ConfigProfile) -> Unit
-) :
-    RecyclerView.Adapter<
-        ProfileAdapter.Holder
-        >() {
+) : RecyclerView.Adapter<ProfileAdapter.Holder>() {
     private val items =
         mutableListOf<ConfigProfile>()
-    private var selectedId:
-        String? = null
-    private var connectedId:
-        String? = null
+    private var selectedId: String? = null
+    private var connectedId: String? = null
 
     init {
         setHasStableIds(true)
@@ -48,43 +41,32 @@ class ProfileAdapter(
         notifyDataSetChanged()
     }
 
-    override fun getItemId(
-        position: Int
-    ): Long =
-        items[position]
-            .id
-            .hashCode()
-            .toLong()
+    override fun getItemId(position: Int): Long =
+        items[position].id.hashCode().toLong()
 
     override fun onCreateViewHolder(
         parent: ViewGroup,
         viewType: Int
-    ) =
-        Holder(
-            LayoutInflater
-                .from(parent.context)
-                .inflate(
-                    R.layout.row_profile,
-                    parent,
-                    false
-                )
-        )
+    ) = Holder(
+        LayoutInflater
+            .from(parent.context)
+            .inflate(
+                R.layout.row_profile,
+                parent,
+                false
+            )
+    )
 
     override fun onBindViewHolder(
         holder: Holder,
         position: Int
     ) {
-        holder.bind(
-            items[position]
-        )
+        holder.bind(items[position])
     }
 
-    override fun getItemCount() =
-        items.size
+    override fun getItemCount() = items.size
 
-    inner class Holder(
-        view: View
-    ) :
+    inner class Holder(view: View) :
         RecyclerView.ViewHolder(view) {
         private val favorite =
             view.findViewById<TextView>(
@@ -119,167 +101,87 @@ class ProfileAdapter(
                 R.id.actionText
             )
 
-        fun bind(
-            profile: ConfigProfile
-        ) {
+        fun bind(profile: ConfigProfile) {
+            val connected =
+                profile.id == connectedId
+
             itemView.isActivated =
-                profile.id ==
-                    selectedId
+                profile.id == selectedId
             itemView.alpha =
-                if (profile.enabled) {
-                    1f
-                } else {
-                    0.52f
-                }
+                if (profile.enabled) 1f else 0.52f
 
             favorite.text =
-                if (profile.favorite) {
-                    "★"
-                } else {
-                    "☆"
-                }
-            name.text =
-                profile.name
+                if (profile.favorite) "★" else "☆"
+            name.text = profile.name
             detail.text =
-                itemView.context
-                    .getString(
-                        R.string
-                            .profile_detail,
-                        profile.protocol
-                            .uppercase(),
-                        profile.server,
-                        profile.port,
-                        profile.group
-                    )
+                itemView.context.getString(
+                    R.string.profile_detail,
+                    profile.protocol.uppercase(),
+                    profile.server,
+                    profile.port,
+                    profile.group
+                )
 
             val locationValue =
                 buildString {
-                    profile
-                        .exitFlag
-                        .takeIf(
-                            String::isNotBlank
-                        )
+                    profile.exitFlag
+                        .takeIf(String::isNotBlank)
                         ?.let {
                             append(it)
                             append(' ')
                         }
-                    profile
-                        .exitCountry
-                        .takeIf(
-                            String::isNotBlank
-                        )
-                        ?.let {
-                            append(it)
-                        }
+                    profile.exitCountry
+                        .takeIf(String::isNotBlank)
+                        ?.let(::append)
 
-                    if (
-                        profile.exitIp
-                            .isNotBlank()
-                    ) {
-                        if (isNotBlank()) {
-                            append(" • ")
-                        }
-                        append(
-                            profile.exitIp
-                        )
+                    if (profile.exitIp.isNotBlank()) {
+                        if (isNotBlank()) append(" • ")
+                        append(profile.exitIp)
                     }
                 }
 
-            location.text =
-                locationValue
+            location.text = locationValue
             location.visibility =
-                if (
-                    locationValue
-                        .isBlank()
-                ) {
+                if (locationValue.isBlank()) {
                     View.GONE
                 } else {
                     View.VISIBLE
                 }
 
-            val prefix =
-                if (
-                    profile.id ==
-                    connectedId
-                ) {
-                    "● "
-                } else {
-                    ""
-                }
-            val time =
-                if (
-                    profile.lastTestAt >
-                    0L
-                ) {
-                    DateFormat
-                        .getDateTimeInstance(
-                            DateFormat.SHORT,
-                            DateFormat.SHORT
+            val statusValue =
+                when {
+                    connected ->
+                        itemView.context.getString(
+                            R.string.state_connected
                         )
-                        .format(
-                            Date(
-                                profile
-                                    .lastTestAt
-                            )
-                        )
-                } else {
-                    ""
-                }
 
-            status.text =
-                prefix +
-                    when (
-                        profile.testStatus
-                    ) {
-                        TestStatus.UNTESTED ->
-                            "—"
-
+                    profile.testStatus ==
                         TestStatus.TESTING ->
-                            itemView.context
-                                .getString(
-                                    R.string
-                                        .status_testing
-                                )
+                        itemView.context.getString(
+                            R.string.status_testing
+                        )
 
-                        TestStatus.ALIVE ->
-                            itemView.context
-                                .getString(
-                                    R.string
-                                        .status_alive,
-                                    time
-                                )
+                    else -> ""
+                }
 
-                        TestStatus.DEAD ->
-                            itemView.context
-                                .getString(
-                                    R.string
-                                        .status_dead,
-                                    time
-                                )
-
-                        TestStatus.ERROR ->
-                            itemView.context
-                                .getString(
-                                    R.string
-                                        .status_error,
-                                    time
-                                )
-                    }
+            status.text = statusValue
+            status.visibility =
+                if (statusValue.isBlank()) {
+                    View.GONE
+                } else {
+                    View.VISIBLE
+                }
 
             latency.text =
                 profile.latencyMs
-                    ?.let {
-                        value ->
-                        itemView.context
-                            .getString(
-                                R.string
-                                    .latency_method_format,
-                                pingMethodLabel(
-                                    profile
-                                        .latencyMethod
-                                ),
-                                value
-                            )
+                    ?.let { value ->
+                        itemView.context.getString(
+                            R.string.latency_method_format,
+                            pingMethodLabel(
+                                profile.latencyMethod
+                            ),
+                            value
+                        )
                     }
                     ?: "—"
 
@@ -290,47 +192,36 @@ class ProfileAdapter(
                 ) {
                     "…"
                 } else {
-                    itemView.context
-                        .getString(
-                            R.string
-                                .ping_short
-                        )
+                    itemView.context.getString(
+                        R.string.ping_short
+                    )
                 }
 
             action.contentDescription =
-                itemView.context
-                    .getString(
-                        R.string
-                            .config_actions
-                    )
+                itemView.context.getString(
+                    R.string.config_actions
+                )
             ping.contentDescription =
-                itemView.context
-                    .getString(
-                        R.string
-                            .ping_now
-                    )
+                itemView.context.getString(
+                    R.string.ping_now
+                )
 
-            itemView
-                .setOnClickListener {
-                    onClick(profile)
-                }
-            itemView
-                .setOnLongClickListener {
-                    onLongClick(profile)
-                    true
-                }
-            latency
-                .setOnClickListener {
-                    onPing(profile)
-                }
-            ping
-                .setOnClickListener {
-                    onPing(profile)
-                }
-            action
-                .setOnClickListener {
-                    onAction(profile)
-                }
+            itemView.setOnClickListener {
+                onClick(profile)
+            }
+            itemView.setOnLongClickListener {
+                onLongClick(profile)
+                true
+            }
+            latency.setOnClickListener {
+                onPing(profile)
+            }
+            ping.setOnClickListener {
+                onPing(profile)
+            }
+            action.setOnClickListener {
+                onAction(profile)
+            }
         }
 
         private fun pingMethodLabel(
@@ -338,22 +229,19 @@ class ProfileAdapter(
         ): String =
             when (
                 PingMethod.fromStored(
-                    stored
+                    stored,
+                    PingMethod.TCP_CONNECT
                 )
             ) {
                 PingMethod.TCP_CONNECT ->
-                    itemView.context
-                        .getString(
-                            R.string
-                                .ping_method_tcp_short
-                        )
+                    itemView.context.getString(
+                        R.string.ping_method_tcp_short
+                    )
 
                 PingMethod.XRAY_HTTP ->
-                    itemView.context
-                        .getString(
-                            R.string
-                                .ping_method_xray_short
-                        )
+                    itemView.context.getString(
+                        R.string.ping_method_xray_short
+                    )
             }
     }
 }

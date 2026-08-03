@@ -64,10 +64,6 @@ class SettingsActivity :
             findViewById<SwitchCompat>(
                 R.id.darkModeSwitch
             )
-        val themeMode =
-            findViewById<Spinner>(
-                R.id.themeModeSpinner
-            )
         val localProxyInVpn =
             findViewById<CheckBox>(
                 R.id.localProxyInVpnCheck
@@ -172,58 +168,36 @@ class SettingsActivity :
             }
         )
 
-        val themeModes =
-            ThemeMode.entries
-        themeMode.adapter =
-            compactAdapter(
-                arrayOf(
-                    getString(R.string.theme_light),
-                    getString(R.string.theme_dark),
-                    getString(R.string.theme_neon)
-                )
-            )
-        themeMode.setSelection(
-            themeModes.indexOf(settings.themeMode)
-                .coerceAtLeast(0)
-        )
         darkMode.isChecked =
-            settings.themeMode != ThemeMode.LIGHT
-        var themeInitialized = false
-        themeMode.onItemSelectedListener =
-            object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(
-                    parent: AdapterView<*>?,
-                    view: View?,
-                    position: Int,
-                    id: Long
-                ) {
-                    if (!themeInitialized) {
-                        themeInitialized = true
-                        return
-                    }
-                    val selected = themeModes[position]
-                    val latest = repository.load()
-                    if (latest.themeMode == selected) return
-                    latest.themeMode = selected
-                    latest.darkMode = selected != ThemeMode.LIGHT
-                    repository.save(latest)
-                    AppCompatDelegate.setDefaultNightMode(
-                        if (selected == ThemeMode.LIGHT) {
-                            AppCompatDelegate.MODE_NIGHT_NO
-                        } else {
-                            AppCompatDelegate.MODE_NIGHT_YES
-                        }
-                    )
-                    recreate()
+            settings.themeMode == ThemeMode.DARK
+
+        darkMode.setOnCheckedChangeListener {
+                _, checked ->
+            val selected =
+                if (checked) {
+                    ThemeMode.DARK
+                } else {
+                    ThemeMode.LIGHT
                 }
-                override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+            val latest =
+                repository.load()
+
+            if (latest.themeMode == selected) {
+                return@setOnCheckedChangeListener
             }
-        darkMode.setOnCheckedChangeListener { _, checked ->
-            if (!themeInitialized) return@setOnCheckedChangeListener
-            val target = if (checked) ThemeMode.DARK else ThemeMode.LIGHT
-            if (themeMode.selectedItemPosition != themeModes.indexOf(target)) {
-                themeMode.setSelection(themeModes.indexOf(target))
-            }
+
+            latest.themeMode = selected
+            latest.darkMode = checked
+            repository.save(latest)
+
+            AppCompatDelegate.setDefaultNightMode(
+                if (checked) {
+                    AppCompatDelegate.MODE_NIGHT_YES
+                } else {
+                    AppCompatDelegate.MODE_NIGHT_NO
+                }
+            )
+            recreate()
         }
 
         val sortModes =
@@ -584,12 +558,13 @@ class SettingsActivity :
             settings.blocking =
                 blocking.isChecked
             settings.themeMode =
-                themeModes[
-                    themeMode.selectedItemPosition
-                ]
-            settings.darkMode =
-                settings.themeMode !=
+                if (darkMode.isChecked) {
+                    ThemeMode.DARK
+                } else {
                     ThemeMode.LIGHT
+                }
+            settings.darkMode =
+                darkMode.isChecked
             settings.localProxyInVpn =
                 localProxyInVpn.isChecked
             settings.autoUpdateCheck =

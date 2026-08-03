@@ -8,12 +8,13 @@ import org.junit.Test
 
 class PingStatisticsTest {
     @Test
-    fun usesMedianAndRequiresMajority() {
+    fun usesMedianAndRequiresVerifiedMajority() {
         val result =
             PingStatistics.summarize(
                 successfulNanos =
                     listOf(
                         50_000_000L,
+                        52_000_000L,
                         52_000_000L,
                         2_000_000_000L
                     ),
@@ -22,22 +23,25 @@ class PingStatisticsTest {
 
         assertTrue(result.success)
         assertEquals(52L, result.latencyMs)
-        assertEquals(3, result.successfulSamples)
-        assertEquals(3, result.requiredSamples)
+        assertEquals(4, result.successfulSamples)
+        assertEquals(4, result.requiredSamples)
     }
 
     @Test
-    fun rejectsSingleLuckySample() {
+    fun rejectsTwoLuckySamplesOutOfFive() {
         val result =
             PingStatistics.summarize(
                 successfulNanos =
-                    listOf(2_000_000L),
+                    listOf(
+                        2_000_000L,
+                        3_000_000L
+                    ),
                 attempts = 5
             )
 
         assertFalse(result.success)
         assertNull(result.latencyMs)
-        assertEquals(0.2, result.successRatio, 0.0001)
+        assertEquals(0.4, result.successRatio, 0.0001)
     }
 
     @Test

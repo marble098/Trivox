@@ -11,13 +11,31 @@ enum class DnsMode { IMPORTED, TRIVOX_DEFAULT, CUSTOM, SYSTEM, DIRECT, THROUGH_P
 enum class AppRoutingMode { ALL, ALLOW_SELECTED, BYPASS_SELECTED }
 
 enum class PingMethod { TCP_CONNECT, XRAY_HTTP;
-    companion object { fun fromStored(value: String?): PingMethod = entries.firstOrNull { it.name.equals(value, true) } ?: TCP_CONNECT }
+    companion object {
+        fun fromStored(
+            value: String?,
+            fallback: PingMethod = XRAY_HTTP
+        ): PingMethod =
+            entries.firstOrNull {
+                it.name.equals(value, true)
+            } ?: fallback
+    }
 }
 enum class ProfileSortMode { SMART, LOWEST_LATENCY, NAME, LAST_TESTED, GROUP;
     companion object { fun fromStored(value: String?): ProfileSortMode = entries.firstOrNull { it.name.equals(value, true) } ?: SMART }
 }
-enum class ThemeMode { LIGHT, DARK, NEON;
-    companion object { fun fromStored(value: String?, legacyDark: Boolean): ThemeMode = entries.firstOrNull { it.name.equals(value, true) } ?: if (legacyDark) DARK else LIGHT }
+enum class ThemeMode { LIGHT, DARK;
+    companion object {
+        fun fromStored(
+            value: String?,
+            legacyDark: Boolean
+        ): ThemeMode =
+            when (value?.trim()?.uppercase()) {
+                LIGHT.name -> LIGHT
+                DARK.name, "NEON" -> DARK
+                else -> if (legacyDark) DARK else LIGHT
+            }
+    }
 }
 
 data class ConfigProfile(
@@ -121,7 +139,7 @@ data class AppSettings(
         httpPort = socksPort
         testAttempts = testAttempts.coerceIn(2, 5)
         if (testUrl.isBlank() || testUrl == LEGACY_TEST_URL) testUrl = DEFAULT_TEST_URL
-        darkMode = themeMode != ThemeMode.LIGHT
+        darkMode = themeMode == ThemeMode.DARK
         return this
     }
     fun toJson() = JSONObject().put("mode", mode.name).put("socksPort", socksPort).put("httpPort", socksPort)

@@ -84,20 +84,6 @@
                     android:text="@string/dark_theme_summary"
                     android:textColor="@color/muted"
                     android:textSize="10sp" />
-
-                <TextView
-                    style="@style/Widget.Trivox.FieldLabel"
-                    android:layout_marginTop="10dp"
-                    android:text="@string/theme_mode" />
-
-                <Spinner
-                    android:id="@+id/themeModeSpinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="42dp"
-                    android:layout_marginTop="3dp"
-                    android:background="@drawable/input_background"
-                    android:paddingStart="10dp"
-                    android:paddingEnd="8dp" />
             </LinearLayout>
 
             <TextView

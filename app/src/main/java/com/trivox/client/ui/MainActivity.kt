@@ -15,6 +15,7 @@ import android.os.SystemClock
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.Gravity
+import android.view.MenuItem
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -26,6 +27,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
 import androidx.core.os.LocaleListCompat
@@ -201,7 +203,23 @@ class MainActivity : ThemedActivity() {
         val toolbar = findViewById<Toolbar>(R.id.toolbar)
         toolbar.title = getString(R.string.app_name)
         toolbar.subtitle = null
-        toolbar.menu.add(0, MENU_VIEW, 0, R.string.grid).setShowAsAction(2)
+        val viewItem =
+            toolbar.menu.add(
+                0,
+                MENU_VIEW,
+                0,
+                R.string.grid
+            )
+        viewItem.icon =
+            AppCompatResources.getDrawable(
+                this,
+                R.drawable.ic_view_grid_compact
+            )
+        viewItem.setShowAsAction(
+            MenuItem.SHOW_AS_ACTION_ALWAYS
+        )
+        viewItem.contentDescription =
+            getString(R.string.grid)
         toolbar.menu.add(0, MENU_FASTEST, 1, R.string.select_fastest)
         toolbar.menu.add(0, MENU_COPY_PROXY, 2, R.string.copy_local_proxy)
         toolbar.menu.add(0, MENU_EXPORT_BACKUP, 3, R.string.export_backup)
@@ -1831,29 +1849,13 @@ class MainActivity : ThemedActivity() {
                             .load()
                     val result =
                         runCatching {
-                            when (
-                                settings.pingMethod
-                            ) {
-                                PingMethod
-                                    .TCP_CONNECT ->
-                                    pingManager.tcp(
-                                        profile =
-                                            profile,
-                                        attempts = 2,
-                                        timeoutMs =
-                                            2_500
-                                    )
-
-                                PingMethod
-                                    .XRAY_HTTP ->
-                                    pingManager
-                                        .httpViaLocalProxy(
-                                            settings = settings,
-                                            url = LIVE_PING_URL,
-                                            attempts = 3,
-                                            timeoutMs = 7_000
-                                        )
-                            }
+                            pingManager
+                                .httpViaLocalProxy(
+                                    settings = settings,
+                                    url = LIVE_PING_URL,
+                                    attempts = settings.testAttempts,
+                                    timeoutMs = 7_000
+                                )
                         }.getOrElse {
                             Diagnostics
                                 .recordThrowable(
