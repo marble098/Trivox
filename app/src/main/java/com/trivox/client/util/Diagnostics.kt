@@ -700,6 +700,13 @@ object Diagnostics {
             return
         }
 
+        collectHistoricalExitReasonsApi30()
+    }
+
+    @android.annotation.TargetApi(
+        Build.VERSION_CODES.R
+    )
+    private fun collectHistoricalExitReasonsApi30() {
         runCatching {
             val manager =
                 appContext
@@ -750,8 +757,7 @@ object Diagnostics {
                     }
                     ?: lastSeen
 
-            exits.forEach {
-                    info: ApplicationExitInfo ->
+            exits.forEach { info ->
                 newest =
                     maxOf(
                         newest,

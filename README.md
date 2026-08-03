@@ -90,6 +90,13 @@ instant first-tap connection feedback, actionable-only diagnostics and refreshed
 subscription/main layouts. Run `python3 tools/audit-trivox.py --ci` to validate
 the guards.
 
+
+## Android 11 diagnostics guard v4.3
+
+The v4.3 follow-up replaces the brittle text-only CI guard with a semantic
+validator and places `ApplicationExitInfo` access behind an explicit Android 11
+API boundary. No lint baseline or suppression is used.
+
 ## License
 
 Trivox source is Apache-2.0. Xray-core is MPL-2.0 and libXray is MIT. The core binary is downloaded separately from its official release and remains under its upstream license. See [LICENSES.md](LICENSES.md).
