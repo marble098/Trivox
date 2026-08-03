@@ -143,7 +143,7 @@ jobs:
           grep -Fq 'sortModeSpinner'             app/src/main/res/layout/activity_settings.xml
           grep -Fq '<string name="dark_theme_summary">Use the low-glare Trivox night palette.</string>' \
             app/src/main/res/values/strings.xml
-          grep -Fq '<string name="ping_method_xray_summary">Runs the Xray HTTP delay test through the complete configuration. It is slower but represents the real route.</string>' \
+          grep -Fq '<string name="ping_method_xray_summary">Tests the complete Xray route with an uncached HTTP request. Google gen_204 is accepted only when the response status is exactly 204.</string>' \
             app/src/main/res/values/strings.xml
           grep -Fq 'SubscriptionManagementActivity' \
             app/src/main/AndroidManifest.xml
