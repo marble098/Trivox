@@ -170,7 +170,7 @@ jobs:
             echo "Deprecated Quick Tile Intent launch detected." >&2
             exit 1
           fi
-          grep -Fq 'ACTION_QS_TILE_PREFERENCES' \
+          grep -Fq 'android.service.quicksettings.action.QS_TILE_PREFERENCES' \
             app/src/main/AndroidManifest.xml
           grep -Fq 'ic_view_grid_compact' \
             app/src/main/java/com/trivox/client/ui/MainActivity.kt
