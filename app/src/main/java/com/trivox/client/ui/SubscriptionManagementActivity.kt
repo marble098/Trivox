@@ -1,6 +1,7 @@
 package com.trivox.client.ui
 
 import android.os.Bundle
+import android.text.InputType
 import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
@@ -15,13 +16,16 @@ import com.trivox.client.R
 import com.trivox.client.core.ConnectionRuntime
 import com.trivox.client.data.ConfigRepository
 import com.trivox.client.data.ConnectionState
+import com.trivox.client.data.SubscriptionKind
 import com.trivox.client.data.SubscriptionRepository
 import com.trivox.client.data.SubscriptionSource
-import com.trivox.client.network.SubscriptionManager
+import com.trivox.client.network.SubscriptionProfileLoader
+import com.trivox.client.util.SecretStore
 import com.trivox.client.util.Diagnostics
 import java.net.URI
 import java.text.DateFormat
 import java.util.Date
+import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -90,7 +94,7 @@ class SubscriptionManagementActivity : ThemedActivity() {
             )
 
         addButton.setOnClickListener {
-            showEditor(null)
+            showAddSourceOptions()
         }
         updateAllButton
             .setOnClickListener {
@@ -172,7 +176,19 @@ class SubscriptionManagementActivity : ThemedActivity() {
                     )
 
             name.text = source.name
-            url.text = source.url
+            url.text =
+                if (
+                    source.kind ==
+                    SubscriptionKind
+                        .NORDVPN
+                ) {
+                    getString(
+                        R.string
+                            .nordvpn_source_label
+                    )
+                } else {
+                    source.url
+                }
             summary.text =
                 getString(
                     R.string
@@ -235,7 +251,19 @@ class SubscriptionManagementActivity : ThemedActivity() {
                 )
             }
             edit.setOnClickListener {
-                showEditor(source)
+                if (
+                    source.kind ==
+                    SubscriptionKind
+                        .NORDVPN
+                ) {
+                    showNordVpnEditor(
+                        source
+                    )
+                } else {
+                    showEditor(
+                        source
+                    )
+                }
             }
             toggle.setOnClickListener {
                 sourceRepository
@@ -259,6 +287,257 @@ class SubscriptionManagementActivity : ThemedActivity() {
                 sources.any {
                     it.enabled
                 }
+    }
+
+    private fun showAddSourceOptions() {
+        val options =
+            arrayOf(
+                getString(
+                    R.string
+                        .url_subscription
+                ),
+                getString(
+                    R.string
+                        .nordvpn_subscription
+                )
+            )
+
+        AlertDialog.Builder(this)
+            .setTitle(
+                R.string
+                    .add_subscription_type
+            )
+            .setItems(
+                options
+            ) {
+                    _,
+                    position ->
+                if (position == 0) {
+                    showEditor(null)
+                } else {
+                    showNordVpnEditor(
+                        null
+                    )
+                }
+            }
+            .show()
+    }
+
+    private fun showNordVpnEditor(
+        source: SubscriptionSource?
+    ) {
+        if (operationBusy.get()) {
+            return
+        }
+
+        val padding =
+            (
+                20 *
+                    resources
+                        .displayMetrics
+                        .density
+                ).toInt()
+        val container =
+            LinearLayout(this).apply {
+                orientation =
+                    LinearLayout.VERTICAL
+                setPadding(
+                    padding,
+                    padding / 2,
+                    padding,
+                    0
+                )
+            }
+        val nameInput =
+            EditText(this).apply {
+                hint =
+                    getString(
+                        R.string
+                            .subscription_name
+                    )
+                setText(
+                    source?.name
+                        ?: getString(
+                            R.string
+                                .nordvpn_subscription
+                        )
+                )
+            }
+        val tokenInput =
+            EditText(this).apply {
+                hint =
+                    if (source == null) {
+                        getString(
+                            R.string
+                                .nordvpn_token
+                        )
+                    } else {
+                        getString(
+                            R.string
+                                .nordvpn_token_keep
+                        )
+                    }
+                inputType =
+                    InputType
+                        .TYPE_CLASS_TEXT or
+                        InputType
+                            .TYPE_TEXT_VARIATION_PASSWORD
+            }
+        val enabled =
+            CheckBox(this).apply {
+                text =
+                    getString(
+                        R.string
+                            .subscription_enabled
+                    )
+                isChecked =
+                    source?.enabled
+                        ?: true
+            }
+
+        container.addView(
+            nameInput
+        )
+        container.addView(
+            tokenInput
+        )
+        container.addView(
+            enabled
+        )
+
+        val dialog =
+            AlertDialog.Builder(this)
+                .setTitle(
+                    R.string
+                        .nordvpn_subscription
+                )
+                .setView(
+                    container
+                )
+                .setNegativeButton(
+                    R.string.cancel,
+                    null
+                )
+                .setPositiveButton(
+                    R.string.save,
+                    null
+                )
+                .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(
+                AlertDialog
+                    .BUTTON_POSITIVE
+            ).setOnClickListener {
+                val name =
+                    nameInput.text
+                        .toString()
+                        .trim()
+                val token =
+                    tokenInput.text
+                        .toString()
+                        .trim()
+
+                if (
+                    name.isBlank() ||
+                    (
+                        source == null &&
+                        token.isBlank()
+                        )
+                ) {
+                    toast(
+                        getString(
+                            R.string
+                                .invalid_nordvpn_token
+                        )
+                    )
+                    return@setOnClickListener
+                }
+
+                val id =
+                    source?.id
+                        ?: UUID
+                            .randomUUID()
+                            .toString()
+                val secretAlias =
+                    source
+                        ?.secretAlias
+                        ?.takeIf {
+                            it.isNotBlank()
+                        }
+                        ?: "nordvpn_$id"
+
+                if (token.isNotBlank()) {
+                    runCatching {
+                        SecretStore.put(
+                            this,
+                            secretAlias,
+                            token
+                        )
+                    }.onFailure {
+                        toast(
+                            getString(
+                                R.string
+                                    .secure_store_failed
+                            )
+                        )
+                        return@setOnClickListener
+                    }
+                }
+
+                val saved =
+                    SubscriptionSource(
+                        id = id,
+                        name = name,
+                        url =
+                            "nordvpn://" +
+                                "all-countries",
+                        enabled =
+                            enabled
+                                .isChecked,
+                        lastSuccessAt =
+                            source
+                                ?.lastSuccessAt
+                                ?: 0L,
+                        lastError =
+                            source
+                                ?.lastError
+                                .orEmpty(),
+                        kind =
+                            SubscriptionKind
+                                .NORDVPN,
+                        secretAlias =
+                            secretAlias
+                    )
+
+                if (
+                    source != null &&
+                    source.name != name
+                ) {
+                    configRepository
+                        .renameSubscription(
+                            source.id,
+                            name
+                        )
+                }
+
+                sourceRepository
+                    .save(saved)
+                dialog.dismiss()
+                render()
+
+                if (
+                    source == null ||
+                    token.isNotBlank()
+                ) {
+                    updateSources(
+                        listOf(saved)
+                    )
+                }
+            }
+        }
+
+        dialog.show()
     }
 
     private fun showEditor(
@@ -489,9 +768,10 @@ class SubscriptionManagementActivity : ThemedActivity() {
 
         return try {
             val result =
-                SubscriptionManager()
-                    .fetch(
-                        latest.url
+                SubscriptionProfileLoader
+                    .load(
+                        this,
+                        latest
                     )
             val profiles =
                 result.profiles.map {
@@ -509,6 +789,13 @@ class SubscriptionManagementActivity : ThemedActivity() {
                     profiles
                 )
 
+            if (
+                latest.kind ==
+                SubscriptionKind.URL
+            ) {
+                latest.url =
+                    result.finalUrl
+            }
             latest.lastSuccessAt =
                 System.currentTimeMillis()
             latest.lastError = ""
@@ -590,6 +877,10 @@ class SubscriptionManagementActivity : ThemedActivity() {
                     .delete(
                         source.id
                     )
+                SecretStore.delete(
+                    this,
+                    source.secretAlias
+                )
                 render()
             }
             .show()

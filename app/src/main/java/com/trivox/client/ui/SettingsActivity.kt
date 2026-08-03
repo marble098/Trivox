@@ -255,7 +255,7 @@ class SettingsActivity :
         pingMethod.setSelection(
             pingMethods
                 .indexOf(
-                    settings.pingMethod
+                    settings.livePingMethod
                 )
                 .coerceAtLeast(0)
         )
@@ -574,11 +574,13 @@ class SettingsActivity :
                     sortMode
                         .selectedItemPosition
                 ]
-            settings.pingMethod =
+            settings.livePingMethod =
                 pingMethods[
                     pingMethod
                         .selectedItemPosition
                 ]
+            settings.pingMethod =
+                PingMethod.TCP_CONNECT
             settings.testAttempts =
                 attempts[
                     pingAttempts

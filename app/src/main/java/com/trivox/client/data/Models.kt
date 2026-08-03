@@ -9,6 +9,12 @@ enum class ConnectionState { DISCONNECTED, PREPARING, CONNECTING, CONNECTED, REC
 enum class TestStatus { UNTESTED, TESTING, ALIVE, DEAD, ERROR }
 enum class DnsMode { IMPORTED, TRIVOX_DEFAULT, CUSTOM, SYSTEM, DIRECT, THROUGH_PROXY }
 enum class AppRoutingMode { ALL, ALLOW_SELECTED, BYPASS_SELECTED }
+enum class SubscriptionKind { URL, NORDVPN;
+    companion object {
+        fun fromStored(value: String?): SubscriptionKind =
+            entries.firstOrNull { it.name.equals(value, true) } ?: URL
+    }
+}
 
 enum class PingMethod { TCP_CONNECT, XRAY_HTTP;
     companion object {
@@ -101,13 +107,37 @@ data class ConfigProfile(
 }
 
 data class SubscriptionSource(
-    val id: String = UUID.randomUUID().toString(), var name: String, var url: String,
-    var enabled: Boolean = true, var lastSuccessAt: Long = 0, var lastError: String = ""
+    val id: String = UUID.randomUUID().toString(),
+    var name: String,
+    var url: String,
+    var enabled: Boolean = true,
+    var lastSuccessAt: Long = 0,
+    var lastError: String = "",
+    var kind: SubscriptionKind = SubscriptionKind.URL,
+    var secretAlias: String = ""
 ) {
-    fun toJson() = JSONObject().put("id", id).put("name", name).put("url", url).put("enabled", enabled).put("lastSuccessAt", lastSuccessAt).put("lastError", lastError)
-    companion object { fun fromJson(json: JSONObject) = SubscriptionSource(
-        id = json.optString("id", UUID.randomUUID().toString()), name = json.optString("name", "Subscription"),
-        url = json.getString("url"), enabled = json.optBoolean("enabled", true), lastSuccessAt = json.optLong("lastSuccessAt"), lastError = json.optString("lastError")) }
+    fun toJson() = JSONObject()
+        .put("id", id)
+        .put("name", name)
+        .put("url", url)
+        .put("enabled", enabled)
+        .put("lastSuccessAt", lastSuccessAt)
+        .put("lastError", lastError)
+        .put("kind", kind.name)
+        .put("secretAlias", secretAlias)
+
+    companion object {
+        fun fromJson(json: JSONObject) = SubscriptionSource(
+            id = json.optString("id", UUID.randomUUID().toString()),
+            name = json.optString("name", "Subscription"),
+            url = json.optString("url"),
+            enabled = json.optBoolean("enabled", true),
+            lastSuccessAt = json.optLong("lastSuccessAt"),
+            lastError = json.optString("lastError"),
+            kind = SubscriptionKind.fromStored(json.optString("kind")),
+            secretAlias = json.optString("secretAlias")
+        )
+    }
 }
 
 data class AppSettings(
@@ -126,6 +156,7 @@ data class AppSettings(
     var blocking: Boolean = true,
     var gridMode: Boolean = false,
     var pingMethod: PingMethod = PingMethod.XRAY_HTTP,
+    var livePingMethod: PingMethod = PingMethod.XRAY_HTTP,
     var sortMode: ProfileSortMode = ProfileSortMode.SMART,
     var darkMode: Boolean = false,
     var themeMode: ThemeMode = ThemeMode.LIGHT,
@@ -147,7 +178,8 @@ data class AppSettings(
         .put("appRoutingMode", appRoutingMode.name).put("routedPackages", JSONArray(routedPackages.toList()))
         .put("showSystemApps", showSystemApps).put("reconnectOnNetworkChange", reconnectOnNetworkChange)
         .put("reconnectOnBoot", reconnectOnBoot).put("blocking", blocking).put("gridMode", gridMode)
-        .put("pingMethod", pingMethod.name).put("sortMode", sortMode.name).put("darkMode", darkMode)
+        .put("pingMethod", pingMethod.name).put("livePingMethod", livePingMethod.name)
+        .put("sortMode", sortMode.name).put("darkMode", darkMode)
         .put("themeMode", themeMode.name).put("localProxyInVpn", localProxyInVpn)
         .put("autoUpdateCheck", autoUpdateCheck).put("testUrl", testUrl).put("testAttempts", testAttempts)
 
@@ -159,6 +191,9 @@ data class AppSettings(
         fun fromJson(json: JSONObject): AppSettings {
             fun strings(key: String): List<String> = json.optJSONArray(key)?.let { a -> (0 until a.length()).mapNotNull { a.optString(it).takeIf(String::isNotBlank) } } ?: emptyList()
             val legacyDark = json.optBoolean("darkMode", false)
+            val legacyPingMethod = PingMethod.fromStored(
+                json.optString("pingMethod")
+            )
             return AppSettings(
                 mode = runCatching { ConnectionMode.valueOf(json.optString("mode")) }.getOrDefault(ConnectionMode.VPN),
                 socksPort = json.optInt("socksPort", DEFAULT_MIXED_PORT), httpPort = json.optInt("httpPort", DEFAULT_MIXED_PORT),
@@ -168,7 +203,12 @@ data class AppSettings(
                 routedPackages = strings("routedPackages").toSet(), showSystemApps = json.optBoolean("showSystemApps"),
                 reconnectOnNetworkChange = json.optBoolean("reconnectOnNetworkChange", true), reconnectOnBoot = json.optBoolean("reconnectOnBoot"),
                 blocking = json.optBoolean("blocking", true), gridMode = json.optBoolean("gridMode"),
-                pingMethod = PingMethod.fromStored(json.optString("pingMethod")), sortMode = ProfileSortMode.fromStored(json.optString("sortMode")),
+                pingMethod = legacyPingMethod,
+                livePingMethod = PingMethod.fromStored(
+                    json.optString("livePingMethod"),
+                    legacyPingMethod
+                ),
+                sortMode = ProfileSortMode.fromStored(json.optString("sortMode")),
                 darkMode = legacyDark, themeMode = ThemeMode.fromStored(json.optString("themeMode"), legacyDark),
                 localProxyInVpn = json.optBoolean("localProxyInVpn", true), autoUpdateCheck = json.optBoolean("autoUpdateCheck", true),
                 testUrl = json.optString("testUrl", DEFAULT_TEST_URL), testAttempts = json.optInt("testAttempts", 3).coerceIn(2, 5)

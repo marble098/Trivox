@@ -2,6 +2,7 @@ package com.trivox.client.network
 
 import android.content.Context
 import com.trivox.client.data.ConfigRepository
+import com.trivox.client.data.SubscriptionKind
 import com.trivox.client.data.SubscriptionRepository
 import com.trivox.client.data.SubscriptionSource
 import com.trivox.client.util.Diagnostics
@@ -76,7 +77,12 @@ class SubscriptionRefreshCoordinator(
     }
 
     private fun refreshOne(source: SubscriptionSource): Int {
-        val result = SubscriptionManager().fetch(source.url)
+        val result =
+            SubscriptionProfileLoader
+                .load(
+                    appContext,
+                    source
+                )
         val profiles = result.profiles.map {
             it.copy(
                 subscriptionId = source.id,
@@ -89,7 +95,13 @@ class SubscriptionRefreshCoordinator(
             profiles
         )
         SubscriptionRepository(appContext).update(source.id) {
-            it.url = result.finalUrl
+            if (
+                it.kind ==
+                SubscriptionKind.URL
+            ) {
+                it.url =
+                    result.finalUrl
+            }
             it.lastSuccessAt = System.currentTimeMillis()
             it.lastError = ""
         }

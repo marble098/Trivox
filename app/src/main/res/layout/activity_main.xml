@@ -84,25 +84,38 @@
             <Button
                 android:id="@+id/livePingText"
                 style="@style/Widget.Trivox.Button.LivePing"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="40dp"
+                android:layout_marginEnd="3dp"
+                android:layout_weight="1"
                 android:contentDescription="@string/live_ping_click_hint"
-                android:minWidth="126dp"
+                android:minWidth="0dp"
                 android:text="@string/live_ping_off"
                 android:textDirection="ltr" />
 
-            <TextView
-                android:id="@+id/exitInfoText"
+            <Button
+                android:id="@+id/realDelayText"
+                style="@style/Widget.Trivox.Button.Secondary"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="10dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="3dp"
                 android:layout_weight="1"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:text="@string/exit_info_off"
-                android:textColor="@color/text_secondary"
-                android:textSize="11sp" />
+                android:contentDescription="@string/real_delay_click_hint"
+                android:minWidth="0dp"
+                android:text="@string/real_delay_off"
+                android:textDirection="ltr" />
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/exitInfoText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/exit_info_off"
+            android:textColor="@color/text_secondary"
+            android:textSize="11sp" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -249,7 +262,7 @@
             android:layout_height="44dp"
             android:layout_marginStart="4dp"
             android:layout_weight="1"
-            android:text="@string/test" />
+            android:text="@string/tcp_ping" />
     </LinearLayout>
 
     <Button

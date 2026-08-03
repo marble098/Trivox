@@ -80,6 +80,7 @@ class MainActivity : ThemedActivity() {
     private lateinit var durationText: TextView
     private lateinit var selectedText: TextView
     private lateinit var livePingText: Button
+    private lateinit var realDelayText: Button
     private lateinit var exitInfoText: TextView
     private lateinit var emptyText: TextView
     private lateinit var connectButton: Button
@@ -94,6 +95,8 @@ class MainActivity : ThemedActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private val livePingBusy =
         AtomicBoolean(false)
+    private val realDelayBusy =
+        AtomicBoolean(false)
     private val connectionActionBusy =
         AtomicBoolean(false)
     private val pingGeneration =
@@ -106,7 +109,14 @@ class MainActivity : ThemedActivity() {
     @Volatile
     private var livePingResult:
         PingResult? = null
+    @Volatile
+    private var realDelayResult:
+        PingResult? = null
 
+    private var pendingSwitchProfileId:
+        String? = null
+    private var pendingSwitchMode:
+        ConnectionMode? = null
     private var filter = ""
     private var importDialogInput: EditText? = null
     private var pendingVpnProfile: String? = null
@@ -139,7 +149,10 @@ class MainActivity : ThemedActivity() {
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     private val runtimeListener: (ConnectionRuntime.Snapshot) -> Unit = {
-        runOnUiThread { renderState(it) }
+        runOnUiThread {
+            renderState(it)
+            completePendingProfileSwitch(it)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -188,6 +201,7 @@ class MainActivity : ThemedActivity() {
         durationText = findViewById(R.id.durationText)
         selectedText = findViewById(R.id.selectedText)
         livePingText = findViewById(R.id.livePingText)
+        realDelayText = findViewById(R.id.realDelayText)
         exitInfoText = findViewById(R.id.exitInfoText)
         emptyText = findViewById(R.id.emptyText)
         connectButton = findViewById(R.id.connectButton)
@@ -280,10 +294,7 @@ class MainActivity : ThemedActivity() {
 
     private fun setupList() {
         adapter = ProfileAdapter(
-            onClick = {
-                repository.select(it.id)
-                refresh()
-            },
+            onClick = ::selectProfile,
             onLongClick = ::showActions,
             onAction = ::showActions,
             onPing = ::testSingleProfile
@@ -325,6 +336,10 @@ class MainActivity : ThemedActivity() {
         livePingText
             .setOnClickListener {
                 requestLivePingNow()
+            }
+        realDelayText
+            .setOnClickListener {
+                requestRealDelayNow()
             }
 
         modeSpinner.adapter = compactAdapter(
@@ -476,6 +491,239 @@ class MainActivity : ThemedActivity() {
         handler.post(
             livePingTick
         )
+    }
+
+    private fun selectProfile(
+        profile: ConfigProfile
+    ) {
+        repository.select(profile.id)
+
+        val current =
+            ConnectionRuntime.current()
+
+        if (
+            current.profileId != profile.id &&
+            current.state !in
+            setOf(
+                ConnectionState.DISCONNECTED,
+                ConnectionState.ERROR
+            )
+        ) {
+            pendingSwitchProfileId =
+                profile.id
+            pendingSwitchMode =
+                current.mode
+                    ?: settingsRepository
+                        .load()
+                        .mode
+
+            toast(
+                getString(
+                    R.string.profile_switching,
+                    profile.name
+                )
+            )
+
+            if (
+                current.state !=
+                ConnectionState.STOPPING
+            ) {
+                stopActiveConnection(
+                    current
+                )
+            }
+        }
+
+        refresh()
+    }
+
+    private fun completePendingProfileSwitch(
+        snapshot:
+            ConnectionRuntime.Snapshot
+    ) {
+        val profileId =
+            pendingSwitchProfileId
+                ?: return
+
+        if (
+            snapshot.state !in
+            setOf(
+                ConnectionState.DISCONNECTED,
+                ConnectionState.ERROR
+            )
+        ) {
+            return
+        }
+
+        val mode =
+            pendingSwitchMode
+                ?: settingsRepository
+                    .load()
+                    .mode
+
+        pendingSwitchProfileId =
+            null
+        pendingSwitchMode =
+            null
+
+        handler.postDelayed(
+            {
+                val profile =
+                    repository.find(
+                        profileId
+                    )
+
+                if (
+                    profile == null ||
+                    !profile.enabled ||
+                    repository.selectedId() !=
+                    profileId
+                ) {
+                    return@postDelayed
+                }
+
+                if (
+                    mode ==
+                    ConnectionMode.PROXY
+                ) {
+                    startProxy(
+                        profileId
+                    )
+                } else {
+                    requestVpn(
+                        profileId
+                    )
+                }
+            },
+            PROFILE_SWITCH_DELAY_MS
+        )
+    }
+
+    private fun stopActiveConnection(
+        snapshot:
+            ConnectionRuntime.Snapshot
+    ) {
+        when (
+            snapshot.mode
+                ?: settingsRepository
+                    .load()
+                    .mode
+        ) {
+            ConnectionMode.PROXY ->
+                startService(
+                    Intent(
+                        this,
+                        ConnectionService::
+                            class.java
+                    ).setAction(
+                        ConnectionService
+                            .ACTION_STOP
+                    )
+                )
+
+            ConnectionMode.VPN ->
+                startService(
+                    Intent(
+                        this,
+                        TrivoxVpnService::
+                            class.java
+                    ).setAction(
+                        TrivoxVpnService
+                            .ACTION_STOP
+                    )
+                )
+        }
+    }
+
+    private fun requestRealDelayNow() {
+        val snapshot =
+            ConnectionRuntime.current()
+
+        if (
+            snapshot.state !=
+            ConnectionState.CONNECTED
+        ) {
+            toast(
+                getString(
+                    R.string.connect_first
+                )
+            )
+            return
+        }
+
+        if (
+            !realDelayBusy
+                .compareAndSet(
+                    false,
+                    true
+                )
+        ) {
+            toast(
+                getString(
+                    R.string
+                        .real_delay_in_progress
+                )
+            )
+            return
+        }
+
+        realDelayResult = null
+        realDelayText.setText(
+            R.string
+                .real_delay_measuring
+        )
+        val sessionId =
+            snapshot.sessionId
+
+        worker.execute {
+            val settings =
+                settingsRepository
+                    .load()
+            val result =
+                runCatching {
+                    pingManager
+                        .httpViaLocalProxy(
+                            settings =
+                                settings,
+                            url =
+                                settings.testUrl,
+                            attempts =
+                                settings
+                                    .testAttempts,
+                            timeoutMs =
+                                10_000
+                        )
+                }.getOrElse {
+                    Diagnostics
+                        .recordThrowable(
+                            "Real delay",
+                            it
+                        )
+                    failedPingResult(
+                        PingMethod.XRAY_HTTP,
+                        it
+                    )
+                }
+
+            val latest =
+                ConnectionRuntime.current()
+
+            if (
+                latest.state ==
+                ConnectionState.CONNECTED &&
+                latest.sessionId ==
+                sessionId
+            ) {
+                realDelayResult =
+                    result
+            }
+
+            realDelayBusy.set(false)
+
+            runOnUiThread(
+                ::refresh
+            )
+        }
     }
 
     private fun renderSubscriptionTabs(
@@ -802,6 +1050,48 @@ class MainActivity : ThemedActivity() {
             connectedProfile != null &&
                 !livePingBusy.get()
 
+        val realDelay =
+            realDelayResult
+        realDelayText.text =
+            if (connectedProfile == null) {
+                getString(
+                    R.string
+                        .real_delay_off
+                )
+            } else if (
+                realDelayBusy.get() &&
+                realDelay == null
+            ) {
+                getString(
+                    R.string
+                        .real_delay_measuring
+                )
+            } else if (
+                realDelay?.success == true &&
+                realDelay.latencyMs != null
+            ) {
+                getString(
+                    R.string
+                        .real_delay_value,
+                    realDelay.latencyMs
+                )
+            } else if (
+                realDelay != null
+            ) {
+                getString(
+                    R.string
+                        .real_delay_failed
+                )
+            } else {
+                getString(
+                    R.string
+                        .real_delay_waiting
+                )
+            }
+        realDelayText.isEnabled =
+            connectedProfile != null &&
+                !realDelayBusy.get()
+
         exitInfoText.text =
             connectedProfile
                 ?.let { profile ->
@@ -1015,6 +1305,8 @@ class MainActivity : ThemedActivity() {
 
         val settings =
             settingsRepository.load()
+        settings.pingMethod =
+            PingMethod.TCP_CONNECT
 
         if (
             settings.pingMethod ==
@@ -1107,6 +1399,8 @@ class MainActivity : ThemedActivity() {
 
         val settings =
             settingsRepository.load()
+        settings.pingMethod =
+            PingMethod.TCP_CONNECT
         val runtime =
             ConnectionRuntime.current()
 
@@ -1175,9 +1469,8 @@ class MainActivity : ThemedActivity() {
 
     private fun selectFastestProfile() {
         val selectedMethod =
-            settingsRepository
-                .load()
-                .pingMethod
+            PingMethod
+                .TCP_CONNECT
                 .name
         val fastest =
             repository.all()
@@ -1639,20 +1932,9 @@ class MainActivity : ThemedActivity() {
                 ConnectionState.ERROR
             )
         ) {
-            when (runtime.mode ?: settingsRepository.load().mode) {
-                ConnectionMode.PROXY -> {
-                    startService(
-                        Intent(this, ConnectionService::class.java)
-                            .setAction(ConnectionService.ACTION_STOP)
-                    )
-                }
-                ConnectionMode.VPN -> {
-                    startService(
-                        Intent(this, TrivoxVpnService::class.java)
-                            .setAction(TrivoxVpnService.ACTION_STOP)
-                    )
-                }
-            }
+            pendingSwitchProfileId = null
+            pendingSwitchMode = null
+            stopActiveConnection(runtime)
             return
         }
 
@@ -1764,6 +2046,7 @@ class MainActivity : ThemedActivity() {
                 snapshot.profileId
             ) {
                 livePingResult = null
+                realDelayResult = null
                 lastInfoProfileId =
                     snapshot.profileId
                 refreshExitInfo(
@@ -1782,7 +2065,9 @@ class MainActivity : ThemedActivity() {
         } else {
             lastInfoProfileId = null
             livePingResult = null
+            realDelayResult = null
             livePingBusy.set(false)
+            realDelayBusy.set(false)
         }
 
         refresh()
@@ -1849,13 +2134,37 @@ class MainActivity : ThemedActivity() {
                             .load()
                     val result =
                         runCatching {
-                            pingManager
-                                .httpViaLocalProxy(
-                                    settings = settings,
-                                    url = LIVE_PING_URL,
-                                    attempts = settings.testAttempts,
-                                    timeoutMs = 7_000
-                                )
+                            when (
+                                settings
+                                    .livePingMethod
+                            ) {
+                                PingMethod
+                                    .TCP_CONNECT ->
+                                    pingManager
+                                        .tcp(
+                                            profile =
+                                                profile,
+                                            attempts =
+                                                settings
+                                                    .testAttempts,
+                                            timeoutMs =
+                                                5_000
+                                        )
+
+                                PingMethod
+                                    .XRAY_HTTP ->
+                                    pingManager
+                                        .httpViaLocalProxy(
+                                            settings =
+                                                settings,
+                                            url =
+                                                settings
+                                                    .testUrl,
+                                            attempts = settings.testAttempts,
+                                            timeoutMs =
+                                                7_000
+                                        )
+                            }
                         }.getOrElse {
                             Diagnostics
                                 .recordThrowable(
@@ -1864,7 +2173,7 @@ class MainActivity : ThemedActivity() {
                                 )
                             failedPingResult(
                                 settings
-                                    .pingMethod,
+                                    .livePingMethod,
                                 it
                             )
                         }
@@ -2031,7 +2340,7 @@ class MainActivity : ThemedActivity() {
         connectedId: String?
     ): Comparator<ConfigProfile> {
         val selectedMethod =
-            settings.pingMethod.name
+            PingMethod.TCP_CONNECT.name
 
         val base =
             when (settings.sortMode) {
@@ -2211,6 +2520,7 @@ class MainActivity : ThemedActivity() {
         private const val LIVE_PING_URL =
             "http://www.google.com/gen_204"
         private const val CONNECTION_ACTION_COOLDOWN_MS = 1_500L
+        private const val PROFILE_SWITCH_DELAY_MS = 350L
         private const val MAIN_UI_PREFS = "main_ui"
         private const val KEY_ACTIVE_SUBSCRIPTION =
             "active_subscription_id"

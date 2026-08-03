@@ -19,7 +19,8 @@ class XrayCoreAdapter(
                 "trojan",
                 "shadowsocks",
                 "socks",
-                "http"
+                "http",
+                "wireguard"
             ),
             transports = setOf(
                 "tcp",

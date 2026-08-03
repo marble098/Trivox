@@ -294,4 +294,23 @@
     <string name="chain_requires_two">حداقل دو کانفیگ فعال و غیرزنجیره‌ای لازم است.</string>
     <string name="chain_select_different">دو کانفیگ متفاوت انتخاب کنید.</string>
     <string name="chain_added">زنجیره پروکسی افزوده شد.</string>
+
+    <string name="tcp_ping">پینگ TCP</string>
+    <string name="live_ping_method">روش پینگ زنده</string>
+    <string name="real_delay_off">تأخیر واقعی —</string>
+    <string name="real_delay_waiting">تأخیر واقعی</string>
+    <string name="real_delay_measuring">سنجش تأخیر واقعی…</string>
+    <string name="real_delay_value">واقعی %1$d ms</string>
+    <string name="real_delay_failed">سنجش تأخیر واقعی ناموفق بود</string>
+    <string name="real_delay_click_hint">سنجش درخواست HTTP بدون کش از داخل تونل فعال</string>
+    <string name="real_delay_in_progress">سنجش تأخیر واقعی در حال اجرا است.</string>
+    <string name="profile_switching">در حال تعویض به %1$s…</string>
+    <string name="add_subscription_type">نوع اشتراک</string>
+    <string name="url_subscription">اشتراک با لینک</string>
+    <string name="nordvpn_subscription">اشتراک NordVPN</string>
+    <string name="nordvpn_source_label">NordVPN • همه کشورهای در دسترس</string>
+    <string name="nordvpn_token">توکن دسترسی NordVPN</string>
+    <string name="nordvpn_token_keep">توکن جدید؛ برای نگه‌داشتن توکن ذخیره‌شده خالی بگذارید</string>
+    <string name="invalid_nordvpn_token">نام و توکن معتبر NordVPN را وارد کنید.</string>
+    <string name="secure_store_failed">محافظت از توکن با Android Keystore ممکن نشد.</string>
 </resources>

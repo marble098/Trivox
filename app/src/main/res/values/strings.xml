@@ -294,4 +294,23 @@
     <string name="chain_requires_two">At least two enabled non-chain configurations are required.</string>
     <string name="chain_select_different">Select two different configurations.</string>
     <string name="chain_added">Proxy chain added.</string>
+
+    <string name="tcp_ping">TCP Ping</string>
+    <string name="live_ping_method">Live Ping method</string>
+    <string name="real_delay_off">Real Delay —</string>
+    <string name="real_delay_waiting">Real Delay</string>
+    <string name="real_delay_measuring">Real Delay…</string>
+    <string name="real_delay_value">Real %1$d ms</string>
+    <string name="real_delay_failed">Real Delay failed</string>
+    <string name="real_delay_click_hint">Measure an uncached HTTP request through the active tunnel</string>
+    <string name="real_delay_in_progress">A Real Delay measurement is already running.</string>
+    <string name="profile_switching">Switching to %1$s…</string>
+    <string name="add_subscription_type">Subscription type</string>
+    <string name="url_subscription">URL subscription</string>
+    <string name="nordvpn_subscription">NordVPN Sub</string>
+    <string name="nordvpn_source_label">NordVPN • all available countries</string>
+    <string name="nordvpn_token">NordVPN access token</string>
+    <string name="nordvpn_token_keep">New token; leave blank to keep the saved token</string>
+    <string name="invalid_nordvpn_token">Enter a name and a valid NordVPN access token.</string>
+    <string name="secure_store_failed">The token could not be protected by Android Keystore.</string>
 </resources>

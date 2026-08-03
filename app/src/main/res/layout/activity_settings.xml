@@ -159,7 +159,7 @@
 
                 <TextView
                     style="@style/Widget.Trivox.FieldLabel"
-                    android:text="@string/ping_method" />
+                    android:text="@string/live_ping_method" />
 
                 <Spinner
                     android:id="@+id/pingMethodSpinner"
