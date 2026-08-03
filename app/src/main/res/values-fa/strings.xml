@@ -313,4 +313,20 @@
     <string name="nordvpn_token_keep">توکن جدید؛ برای نگه‌داشتن توکن ذخیره‌شده خالی بگذارید</string>
     <string name="invalid_nordvpn_token">نام و توکن معتبر NordVPN را وارد کنید.</string>
     <string name="secure_store_failed">محافظت از توکن با Android Keystore ممکن نشد.</string>
+
+    <string name="profile_detail_private">%1$s • %2$s • نشانی مخفی</string>
+    <string name="hide_ip_on_main">مخفی‌کردن نشانی‌های IP در صفحه اصلی</string>
+    <string name="hide_ip_on_main_summary">نشانی سرور و IP خروجی را در فهرست و پنل اصلی مخفی می‌کند؛ کپی و خروجی کامل باقی می‌ماند.</string>
+    <string name="tcp_ping_icon">⚡ پینگ TCP</string>
+    <string name="real_delay_all_icon">◉ تأخیر واقعی همه</string>
+    <string name="toggle_connection_tools">نمایش یا مخفی‌کردن ابزارهای اتصال</string>
+    <string name="add_url_subscription">افزودن اشتراک URL</string>
+    <string name="add_nordvpn_subscription">افزودن توکن NordVPN</string>
+    <string name="pause_connection">توقف موقت اتصال</string>
+    <string name="pause_15_minutes">توقف برای ۱۵ دقیقه</string>
+    <string name="pause_30_minutes">توقف برای ۳۰ دقیقه</string>
+    <string name="pause_custom">زمان دلخواه</string>
+    <string name="pause_minutes_hint">دقیقه، از ۱ تا ۱۴۴۰</string>
+    <string name="invalid_pause_minutes">زمان توقف باید بین ۱ تا ۱۴۴۰ دقیقه باشد.</string>
+    <string name="pause_scheduled">اتصال برای %1$d دقیقه متوقف شد و خودکار دوباره وصل می‌شود.</string>
 </resources>

@@ -6,6 +6,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
@@ -47,6 +48,7 @@ import com.trivox.client.data.PingMethod
 import com.trivox.client.data.PingResult
 import com.trivox.client.data.ProfileSortMode
 import com.trivox.client.data.SettingsRepository
+import com.trivox.client.data.SubscriptionKind
 import com.trivox.client.data.SubscriptionRepository
 import com.trivox.client.data.SubscriptionSource
 import com.trivox.client.data.TestStatus
@@ -55,6 +57,7 @@ import com.trivox.client.network.PingManager
 import com.trivox.client.network.SubscriptionManager
 import com.trivox.client.network.SubscriptionRefreshCoordinator
 import com.trivox.client.update.UpdateChecker
+import com.trivox.client.service.ConnectionPauseController
 import com.trivox.client.service.ConnectionService
 import com.trivox.client.service.NotificationSupport
 import com.trivox.client.service.TrivoxVpnService
@@ -64,9 +67,11 @@ import org.json.JSONObject
 import java.net.URI
 import java.util.UUID
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 class MainActivity : ThemedActivity() {
@@ -84,6 +89,11 @@ class MainActivity : ThemedActivity() {
     private lateinit var exitInfoText: TextView
     private lateinit var emptyText: TextView
     private lateinit var connectButton: Button
+    private lateinit var pauseButton: Button
+    private lateinit var tcpPingButton: Button
+    private lateinit var realDelayAllButton: Button
+    private lateinit var quickToolsPanel: View
+    private lateinit var quickToolsToggle: Button
     private lateinit var modeSpinner: Spinner
     private lateinit var refreshExitButton: Button
     private lateinit var copySummaryButton: Button
@@ -92,6 +102,8 @@ class MainActivity : ThemedActivity() {
     private lateinit var subscriptionUpdater: SubscriptionRefreshCoordinator
 
     private val worker = Executors.newSingleThreadExecutor()
+    private val storageWorker =
+        Executors.newSingleThreadExecutor()
     private val handler = Handler(Looper.getMainLooper())
     private val livePingBusy =
         AtomicBoolean(false)
@@ -104,6 +116,10 @@ class MainActivity : ThemedActivity() {
     private val pingTasks =
         mutableListOf<Future<*>>()
     private val subscriptionRefreshBusy =
+        AtomicBoolean(false)
+    private val pingResultBuffer =
+        ConcurrentHashMap<String, PingResult>()
+    private val pingFlushScheduled =
         AtomicBoolean(false)
 
     @Volatile
@@ -123,6 +139,7 @@ class MainActivity : ThemedActivity() {
     private var lastInfoProfileId: String? = null
     private var activeSubscriptionId: String? = null
     private var subscriptionTabsSignature = ""
+    private var quickToolsExpanded = false
 
     private val filePicker =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -205,6 +222,14 @@ class MainActivity : ThemedActivity() {
         exitInfoText = findViewById(R.id.exitInfoText)
         emptyText = findViewById(R.id.emptyText)
         connectButton = findViewById(R.id.connectButton)
+        pauseButton = findViewById(R.id.pauseButton)
+        tcpPingButton = findViewById(R.id.testButton)
+        realDelayAllButton =
+            findViewById(R.id.realDelayAllButton)
+        quickToolsPanel =
+            findViewById(R.id.quickToolsPanel)
+        quickToolsToggle =
+            findViewById(R.id.quickToolsToggle)
         modeSpinner = findViewById(R.id.modeSpinner)
         refreshExitButton = findViewById(R.id.refreshExitButton)
         copySummaryButton = findViewById(R.id.copySummaryButton)
@@ -301,6 +326,7 @@ class MainActivity : ThemedActivity() {
         )
 
         list.adapter = adapter
+        list.itemAnimator = null
         list.setHasFixedSize(true)
         applyLayout()
     }
@@ -332,6 +358,31 @@ class MainActivity : ThemedActivity() {
         renderSubscriptionTabs(
             force = true
         )
+
+        quickToolsExpanded =
+            getSharedPreferences(
+                MAIN_UI_PREFS,
+                MODE_PRIVATE
+            ).getBoolean(
+                KEY_QUICK_TOOLS_EXPANDED,
+                false
+            )
+        renderQuickTools()
+        quickToolsToggle
+            .setOnClickListener {
+                quickToolsExpanded =
+                    !quickToolsExpanded
+                getSharedPreferences(
+                    MAIN_UI_PREFS,
+                    MODE_PRIVATE
+                ).edit()
+                    .putBoolean(
+                        KEY_QUICK_TOOLS_EXPANDED,
+                        quickToolsExpanded
+                    )
+                    .apply()
+                renderQuickTools()
+            }
 
         livePingText
             .setOnClickListener {
@@ -387,9 +438,24 @@ class MainActivity : ThemedActivity() {
             .setOnClickListener { showAddOptions() }
         refreshSubscriptionsButton
             .setOnClickListener { refreshSubscriptionsFromMain() }
-        findViewById<Button>(R.id.testButton)
-            .setOnClickListener { testProfiles() }
-        connectButton.setOnClickListener { toggleConnection() }
+        tcpPingButton
+            .setOnClickListener {
+                testProfiles(
+                    PingMethod.TCP_CONNECT
+                )
+            }
+        realDelayAllButton
+            .setOnClickListener {
+                testProfiles(
+                    PingMethod.XRAY_HTTP
+                )
+            }
+        connectButton.setOnClickListener {
+            toggleConnection()
+        }
+        pauseButton.setOnClickListener {
+            showPauseOptions()
+        }
         refreshExitButton.setOnClickListener {
             refreshExitInfo(force = true, showError = true)
         }
@@ -400,23 +466,80 @@ class MainActivity : ThemedActivity() {
     private fun showAddOptions() {
         val labels = arrayOf(
             getString(R.string.import_existing),
+            getString(R.string.add_url_subscription),
+            getString(R.string.add_nordvpn_subscription),
             getString(R.string.add_manual_config),
             getString(R.string.add_proxy_chain)
         )
+
         AlertDialog.Builder(this)
             .setTitle(R.string.add_options)
             .setItems(labels) { _, position ->
                 when (position) {
                     0 -> showImportDialog()
-                    1 -> startActivity(
-                        Intent(this, ManualConfigActivity::class.java)
+                    1 -> openSubscriptionManager(
+                        kind = SubscriptionKind.URL
                     )
-                    2 -> startActivity(
-                        Intent(this, ProxyChainActivity::class.java)
+                    2 -> openSubscriptionManager(
+                        kind = SubscriptionKind.NORDVPN
+                    )
+                    3 -> startActivity(
+                        Intent(
+                            this,
+                            ManualConfigActivity::class.java
+                        )
+                    )
+                    4 -> startActivity(
+                        Intent(
+                            this,
+                            ProxyChainActivity::class.java
+                        )
                     )
                 }
             }
             .show()
+    }
+
+    private fun openSubscriptionManager(
+        sourceId: String? = null,
+        kind: SubscriptionKind? = null
+    ) {
+        startActivity(
+            Intent(
+                this,
+                SubscriptionManagementActivity::class.java
+            ).apply {
+                sourceId?.let {
+                    putExtra(
+                        SubscriptionManagementActivity
+                            .EXTRA_SOURCE_ID,
+                        it
+                    )
+                }
+                kind?.let {
+                    putExtra(
+                        SubscriptionManagementActivity
+                            .EXTRA_ADD_KIND,
+                        it.name
+                    )
+                }
+            }
+        )
+    }
+
+    private fun renderQuickTools() {
+        quickToolsPanel.visibility =
+            if (quickToolsExpanded) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+        quickToolsToggle.text =
+            if (quickToolsExpanded) {
+                "⌃"
+            } else {
+                "⌄"
+            }
     }
 
     private fun refreshSubscriptionsFromMain() {
@@ -862,6 +985,12 @@ class MainActivity : ThemedActivity() {
                 )
                 isClickable = true
                 isFocusable = true
+                setOnLongClickListener {
+                    openSubscriptionManager(
+                        sourceId = id
+                    )
+                    true
+                }
                 setOnClickListener {
                     if (
                         activeSubscriptionId !=
@@ -918,92 +1047,110 @@ class MainActivity : ThemedActivity() {
         }
 
     private fun refresh() {
-        val selectedId = repository.selectedId()
-        val current = ConnectionRuntime.current()
-        renderSubscriptionTabs()
-        val values = repository.all()
-            .asSequence()
-            .filter { profile ->
-                val sourceMatches =
-                    activeSubscriptionId ==
-                        null ||
-                        profile
-                            .subscriptionId ==
-                        activeSubscriptionId
-
-                val searchMatches =
-                    filter.isBlank() ||
-                        profile.name
-                            .contains(
+        val selectedId =
+            repository.selectedId()
+        val current =
+            ConnectionRuntime.current()
+        val settings =
+            settingsRepository.load()
+        val all =
+            repository.all()
+        val values =
+            all.asSequence()
+                .filter { profile ->
+                    val sourceMatches =
+                        activeSubscriptionId == null ||
+                            profile.subscriptionId ==
+                            activeSubscriptionId
+                    val searchMatches =
+                        filter.isBlank() ||
+                            profile.name.contains(
                                 filter,
                                 true
                             ) ||
-                        profile.server
-                            .contains(
+                            profile.server.contains(
                                 filter,
                                 true
                             ) ||
-                        profile.protocol
-                            .contains(
+                            profile.protocol.contains(
                                 filter,
                                 true
                             ) ||
-                        profile.exitCountry
-                            .contains(
+                            profile.exitCountry.contains(
                                 filter,
                                 true
                             ) ||
-                        profile.exitIp
-                            .contains(
+                            profile.exitIp.contains(
                                 filter,
                                 true
                             )
 
-                profile.id ==
-                    current.profileId ||
+                    profile.id ==
+                        current.profileId ||
+                        (
+                            sourceMatches &&
+                                searchMatches
+                            )
+                }
+                .sortedWith(
+                    profileComparator(
+                        settings = settings,
+                        connectedId =
+                            current.profileId
+                    )
+                )
+                .toList()
+
+        adapter.submit(
+            values,
+            selectedId,
+            current.profileId,
+            settings.hideIpOnMain
+        )
+        emptyText.visibility =
+            if (values.isEmpty()) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+
+        val infoProfile =
+            all.firstOrNull {
+                it.id ==
                     (
-                        sourceMatches &&
-                            searchMatches
+                        current.profileId
+                            ?: selectedId
                         )
             }
-            .sortedWith(
-                profileComparator(
-                    settings =
-                        settingsRepository
-                            .load(),
-                    connectedId =
-                        current.profileId
-                )
-            )
-            .toList()
-
-        adapter.submit(values, selectedId, current.profileId)
-        emptyText.visibility = if (values.isEmpty()) View.VISIBLE else View.GONE
 
         if (current.error.isBlank()) {
-            selectedText.text = repository.find(
-                current.profileId ?: selectedId
-            )?.let {
-                "${it.name} • ${it.server}:${it.port}"
-            }.orEmpty()
+            selectedText.text =
+                infoProfile?.let {
+                    if (settings.hideIpOnMain) {
+                        it.name
+                    } else {
+                        "${it.name} • ${it.server}:${it.port}"
+                    }
+                }.orEmpty()
         }
 
-        renderConnectedInfo(current)
+        renderConnectedInfo(
+            current,
+            infoProfile,
+            settings.hideIpOnMain
+        )
     }
 
     private fun renderConnectedInfo(
-        snapshot: ConnectionRuntime.Snapshot
+        snapshot: ConnectionRuntime.Snapshot,
+        profile: ConfigProfile?,
+        hideIp: Boolean
     ) {
         val connectedProfile =
-            if (
+            profile.takeIf {
                 snapshot.state ==
-                ConnectionState.CONNECTED
-            ) {
-                repository.find(
-                    snapshot.profileId
-                )
-            } else {
-                null
+                    ConnectionState.CONNECTED &&
+                    it?.id == snapshot.profileId
             }
 
         val live =
@@ -1095,8 +1242,10 @@ class MainActivity : ThemedActivity() {
         exitInfoText.text =
             connectedProfile
                 ?.let { profile ->
-                    profileExitLine(profile)
-                        .ifBlank {
+                    profileExitLine(
+                        profile,
+                        hideIp
+                    ).ifBlank {
                             getString(
                                 R.string.exit_info_waiting
                             )
@@ -1110,10 +1259,7 @@ class MainActivity : ThemedActivity() {
             connectedProfile != null
 
         copySummaryButton.isEnabled =
-            repository.find(
-                snapshot.profileId
-                    ?: repository.selectedId()
-            ) != null
+            profile != null
     }
 
     private fun showImportDialog() {
@@ -1257,15 +1403,17 @@ class MainActivity : ThemedActivity() {
                     6 -> shareProfileJson(profile)
                     7 -> rename(profile)
                     8 -> duplicateProfile(profile)
-                    9 -> {
-                        profile.favorite = !profile.favorite
-                        repository.save(profile)
-                        refresh()
+                    9 -> storageWorker.execute {
+                        repository.update(profile.id) {
+                            it.favorite = !it.favorite
+                        }
+                        runOnUiThread(::refresh)
                     }
-                    10 -> {
-                        profile.enabled = !profile.enabled
-                        repository.save(profile)
-                        refresh()
+                    10 -> storageWorker.execute {
+                        repository.update(profile.id) {
+                            it.enabled = !it.enabled
+                        }
+                        runOnUiThread(::refresh)
                     }
                     11 -> confirmDelete(profile)
                 }
@@ -1303,116 +1451,68 @@ class MainActivity : ThemedActivity() {
             return
         }
 
-        val settings =
-            settingsRepository.load()
-        settings.pingMethod =
-            PingMethod.TCP_CONNECT
-
-        if (
-            settings.pingMethod ==
-            PingMethod.XRAY_HTTP &&
-            ConnectionRuntime
-                .current()
-                .state !in
-                setOf(
-                    ConnectionState
-                        .DISCONNECTED,
-                    ConnectionState.ERROR
-                )
-        ) {
-            toast(
-                getString(
-                    R.string
-                        .xray_ping_requires_disconnect
-                )
-            )
-            return
-        }
-
         cancelPingTasks()
         val generation =
-            pingGeneration
-                .incrementAndGet()
+            pingGeneration.incrementAndGet()
 
-        repository.update(
-            profile.id
-        ) {
-            it.testStatus =
-                TestStatus.TESTING
-        }
-        refresh()
-
-        val task =
-            worker.submit {
-                val result =
-                    runCatching {
-                        pingManager.measure(
-                            profile =
-                                profile,
-                            settings =
-                                settings,
-                            workDir =
-                                cacheDir
-                        )
-                    }.getOrElse {
-                        Diagnostics
-                            .recordThrowable(
-                                "Single ping test",
-                                it
-                            )
-                        failedPingResult(
-                            settings
-                                .pingMethod,
-                            it
-                        )
-                    }
-
-                if (
-                    pingGeneration.get() ==
-                    generation
-                ) {
-                    applyPingResult(
-                        profile.id,
-                        result
-                    )
-                    runOnUiThread(
-                        ::refresh
-                    )
-                }
+        storageWorker.execute {
+            repository.update(profile.id) {
+                it.testStatus =
+                    TestStatus.TESTING
             }
 
-        trackPingTasks(
-            listOf(task)
-        )
-    }
+            runOnUiThread(::refresh)
 
-    private fun testProfiles() {
-        val profiles =
-            repository.all()
-                .filter {
-                    it.enabled
+            val settings =
+                settingsRepository.load()
+            settings.pingMethod =
+                PingMethod.TCP_CONNECT
+            val result =
+                runCatching {
+                    pingManager.measure(
+                        profile = profile,
+                        settings = settings,
+                        workDir = cacheDir
+                    )
+                }.getOrElse {
+                    Diagnostics.recordThrowable(
+                        "Single ping test",
+                        it
+                    )
+                    failedPingResult(
+                        settings.pingMethod,
+                        it
+                    )
                 }
 
-        if (profiles.isEmpty()) {
-            return
+            if (
+                pingGeneration.get() ==
+                generation
+            ) {
+                repository.update(profile.id) {
+                    applyPingResultToProfile(
+                        it,
+                        result
+                    )
+                }
+                runOnUiThread(::refresh)
+            }
         }
+    }
 
-        val settings =
-            settingsRepository.load()
-        settings.pingMethod =
-            PingMethod.TCP_CONNECT
+    private fun testProfiles(
+        method: PingMethod
+    ) {
         val runtime =
             ConnectionRuntime.current()
 
         if (
-            settings.pingMethod ==
-            PingMethod.XRAY_HTTP &&
+            method == PingMethod.XRAY_HTTP &&
             runtime.state !in
-                setOf(
-                    ConnectionState
-                        .DISCONNECTED,
-                    ConnectionState.ERROR
-                )
+            setOf(
+                ConnectionState.DISCONNECTED,
+                ConnectionState.ERROR
+            )
         ) {
             toast(
                 getString(
@@ -1425,46 +1525,145 @@ class MainActivity : ThemedActivity() {
 
         cancelPingTasks()
         val generation =
-            pingGeneration
-                .incrementAndGet()
+            pingGeneration.incrementAndGet()
+        setBatchControlsEnabled(false)
 
-        profiles.forEach {
-            repository.update(
-                it.id
+        storageWorker.execute {
+            val profiles =
+                repository.all()
+                    .filter { it.enabled }
+
+            if (profiles.isEmpty()) {
+                runOnUiThread {
+                    setBatchControlsEnabled(true)
+                }
+                return@execute
+            }
+
+            repository.updateMany(
+                profiles.map { it.id }
             ) {
-                value ->
-                value.testStatus =
+                it.testStatus =
                     TestStatus.TESTING
             }
-        }
-        refresh()
 
-        val tasks =
-            pingManager.batch(
-                profiles =
-                    profiles,
-                settings =
-                    settings,
-                workDir =
-                    cacheDir
-            ) {
-                    profile,
-                    result ->
+            runOnUiThread(::refresh)
+
+            val settings =
+                settingsRepository.load()
+            settings.pingMethod = method
+            val remaining =
+                AtomicInteger(profiles.size)
+            val tasks =
+                pingManager.batch(
+                    profiles = profiles,
+                    settings = settings,
+                    workDir = cacheDir
+                ) { profile, result ->
+                    if (
+                        pingGeneration.get() ==
+                        generation
+                    ) {
+                        pingResultBuffer[
+                            profile.id
+                        ] = result
+                        schedulePingFlush(
+                            generation
+                        )
+                    }
+
+                    if (
+                        remaining.decrementAndGet() ==
+                        0
+                    ) {
+                        schedulePingFlush(
+                            generation,
+                            immediate = true
+                        )
+                        runOnUiThread {
+                            setBatchControlsEnabled(
+                                true
+                            )
+                        }
+                    }
+                }
+
+            trackPingTasks(tasks)
+        }
+    }
+
+    private fun setBatchControlsEnabled(
+        enabled: Boolean
+    ) {
+        tcpPingButton.isEnabled = enabled
+        realDelayAllButton.isEnabled = enabled
+    }
+
+    private fun schedulePingFlush(
+        generation: Long,
+        immediate: Boolean = false
+    ) {
+        if (
+            !pingFlushScheduled.compareAndSet(
+                false,
+                true
+            )
+        ) {
+            return
+        }
+
+        handler.postDelayed(
+            {
+                pingFlushScheduled.set(false)
+
                 if (
-                    pingGeneration.get() ==
+                    pingGeneration.get() !=
                     generation
                 ) {
-                    applyPingResult(
-                        profile.id,
-                        result
-                    )
-                    runOnUiThread(
-                        ::refresh
-                    )
+                    pingResultBuffer.clear()
+                    return@postDelayed
                 }
-            }
 
-        trackPingTasks(tasks)
+                val results =
+                    HashMap(pingResultBuffer)
+                results.keys.forEach(
+                    pingResultBuffer::remove
+                )
+
+                if (results.isEmpty()) {
+                    return@postDelayed
+                }
+
+                storageWorker.execute {
+                    repository.updateMany(
+                        results.keys
+                    ) { profile ->
+                        results[profile.id]
+                            ?.let {
+                                applyPingResultToProfile(
+                                    profile,
+                                    it
+                                )
+                            }
+                    }
+
+                    runOnUiThread(::refresh)
+
+                    if (
+                        pingResultBuffer.isNotEmpty()
+                    ) {
+                        schedulePingFlush(
+                            generation
+                        )
+                    }
+                }
+            },
+            if (immediate) {
+                0L
+            } else {
+                PING_RESULT_FLUSH_MS
+            }
+        )
     }
 
     private fun selectFastestProfile() {
@@ -1703,13 +1902,19 @@ class MainActivity : ThemedActivity() {
         copyToClipboard(getString(R.string.connection_summary), summary)
     }
 
-    private fun profileExitLine(profile: ConfigProfile): String = buildString {
+    private fun profileExitLine(
+        profile: ConfigProfile,
+        hideIp: Boolean = false
+    ): String = buildString {
         profile.exitFlag.takeIf(String::isNotBlank)?.let {
             append(it)
             append(' ')
         }
         profile.exitCountry.takeIf(String::isNotBlank)?.let { append(it) }
-        if (profile.exitIp.isNotBlank()) {
+        if (
+            !hideIp &&
+            profile.exitIp.isNotBlank()
+        ) {
             if (isNotBlank()) append(" • ")
             append(profile.exitIp)
         }
@@ -1734,31 +1939,50 @@ class MainActivity : ThemedActivity() {
     }
 
     private fun copyProfileJson(profile: ConfigProfile) {
-        runCatching { fullJson(profile) }
-            .onSuccess {
-                copyToClipboard(getString(R.string.full_json), it)
-            }
-            .onFailure {
-                toast(
-                    getString(
-                        R.string.json_generation_failed,
-                        it.message ?: getString(R.string.unknown_error)
+        worker.execute {
+            runCatching {
+                fullJson(profile)
+            }.onSuccess { value ->
+                runOnUiThread {
+                    copyToClipboard(
+                        getString(R.string.full_json),
+                        value
                     )
-                )
+                }
+            }.onFailure { error ->
+                runOnUiThread {
+                    toast(
+                        getString(
+                            R.string.json_generation_failed,
+                            error.message
+                                ?: getString(R.string.unknown_error)
+                        )
+                    )
+                }
             }
+        }
     }
 
     private fun shareProfileJson(profile: ConfigProfile) {
-        runCatching { fullJson(profile) }
-            .onSuccess { shareText(profile.name, it) }
-            .onFailure {
-                toast(
-                    getString(
-                        R.string.json_generation_failed,
-                        it.message ?: getString(R.string.unknown_error)
+        worker.execute {
+            runCatching {
+                fullJson(profile)
+            }.onSuccess { value ->
+                runOnUiThread {
+                    shareText(profile.name, value)
+                }
+            }.onFailure { error ->
+                runOnUiThread {
+                    toast(
+                        getString(
+                            R.string.json_generation_failed,
+                            error.message
+                                ?: getString(R.string.unknown_error)
+                        )
                     )
-                )
+                }
             }
+        }
     }
 
     private fun shareLink(profile: ConfigProfile): String? {
@@ -1773,8 +1997,22 @@ class MainActivity : ThemedActivity() {
 
     private fun fullJson(profile: ConfigProfile): String {
         val raw = profile.raw.trim()
-        return if (raw.startsWith("{")) {
-            JSONObject(raw).toString(2)
+        val rawRoot =
+            raw.takeIf {
+                it.startsWith("{")
+            }?.let {
+                runCatching(::JSONObject)
+                    .getOrNull()
+            }
+        val complete =
+            rawRoot != null &&
+                rawRoot.has("inbounds") &&
+                rawRoot.has("outbounds") &&
+                rawRoot.has("dns") &&
+                rawRoot.has("routing")
+
+        return if (complete) {
+            rawRoot!!.toString(2)
         } else {
             XrayConfigBuilder.build(
                 profile = profile,
@@ -1815,28 +2053,35 @@ class MainActivity : ThemedActivity() {
     }
 
     private fun exportCompleteBackup() {
-        val profiles = JSONArray().apply {
-            repository.all().forEach { put(it.toJson()) }
-        }
-        val subscriptions =
-            JSONArray().apply {
-                SubscriptionRepository(
-                    this@MainActivity
-                ).all().forEach {
+        storageWorker.execute {
+            val profiles = JSONArray().apply {
+                repository.all().forEach {
                     put(it.toJson())
                 }
             }
-        val backup = JSONObject()
-            .put("format", "trivox-backup-v2")
-            .put("createdAt", System.currentTimeMillis())
-            .put("settings", settingsRepository.load().toJson())
-            .put("profiles", profiles)
-            .put(
-                "subscriptions",
-                subscriptions
-            )
-            .toString(2)
-        shareText(getString(R.string.export_backup), backup)
+            val subscriptions =
+                JSONArray().apply {
+                    SubscriptionRepository(
+                        this@MainActivity
+                    ).all().forEach {
+                        put(it.toJson())
+                    }
+                }
+            val backup = JSONObject()
+                .put("format", "trivox-backup-v2")
+                .put("createdAt", System.currentTimeMillis())
+                .put("settings", settingsRepository.load().toJson())
+                .put("profiles", profiles)
+                .put("subscriptions", subscriptions)
+                .toString(2)
+
+            runOnUiThread {
+                shareText(
+                    getString(R.string.export_backup),
+                    backup
+                )
+            }
+        }
     }
 
     private fun confirmClearDeadProfiles() {
@@ -1853,21 +2098,32 @@ class MainActivity : ThemedActivity() {
             .setMessage(getString(R.string.clear_dead_confirm, dead.size))
             .setNegativeButton(R.string.cancel, null)
             .setPositiveButton(R.string.delete) { _, _ ->
-                val selected = repository.selectedId()
-                dead.forEach { repository.delete(it.id) }
-                if (dead.any { it.id == selected }) {
-                    repository.select(null)
+                storageWorker.execute {
+                    val selected = repository.selectedId()
+                    repository.deleteMany(
+                        dead.map { it.id }
+                    )
+                    if (dead.any { it.id == selected }) {
+                        repository.select(null)
+                    }
+                    runOnUiThread {
+                        subscriptionTabsSignature = ""
+                        renderSubscriptionTabs(force = true)
+                        refresh()
+                    }
                 }
-                refresh()
             }
             .show()
     }
 
     private fun duplicateProfile(profile: ConfigProfile) {
-        repository.save(
+        val copy =
             profile.copy(
                 id = UUID.randomUUID().toString(),
-                name = getString(R.string.copy_suffix, profile.name),
+                name = getString(
+                    R.string.copy_suffix,
+                    profile.name
+                ),
                 subscriptionId = null,
                 exitIp = "",
                 exitCountry = "",
@@ -1876,8 +2132,15 @@ class MainActivity : ThemedActivity() {
                 exitIsp = "",
                 lastExitCheckAt = 0
             )
-        )
-        refresh()
+
+        storageWorker.execute {
+            repository.save(copy)
+            runOnUiThread {
+                subscriptionTabsSignature = ""
+                renderSubscriptionTabs(force = true)
+                refresh()
+            }
+        }
     }
 
     private fun confirmDelete(profile: ConfigProfile) {
@@ -1886,11 +2149,17 @@ class MainActivity : ThemedActivity() {
             .setMessage(getString(R.string.delete_config_message, profile.name))
             .setNegativeButton(R.string.cancel, null)
             .setPositiveButton(R.string.delete) { _, _ ->
-                repository.delete(profile.id)
-                if (repository.selectedId() == profile.id) {
-                    repository.select(null)
+                storageWorker.execute {
+                    repository.delete(profile.id)
+                    if (repository.selectedId() == profile.id) {
+                        repository.select(null)
+                    }
+                    runOnUiThread {
+                        subscriptionTabsSignature = ""
+                        renderSubscriptionTabs(force = true)
+                        refresh()
+                    }
                 }
-                refresh()
             }
             .show()
     }
@@ -1909,13 +2178,106 @@ class MainActivity : ThemedActivity() {
             .setPositiveButton(R.string.save) { _, _ ->
                 input.text.toString().trim()
                     .takeIf(String::isNotEmpty)
-                    ?.let {
-                        profile.name = it
-                        repository.save(profile)
-                        refresh()
+                    ?.let { newName ->
+                        storageWorker.execute {
+                            repository.update(profile.id) {
+                                it.name = newName
+                            }
+                            runOnUiThread(::refresh)
+                        }
                     }
             }
             .show()
+    }
+
+    private fun showPauseOptions() {
+        val labels = arrayOf(
+            getString(R.string.pause_15_minutes),
+            getString(R.string.pause_30_minutes),
+            getString(R.string.pause_custom)
+        )
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.pause_connection)
+            .setItems(labels) { _, position ->
+                when (position) {
+                    0 -> pauseConnection(15)
+                    1 -> pauseConnection(30)
+                    2 -> showCustomPauseDialog()
+                }
+            }
+            .show()
+    }
+
+    private fun showCustomPauseDialog() {
+        val input = EditText(this).apply {
+            inputType =
+                android.text.InputType.TYPE_CLASS_NUMBER
+            hint = getString(
+                R.string.pause_minutes_hint
+            )
+            setText("60")
+            selectAll()
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.pause_custom)
+            .setView(input)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.pause_connection) {
+                    _,
+                    _ ->
+                val minutes =
+                    input.text.toString()
+                        .toIntOrNull()
+                        ?.coerceIn(1, 1440)
+
+                if (minutes == null) {
+                    toast(
+                        getString(
+                            R.string.invalid_pause_minutes
+                        )
+                    )
+                } else {
+                    pauseConnection(minutes)
+                }
+            }
+            .show()
+    }
+
+    private fun pauseConnection(
+        minutes: Int
+    ) {
+        val snapshot =
+            ConnectionRuntime.current()
+        val profileId =
+            snapshot.profileId
+                ?: return
+        val mode =
+            snapshot.mode
+                ?: settingsRepository.load().mode
+
+        if (
+            snapshot.state !=
+            ConnectionState.CONNECTED
+        ) {
+            return
+        }
+
+        ConnectionPauseController.schedule(
+            context = this,
+            profileId = profileId,
+            mode = mode,
+            durationMillis =
+                minutes * 60_000L
+        )
+        stopActiveConnection(snapshot)
+        toast(
+            getString(
+                R.string.pause_scheduled,
+                minutes
+            )
+        )
     }
 
     private fun toggleConnection() {
@@ -1955,6 +2317,8 @@ class MainActivity : ThemedActivity() {
         ) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+
+        ConnectionPauseController.cancel(this)
 
         if (settingsRepository.load().mode == ConnectionMode.PROXY) {
             startProxy(profile.id)
@@ -2069,6 +2433,33 @@ class MainActivity : ThemedActivity() {
             livePingBusy.set(false)
             realDelayBusy.set(false)
         }
+
+        val connected =
+            snapshot.state !in
+            setOf(
+                ConnectionState.DISCONNECTED,
+                ConnectionState.ERROR
+            )
+        pauseButton.visibility =
+            if (
+                snapshot.state ==
+                ConnectionState.CONNECTED
+            ) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+        connectButton.backgroundTintList =
+            ColorStateList.valueOf(
+                ContextCompat.getColor(
+                    this,
+                    if (connected) {
+                        R.color.red
+                    } else {
+                        R.color.blue
+                    }
+                )
+            )
 
         refresh()
     }
@@ -2251,44 +2642,35 @@ class MainActivity : ThemedActivity() {
             }
         }
 
-    private fun applyPingResult(
-        profileId: String,
+    private fun applyPingResultToProfile(
+        profile: ConfigProfile,
         result: PingResult
     ) {
-        repository.update(
-            profileId
-        ) {
-            profile ->
-            profile.latencyMs =
-                result.latencyMs
-            profile.latencyJitterMs =
-                result.jitterMs
-            profile.latencySuccessRatio =
-                result.successRatio
-            profile.latencyMethod =
-                result.method
-            profile.lastTestAt =
-                result.timestamp
-            profile.testStatus =
-                when {
-                    result.success ->
-                        TestStatus.ALIVE
-
-                    result.errorCategory ==
-                        "cancelled" ->
-                        TestStatus.UNTESTED
-
-                    result.errorCategory in
-                        setOf(
-                            "core_unavailable",
-                            "invalid_test_url"
-                        ) ->
-                        TestStatus.ERROR
-
-                    else ->
-                        TestStatus.DEAD
-                }
-        }
+        profile.latencyMs =
+            result.latencyMs
+        profile.latencyJitterMs =
+            result.jitterMs
+        profile.latencySuccessRatio =
+            result.successRatio
+        profile.latencyMethod =
+            result.method
+        profile.lastTestAt =
+            result.timestamp
+        profile.testStatus =
+            when {
+                result.success ->
+                    TestStatus.ALIVE
+                result.errorCategory ==
+                    "cancelled" ->
+                    TestStatus.UNTESTED
+                result.errorCategory in
+                    setOf(
+                        "core_unavailable",
+                        "invalid_test_url"
+                    ) ->
+                    TestStatus.ERROR
+                else -> TestStatus.DEAD
+            }
     }
 
     private fun failedPingResult(
@@ -2331,6 +2713,9 @@ class MainActivity : ThemedActivity() {
             }
 
         pingManager.cancel(tasks)
+        pingResultBuffer.clear()
+        pingFlushScheduled.set(false)
+        setBatchControlsEnabled(true)
     }
 
     private fun profileComparator(
@@ -2504,6 +2889,7 @@ class MainActivity : ThemedActivity() {
         pingManager.close()
         subscriptionUpdater.close()
         worker.shutdownNow()
+        storageWorker.shutdownNow()
         super.onDestroy()
     }
 
@@ -2521,9 +2907,12 @@ class MainActivity : ThemedActivity() {
             "http://www.google.com/gen_204"
         private const val CONNECTION_ACTION_COOLDOWN_MS = 1_500L
         private const val PROFILE_SWITCH_DELAY_MS = 350L
+        private const val PING_RESULT_FLUSH_MS = 220L
         private const val MAIN_UI_PREFS = "main_ui"
         private const val KEY_ACTIVE_SUBSCRIPTION =
             "active_subscription_id"
+        private const val KEY_QUICK_TOOLS_EXPANDED =
+            "quick_tools_expanded"
         private const val EXIT_CACHE_MS = 10 * 60 * 1_000L
 
         private val SHARE_SCHEMES = setOf(

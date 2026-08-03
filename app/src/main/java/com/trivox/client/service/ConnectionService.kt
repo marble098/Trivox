@@ -264,11 +264,33 @@ class ConnectionService : Service() {
                 settings.socksPort
             )
         ) {
-            fail(
-                "The mixed proxy port " +
-                    "is already in use"
+            Diagnostics.warning(
+                "Mixed proxy port was busy; " +
+                    "stopping a stale Xray instance"
             )
-            return
+            core.stop()
+
+            try {
+                Thread.sleep(250L)
+            } catch (
+                _: InterruptedException
+            ) {
+                Thread.currentThread()
+                    .interrupt()
+            }
+
+            if (
+                !portAvailable(
+                    settings.socksPort
+                )
+            ) {
+                fail(
+                    "The mixed proxy port " +
+                        "is already in use by " +
+                        "another application"
+                )
+                return
+            }
         }
 
         ConnectionRuntime.update(

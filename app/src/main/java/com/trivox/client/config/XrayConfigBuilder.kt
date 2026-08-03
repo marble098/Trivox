@@ -33,7 +33,7 @@ object XrayConfigBuilder {
         root.put("inbounds", buildInbounds(settings, mode))
         root.put("outbounds", buildOutbounds(profile))
         root.put("dns", dns(profile, settings))
-        root.put("routing", JSONObject().put("domainStrategy", "IPIfNonMatch").put("rules", JSONArray().put(JSONObject().put("type", "field").put("ip", JSONArray(privateNetworks)).put("outboundTag", "direct"))))
+        root.put("routing", routing(profile))
         return root.toString(2)
     }
 
@@ -60,9 +60,52 @@ object XrayConfigBuilder {
     }
 
     private fun normalizeOutbound(outbound: JSONObject): JSONObject {
-        val stream = outbound.optJSONObject("streamSettings") ?: return outbound
-        val network = stream.optString("network").trim().lowercase()
-        if (network.isBlank() || network == "none" || network == "null") stream.put("network", "tcp")
+        if (
+            outbound.optString("protocol") ==
+            "shadowsocks"
+        ) {
+            val servers =
+                outbound.optJSONObject("settings")
+                    ?.optJSONArray("servers")
+                    ?: JSONArray()
+
+            for (index in 0 until servers.length()) {
+                val server =
+                    servers.optJSONObject(index)
+                        ?: continue
+                val method =
+                    server.optString("method")
+                val password =
+                    server.optString("password")
+
+                server.put(
+                    "password",
+                    Shadowsocks2022
+                        .normalizePassword(
+                            method,
+                            password
+                        )
+                )
+            }
+        }
+
+        val stream =
+            outbound.optJSONObject(
+                "streamSettings"
+            ) ?: return outbound
+        val network =
+            stream.optString("network")
+                .trim()
+                .lowercase()
+
+        if (
+            network.isBlank() ||
+            network == "none" ||
+            network == "null"
+        ) {
+            stream.put("network", "tcp")
+        }
+
         return outbound
     }
     private fun mixedInbound(settings: AppSettings) = JSONObject().put("tag", "mixed-in").put("listen", "127.0.0.1")
@@ -71,13 +114,87 @@ object XrayConfigBuilder {
         .put("sniffing", JSONObject().put("enabled", true).put("destOverride", JSONArray().put("http").put("tls").put("quic")).put("routeOnly", false))
     private fun tunInbound(settings: AppSettings) = JSONObject().put("tag", "tun-in").put("port", 0).put("protocol", "tun")
         .put("settings", JSONObject().put("name", "trivox0").put("mtu", settings.mtu))
-    private fun dns(profile: ConfigProfile, settings: AppSettings): JSONObject = when (settings.dnsMode) {
-        DnsMode.IMPORTED -> profile.originalDnsJson?.let(::JSONObject) ?: defaultDns()
-        DnsMode.CUSTOM -> JSONObject().put("servers", JSONArray(settings.customDns))
-        DnsMode.SYSTEM -> JSONObject().put("servers", JSONArray().put("localhost"))
-        DnsMode.DIRECT -> JSONObject().put("servers", JSONArray().put(JSONObject().put("address", "1.1.1.1").put("skipFallback", true)))
-        DnsMode.THROUGH_PROXY -> JSONObject().put("servers", JSONArray().put("https://1.1.1.1/dns-query")).put("queryStrategy", "UseIP")
-        DnsMode.TRIVOX_DEFAULT -> defaultDns()
+    private fun dns(
+        profile: ConfigProfile,
+        settings: AppSettings
+    ): JSONObject {
+        if (
+            profile.protocol == "wireguard" &&
+            settings.dnsMode in
+            setOf(
+                DnsMode.TRIVOX_DEFAULT,
+                DnsMode.THROUGH_PROXY
+            )
+        ) {
+            return wireGuardDns()
+        }
+
+        return when (settings.dnsMode) {
+            DnsMode.IMPORTED ->
+                profile.originalDnsJson
+                    ?.let(::JSONObject)
+                    ?: defaultDns()
+            DnsMode.CUSTOM ->
+                JSONObject().put(
+                    "servers",
+                    JSONArray(settings.customDns)
+                )
+            DnsMode.SYSTEM ->
+                JSONObject().put(
+                    "servers",
+                    JSONArray().put("localhost")
+                )
+            DnsMode.DIRECT -> wireGuardDns()
+            DnsMode.THROUGH_PROXY ->
+                JSONObject()
+                    .put(
+                        "servers",
+                        JSONArray().put(
+                            "https://1.1.1.1/dns-query"
+                        )
+                    )
+                    .put("queryStrategy", "UseIP")
+            DnsMode.TRIVOX_DEFAULT ->
+                defaultDns()
+        }
     }
+
+    private fun wireGuardDns() =
+        JSONObject()
+            .put(
+                "servers",
+                JSONArray()
+                    .put("1.1.1.1")
+                    .put("8.8.8.8")
+            )
+            .put("queryStrategy", "UseIPv4")
+
+    private fun routing(
+        profile: ConfigProfile
+    ): JSONObject {
+        val rules = JSONArray()
+
+        if (profile.protocol == "wireguard") {
+            rules.put(
+                JSONObject()
+                    .put("type", "field")
+                    .put("network", "udp,tcp")
+                    .put("port", "53")
+                    .put("outboundTag", "direct")
+            )
+        }
+
+        rules.put(
+            JSONObject()
+                .put("type", "field")
+                .put("ip", JSONArray(privateNetworks))
+                .put("outboundTag", "direct")
+        )
+
+        return JSONObject()
+            .put("domainStrategy", "IPIfNonMatch")
+            .put("rules", rules)
+    }
+
     private fun defaultDns() = JSONObject().put("servers", JSONArray().put("https://1.1.1.1/dns-query").put("https://8.8.8.8/dns-query")).put("queryStrategy", "UseIP")
 }
