@@ -11,10 +11,12 @@ import com.trivox.client.data.SettingsRepository
 import com.trivox.client.util.Diagnostics
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 object UpdateChecker {
     private const val LATEST_RELEASE_API =
@@ -30,9 +32,13 @@ object UpdateChecker {
     private const val PREFS = "update_checker"
     private const val CHECK_INTERVAL_MS =
         24L * 60L * 60L * 1000L
+    private const val FAILURE_RETRY_INTERVAL_MS =
+        60L * 60L * 1000L
 
     private val worker =
         Executors.newSingleThreadExecutor()
+    private val checkInProgress =
+        AtomicBoolean(false)
 
     data class Result(
         val available: Boolean,
@@ -57,14 +63,27 @@ object UpdateChecker {
                 PREFS,
                 Context.MODE_PRIVATE
             )
-        val elapsed =
-            System.currentTimeMillis() -
+        val now =
+            System.currentTimeMillis()
+        val sinceSuccess =
+            now -
                 preferences.getLong(
-                    "last_check",
+                    "last_success",
+                    0L
+                )
+        val sinceAttempt =
+            now -
+                preferences.getLong(
+                    "last_attempt",
                     0L
                 )
 
-        if (elapsed < CHECK_INTERVAL_MS) {
+        if (
+            sinceSuccess <
+            CHECK_INTERVAL_MS ||
+            sinceAttempt <
+            FAILURE_RETRY_INTERVAL_MS
+        ) {
             return
         }
 
@@ -80,18 +99,42 @@ object UpdateChecker {
         showCurrentResult: Boolean = true,
         callback: ((Result) -> Unit)? = null
     ) {
-        worker.execute {
-            val result = fetchLatest()
+        if (
+            !checkInProgress.compareAndSet(
+                false,
+                true
+            )
+        ) {
+            return
+        }
 
-            activity.getSharedPreferences(
-                PREFS,
-                Context.MODE_PRIVATE
-            ).edit()
-                .putLong(
-                    "last_check",
-                    System.currentTimeMillis()
+        worker.execute {
+            val result =
+                try {
+                    fetchLatest()
+                } finally {
+                    checkInProgress.set(false)
+                }
+            val now =
+                System.currentTimeMillis()
+            val editor =
+                activity.getSharedPreferences(
+                    PREFS,
+                    Context.MODE_PRIVATE
+                ).edit()
+                    .putLong(
+                        "last_attempt",
+                        now
+                    )
+
+            if (result.error.isBlank()) {
+                editor.putLong(
+                    "last_success",
+                    now
                 )
-                .apply()
+            }
+
+            editor.apply()
 
             activity.runOnUiThread {
                 callback?.invoke(result)
@@ -306,14 +349,39 @@ object UpdateChecker {
     private fun readLimited(
         input: InputStream
     ): String {
-        val bytes =
-            input.readBytes()
+        val output =
+            ByteArrayOutputStream()
+        val buffer =
+            ByteArray(8 * 1024)
+        var total = 0
 
-        check(bytes.size <= 512 * 1024) {
-            "GitHub response is too large"
+        while (true) {
+            val count =
+                input.read(buffer)
+
+            if (count < 0) {
+                break
+            }
+
+            total += count
+
+            check(
+                total <=
+                MAX_RESPONSE_BYTES
+            ) {
+                "GitHub response is too large"
+            }
+
+            output.write(
+                buffer,
+                0,
+                count
+            )
         }
 
-        return bytes.toString(Charsets.UTF_8)
+        return output
+            .toByteArray()
+            .toString(Charsets.UTF_8)
     }
 
     private fun showUpdateDialog(
@@ -346,6 +414,9 @@ object UpdateChecker {
             }
             .show()
     }
+
+    private const val MAX_RESPONSE_BYTES =
+        512 * 1024
 
     private data class JsonResponse(
         val status: Int,

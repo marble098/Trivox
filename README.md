@@ -61,13 +61,24 @@ See [BUILDING.md](BUILDING.md), [CORE_INTEGRATION.md](CORE_INTEGRATION.md), and 
 
 ## Versions
 
-- App: `0.1.0` (`versionCode 1`)
+- App version: generated automatically from Git history by CI
 - Xray/libXray pin: `v26.7.28`
 - AGP: `8.13.2`
 - Kotlin: `2.4.10`
 - Gradle: `8.13`
 - JDK: `17`
 - compile/target SDK: `36`; min SDK: `26`
+
+
+## Technical audit
+
+The ping, DNS bootstrap, NordVPN location import, parser bounds, storage
+preservation, update checker and CI guards were reviewed in the v3 corrective
+audit. See `docs/TRIVOX_FULL_TECHNICAL_AUDIT_V3.md`. Run:
+
+```bash
+python3 tools/audit-trivox.py --ci
+```
 
 ## License
 

@@ -2,7 +2,6 @@ package com.trivox.client.network
 
 import kotlin.math.abs
 import kotlin.math.ceil
-import kotlin.math.max
 
 internal data class PingSummary(
     val latencyMs: Long?,
@@ -24,12 +23,24 @@ internal object PingStatistics {
             successfulNanos
                 .filter { it > 0L }
                 .sorted()
+        /*
+         * Integer ceiling of 2/3. Using ceil(total * 0.67) accidentally
+         * required 3/3 successes because 3 * 0.67 = 2.01.
+         */
         val required =
-            max(
-                if (total > 1) 2 else 1,
-                ceil(total * REQUIRED_SUCCESS_RATIO)
-                    .toInt()
-            ).coerceAtMost(total)
+            if (total == 1) {
+                1
+            } else {
+                (
+                    total * REQUIRED_SUCCESS_NUMERATOR +
+                        REQUIRED_SUCCESS_DENOMINATOR -
+                        1
+                    ) /
+                    REQUIRED_SUCCESS_DENOMINATOR
+            }.coerceIn(
+                1,
+                total
+            )
         val ratio =
             (
                 samples.size.toDouble() /
@@ -124,7 +135,8 @@ internal object PingStatistics {
             .toLong()
             .coerceAtLeast(1L)
 
-    private const val REQUIRED_SUCCESS_RATIO = 0.67
+    private const val REQUIRED_SUCCESS_NUMERATOR = 2
+    private const val REQUIRED_SUCCESS_DENOMINATOR = 3
     private const val NANOS_PER_MILLISECOND =
         1_000_000.0
 }

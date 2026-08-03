@@ -2,7 +2,7 @@ name: Build Trivox APKs
 
 on:
   push:
-    branches: [main, master, develop]
+    branches: [main, master, develop, 'audit/**']
   pull_request:
   workflow_dispatch:
     inputs:
@@ -111,6 +111,7 @@ jobs:
           python3 -m py_compile tools/generate-core-manifest.py
           python3 -m py_compile tools/validate-android-resources.py
           python3 tools/validate-android-resources.py
+          python3 tools/audit-trivox.py --ci
           if grep -R --fixed-strings             "registerController(null)"             app/src/main/java; then
             echo "Unsafe null native controller registration detected." >&2
             exit 1
@@ -143,7 +144,7 @@ jobs:
           grep -Fq 'sortModeSpinner'             app/src/main/res/layout/activity_settings.xml
           grep -Fq '<string name="dark_theme_summary">Use the low-glare Trivox night palette.</string>' \
             app/src/main/res/values/strings.xml
-          grep -Fq '<string name="ping_method_xray_summary">Tests the complete Xray route with an uncached HTTP request. Google gen_204 is accepted only when the response status is exactly 204.</string>' \
+          grep -Fq '<string name="ping_method_xray_summary">Tests the complete Xray route against a small verified connectivity pool, automatically replacing blocked or unhealthy targets. generate_204 endpoints require an exact 204 response.</string>' \
             app/src/main/res/values/strings.xml
           grep -Fq 'SubscriptionManagementActivity' \
             app/src/main/AndroidManifest.xml
@@ -184,6 +185,12 @@ jobs:
             app/src/main/java/com/trivox/client/network/PingManager.kt
           grep -Fq 'attempts = settings.testAttempts' \
             app/src/main/java/com/trivox/client/ui/MainActivity.kt
+          grep -Fq 'TrustedDohResolver' \
+            app/src/main/java/com/trivox/client/network/NordVpnSubscriptionManager.kt
+          grep -Fq 'UUID.nameUUIDFromBytes' \
+            app/src/main/java/com/trivox/client/network/NordVpnSubscriptionManager.kt
+          grep -Fq 'REQUIRED_SUCCESS_NUMERATOR' \
+            app/src/main/java/com/trivox/client/network/PingStatistics.kt
           if grep -R -n -E \
             'Theme\.Trivox\.Neon|ThemeMode\.NEON|themeModeSpinner|neon_' \
             app/src/main; then
@@ -197,7 +204,7 @@ jobs:
             echo "Alive/dead row labels unexpectedly returned." >&2
             exit 1
           fi
-          grep -Fq 'http://www.google.com/gen_204' \
+          grep -Fq 'https://cp.cloudflare.com/generate_204' \
             app/src/main/java/com/trivox/client/ui/MainActivity.kt
           grep -Fq 'localProxyInVpn' \
             app/src/main/java/com/trivox/client/config/XrayConfigBuilder.kt

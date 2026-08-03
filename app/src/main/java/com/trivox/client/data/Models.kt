@@ -175,7 +175,13 @@ data class AppSettings(
         if (socksPort == LEGACY_SOCKS_PORT || socksPort !in 1..65535) socksPort = DEFAULT_MIXED_PORT
         httpPort = socksPort
         testAttempts = testAttempts.coerceIn(2, 5)
-        if (testUrl.isBlank() || testUrl == LEGACY_TEST_URL) testUrl = DEFAULT_TEST_URL
+        if (
+            testUrl.isBlank() ||
+            testUrl == LEGACY_TEST_URL ||
+            testUrl == LEGACY_GOOGLE_TEST_URL
+        ) {
+            testUrl = DEFAULT_TEST_URL
+        }
         darkMode = themeMode == ThemeMode.DARK
         return this
     }
@@ -191,9 +197,13 @@ data class AppSettings(
 
     companion object {
         const val DEFAULT_MIXED_PORT = 10202
-        const val DEFAULT_TEST_URL = "http://www.google.com/gen_204"
+        const val DEFAULT_TEST_URL =
+            "https://cp.cloudflare.com/generate_204"
         private const val LEGACY_SOCKS_PORT = 10808
-        private const val LEGACY_TEST_URL = "https://cp.cloudflare.com/"
+        private const val LEGACY_TEST_URL =
+            "https://cp.cloudflare.com/"
+        private const val LEGACY_GOOGLE_TEST_URL =
+            "http://www.google.com/gen_204"
         fun fromJson(json: JSONObject): AppSettings {
             fun strings(key: String): List<String> = json.optJSONArray(key)?.let { a -> (0 until a.length()).mapNotNull { a.optString(it).takeIf(String::isNotBlank) } } ?: emptyList()
             val legacyDark = json.optBoolean("darkMode", false)

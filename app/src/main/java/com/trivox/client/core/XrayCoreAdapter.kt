@@ -197,8 +197,8 @@ class XrayCoreAdapter(
             }
 
             invoke(
-                "ping",
-                JSONObject()
+                method = "ping",
+                payload = JSONObject()
                     .put(
                         "configPath",
                         configPath
@@ -210,7 +210,8 @@ class XrayCoreAdapter(
                     .put(
                         "url",
                         url
-                    )
+                    ),
+                logFailure = false
             )
         }
 
@@ -399,7 +400,8 @@ class XrayCoreAdapter(
 
     private fun invoke(
         method: String,
-        payload: JSONObject? = null
+        payload: JSONObject? = null,
+        logFailure: Boolean = true
     ): CoreResult =
         runCatching {
             val request =
@@ -448,7 +450,10 @@ class XrayCoreAdapter(
                 ),
                 response
             ).also {
-                if (!it.success) {
+                if (
+                    !it.success &&
+                    logFailure
+                ) {
                     Diagnostics.error(
                         "Xray $method failed: " +
                             Diagnostics.sanitize(

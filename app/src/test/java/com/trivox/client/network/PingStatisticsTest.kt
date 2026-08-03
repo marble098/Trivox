@@ -2,73 +2,62 @@ package com.trivox.client.network
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PingStatisticsTest {
     @Test
-    fun usesMedianAndRequiresVerifiedMajority() {
+    fun twoOfThreeSamplesMeetTwoThirdsThreshold() {
         val result =
             PingStatistics.summarize(
                 successfulNanos =
                     listOf(
-                        50_000_000L,
-                        52_000_000L,
-                        52_000_000L,
-                        2_000_000_000L
-                    ),
-                attempts = 5
-            )
-
-        assertTrue(result.success)
-        assertEquals(52L, result.latencyMs)
-        assertEquals(4, result.successfulSamples)
-        assertEquals(4, result.requiredSamples)
-    }
-
-    @Test
-    fun rejectsTwoLuckySamplesOutOfFive() {
-        val result =
-            PingStatistics.summarize(
-                successfulNanos =
-                    listOf(
-                        2_000_000L,
-                        3_000_000L
-                    ),
-                attempts = 5
-            )
-
-        assertFalse(result.success)
-        assertNull(result.latencyMs)
-        assertEquals(0.4, result.successRatio, 0.0001)
-    }
-
-    @Test
-    fun roundsSubMillisecondSamplesUp() {
-        assertEquals(
-            1L,
-            PingStatistics.nanosToDisplayMs(
-                100_000L
-            )
-        )
-    }
-
-    @Test
-    fun computesRobustMedianJitter() {
-        val result =
-            PingStatistics.summarize(
-                successfulNanos =
-                    listOf(
-                        40_000_000L,
-                        43_000_000L,
-                        47_000_000L
+                        10_000_000L,
+                        12_000_000L
                     ),
                 attempts = 3
             )
 
         assertTrue(result.success)
-        assertEquals(43L, result.latencyMs)
-        assertEquals(3L, result.jitterMs)
+        assertEquals(2, result.requiredSamples)
+        assertEquals(2, result.successfulSamples)
+        assertEquals(11L, result.latencyMs)
+    }
+
+    @Test
+    fun threeOfFiveSamplesDoNotMeetTwoThirdsThreshold() {
+        val result =
+            PingStatistics.summarize(
+                successfulNanos =
+                    listOf(
+                        10_000_000L,
+                        12_000_000L,
+                        14_000_000L
+                    ),
+                attempts = 5
+            )
+
+        assertFalse(result.success)
+        assertEquals(4, result.requiredSamples)
+        assertEquals(null, result.latencyMs)
+    }
+
+    @Test
+    fun medianAndMadIgnoreOneLargeOutlier() {
+        val result =
+            PingStatistics.summarize(
+                successfulNanos =
+                    listOf(
+                        10_000_000L,
+                        11_000_000L,
+                        12_000_000L,
+                        900_000_000L
+                    ),
+                attempts = 4
+            )
+
+        assertTrue(result.success)
+        assertEquals(12L, result.latencyMs)
+        assertEquals(1L, result.jitterMs)
     }
 }

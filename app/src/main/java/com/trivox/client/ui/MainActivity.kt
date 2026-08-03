@@ -73,6 +73,7 @@ import java.util.concurrent.Future
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.abs
 
 class MainActivity : ThemedActivity() {
     private lateinit var repository: ConfigRepository
@@ -101,7 +102,10 @@ class MainActivity : ThemedActivity() {
     private lateinit var refreshSubscriptionsButton: Button
     private lateinit var subscriptionUpdater: SubscriptionRefreshCoordinator
 
-    private val worker = Executors.newSingleThreadExecutor()
+    private val worker =
+        Executors.newSingleThreadExecutor()
+    private val latencyWorker =
+        Executors.newSingleThreadExecutor()
     private val storageWorker =
         Executors.newSingleThreadExecutor()
     private val handler = Handler(Looper.getMainLooper())
@@ -140,13 +144,44 @@ class MainActivity : ThemedActivity() {
     private var activeSubscriptionId: String? = null
     private var subscriptionTabsSignature = ""
     private var quickToolsExpanded = false
+    private var lastLivePingPersistAt = 0L
+    private var lastLivePingPersistMs: Long? = null
+    private var lastLivePingPersistProfileId:
+        String? = null
 
     private val filePicker =
-        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            uri?.let {
-                contentResolver.openInputStream(it)
-                    ?.bufferedReader()
-                    ?.use { reader -> importText(reader.readText()) }
+        registerForActivityResult(
+            ActivityResultContracts.OpenDocument()
+        ) { uri ->
+            uri ?: return@registerForActivityResult
+
+            worker.execute {
+                runCatching {
+                    contentResolver
+                        .openInputStream(uri)
+                        ?.bufferedReader()
+                        ?.use(
+                            ::readConfigurationText
+                        )
+                        ?: error(
+                            "Unable to open the selected file"
+                        )
+                }.onSuccess(
+                    ::importText
+                ).onFailure {
+                        throwable ->
+                    runOnUiThread {
+                        toast(
+                            getString(
+                                R.string.import_failed,
+                                throwable.message
+                                    ?: getString(
+                                        R.string.unknown_error
+                                    )
+                            )
+                        )
+                    }
+                }
             }
         }
 
@@ -798,7 +833,7 @@ class MainActivity : ThemedActivity() {
         val sessionId =
             snapshot.sessionId
 
-        worker.execute {
+        latencyWorker.execute {
             val settings =
                 settingsRepository
                     .load()
@@ -1310,6 +1345,41 @@ class MainActivity : ThemedActivity() {
         dialog.show()
     }
 
+    private fun readConfigurationText(
+        reader: java.io.Reader
+    ): String {
+        val output =
+            StringBuilder()
+        val buffer =
+            CharArray(16 * 1024)
+
+        while (true) {
+            val count =
+                reader.read(buffer)
+
+            if (count < 0) {
+                break
+            }
+
+            if (
+                output.length + count >
+                MAX_SHARED_INPUT_CHARS
+            ) {
+                throw IllegalArgumentException(
+                    "Configuration file exceeds the 4 MiB safety limit"
+                )
+            }
+
+            output.append(
+                buffer,
+                0,
+                count
+            )
+        }
+
+        return output.toString()
+    }
+
     private fun importText(text: String) {
         val single = text.trim()
         val subscription = runCatching { URI(single) }
@@ -1603,6 +1673,20 @@ class MainActivity : ThemedActivity() {
         generation: Long,
         immediate: Boolean = false
     ) {
+        if (immediate) {
+            /*
+             * A delayed flush may already own the scheduling flag. The old
+             * implementation discarded this final request, so the last batch
+             * results could stay buffered after controls were re-enabled.
+             */
+            handler.post {
+                drainPingResults(
+                    generation
+                )
+            }
+            return
+        }
+
         if (
             !pingFlushScheduled.compareAndSet(
                 false,
@@ -1615,55 +1699,66 @@ class MainActivity : ThemedActivity() {
         handler.postDelayed(
             {
                 pingFlushScheduled.set(false)
-
-                if (
-                    pingGeneration.get() !=
+                drainPingResults(
                     generation
-                ) {
-                    pingResultBuffer.clear()
-                    return@postDelayed
-                }
-
-                val results =
-                    HashMap(pingResultBuffer)
-                results.keys.forEach(
-                    pingResultBuffer::remove
                 )
+            },
+            PING_RESULT_FLUSH_MS
+        )
+    }
 
-                if (results.isEmpty()) {
-                    return@postDelayed
-                }
+    private fun drainPingResults(
+        generation: Long
+    ) {
+        if (
+            pingGeneration.get() !=
+            generation
+        ) {
+            pingResultBuffer.clear()
+            return
+        }
 
-                storageWorker.execute {
-                    repository.updateMany(
-                        results.keys
-                    ) { profile ->
-                        results[profile.id]
-                            ?.let {
-                                applyPingResultToProfile(
-                                    profile,
-                                    it
-                                )
-                            }
-                    }
+        val results =
+            HashMap(pingResultBuffer)
 
-                    runOnUiThread(::refresh)
+        results.keys.forEach(
+            pingResultBuffer::remove
+        )
 
-                    if (
-                        pingResultBuffer.isNotEmpty()
-                    ) {
-                        schedulePingFlush(
-                            generation
+        if (results.isEmpty()) {
+            return
+        }
+
+        storageWorker.execute {
+            if (
+                pingGeneration.get() !=
+                generation
+            ) {
+                return@execute
+            }
+
+            repository.updateMany(
+                results.keys
+            ) { profile ->
+                results[profile.id]
+                    ?.let {
+                        applyPingResultToProfile(
+                            profile,
+                            it
                         )
                     }
-                }
-            },
-            if (immediate) {
-                0L
-            } else {
-                PING_RESULT_FLUSH_MS
             }
-        )
+
+            runOnUiThread(::refresh)
+
+            if (
+                pingResultBuffer.isNotEmpty()
+            ) {
+                schedulePingFlush(
+                    generation
+                )
+            }
+        }
     }
 
     private fun selectFastestProfile() {
@@ -2519,7 +2614,7 @@ class MainActivity : ThemedActivity() {
                     return
                 }
 
-                worker.execute {
+                latencyWorker.execute {
                     val settings =
                         settingsRepository
                             .load()
@@ -2588,30 +2683,20 @@ class MainActivity : ThemedActivity() {
                         if (
                             result.success &&
                             result.latencyMs !=
-                            null
+                            null &&
+                            shouldPersistLivePing(
+                                profile.id,
+                                result
+                            )
                         ) {
                             repository.update(
                                 profile.id
                             ) {
                                 value ->
-                                value.latencyMs =
+                                applyPingResultToProfile(
+                                    value,
                                     result
-                                        .latencyMs
-                                value
-                                    .latencyJitterMs =
-                                    result
-                                        .jitterMs
-                                value
-                                    .latencySuccessRatio =
-                                    result
-                                        .successRatio
-                                value
-                                    .latencyMethod =
-                                    result.method
-                                value.testStatus =
-                                    TestStatus.ALIVE
-                                value.lastTestAt =
-                                    result.timestamp
+                                )
                             }
                         }
                     }
@@ -2641,6 +2726,45 @@ class MainActivity : ThemedActivity() {
                 }
             }
         }
+
+    private fun shouldPersistLivePing(
+        profileId: String,
+        result: PingResult
+    ): Boolean {
+        val latency =
+            result.latencyMs
+                ?: return false
+        val now =
+            System.currentTimeMillis()
+        val profileChanged =
+            lastLivePingPersistProfileId !=
+                profileId
+        val significantChange =
+            lastLivePingPersistMs
+                ?.let {
+                    abs(it - latency) >=
+                        LIVE_PING_SIGNIFICANT_CHANGE_MS
+                }
+                ?: true
+        val due =
+            now - lastLivePingPersistAt >=
+                LIVE_PING_PERSIST_INTERVAL_MS
+
+        if (
+            profileChanged ||
+            significantChange ||
+            due
+        ) {
+            lastLivePingPersistProfileId =
+                profileId
+            lastLivePingPersistMs =
+                latency
+            lastLivePingPersistAt = now
+            return true
+        }
+
+        return false
+    }
 
     private fun applyPingResultToProfile(
         profile: ConfigProfile,
@@ -2858,9 +2982,29 @@ class MainActivity : ThemedActivity() {
 
     private fun handleShareIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND) {
-            intent.getStringExtra(Intent.EXTRA_TEXT)
-                ?.takeIf(String::isNotBlank)
-                ?.let(::importText)
+            val shared =
+                intent.getStringExtra(
+                    Intent.EXTRA_TEXT
+                )
+                    ?.takeIf(String::isNotBlank)
+                    ?: return
+
+            if (
+                shared.length >
+                MAX_SHARED_INPUT_CHARS
+            ) {
+                Diagnostics.warning(
+                    "Rejected oversized shared configuration input"
+                )
+                toast(
+                    getString(
+                        R.string.invalid_config
+                    )
+                )
+                return
+            }
+
+            importText(shared)
         }
     }
 
@@ -2889,6 +3033,7 @@ class MainActivity : ThemedActivity() {
         pingManager.close()
         subscriptionUpdater.close()
         worker.shutdownNow()
+        latencyWorker.shutdownNow()
         storageWorker.shutdownNow()
         super.onDestroy()
     }
@@ -2902,9 +3047,14 @@ class MainActivity : ThemedActivity() {
         private const val MENU_SETTINGS = 105
         private const val MENU_ROUTING = 106
         private const val MENU_DIAGNOSTICS = 107
-        private const val LIVE_PING_INTERVAL_MS = 8_000L
+        private const val LIVE_PING_INTERVAL_MS =
+            8_000L
+        private const val LIVE_PING_PERSIST_INTERVAL_MS =
+            60_000L
+        private const val LIVE_PING_SIGNIFICANT_CHANGE_MS =
+            50L
         private const val LIVE_PING_URL =
-            "http://www.google.com/gen_204"
+            "https://cp.cloudflare.com/generate_204"
         private const val CONNECTION_ACTION_COOLDOWN_MS = 1_500L
         private const val PROFILE_SWITCH_DELAY_MS = 350L
         private const val PING_RESULT_FLUSH_MS = 220L
@@ -2913,7 +3063,10 @@ class MainActivity : ThemedActivity() {
             "active_subscription_id"
         private const val KEY_QUICK_TOOLS_EXPANDED =
             "quick_tools_expanded"
-        private const val EXIT_CACHE_MS = 10 * 60 * 1_000L
+        private const val EXIT_CACHE_MS =
+            10 * 60 * 1_000L
+        private const val MAX_SHARED_INPUT_CHARS =
+            4 * 1024 * 1024
 
         private val SHARE_SCHEMES = setOf(
             "vless",

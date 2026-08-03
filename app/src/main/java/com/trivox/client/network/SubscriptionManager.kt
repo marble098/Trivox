@@ -11,14 +11,39 @@ class SubscriptionManager {
     data class Result(val profiles: List<ConfigProfile>, val finalUrl: String)
 
     fun fetch(url: String): Result {
-        val uri = runCatching { URI(url) }.getOrElse { throw IOException("Invalid subscription URL") }
-        require(uri.scheme == "https") { "Only HTTPS subscription URLs are accepted" }
+        val uri =
+            runCatching {
+                URI(url)
+            }.getOrElse {
+                throw IOException(
+                    "Invalid subscription URL"
+                )
+            }
+
+        require(
+            uri.scheme.equals(
+                "https",
+                ignoreCase = true
+            )
+        ) {
+            "Only HTTPS subscription URLs are accepted"
+        }
+        require(
+            !uri.host.isNullOrBlank() &&
+                uri.userInfo == null &&
+                uri.fragment == null
+        ) {
+            "Subscription URL must contain a host and no credentials or fragment"
+        }
         var current = uri.toURL()
         repeat(6) {
             val connection = (current.openConnection() as HttpURLConnection).apply {
                 instanceFollowRedirects = false; connectTimeout = 10_000; readTimeout = 20_000
                 setRequestProperty("Accept", "text/plain, application/json;q=0.9, */*;q=0.1")
-                setRequestProperty("User-Agent", "Trivox/0.1")
+                setRequestProperty(
+                    "User-Agent",
+                    "Trivox/3"
+                )
             }
             try {
                 val code = connection.responseCode

@@ -197,10 +197,10 @@
     <string name="ping_method_tcp">TCP مقصد</string>
     <string name="ping_method_xray">پینگ Alive (مسیر کامل)</string>
     <string name="ping_method_tcp_summary">زمان اتصال مستقیم TCP به مقصد سرور را اندازه می‌گیرد. مقدار بسیار کم برای سرور نزدیک یا لبه CDN می‌تواند واقعی باشد و تأخیر کامل تونل نیست. نتیجه‌های مشکوک کم به‌صورت خودکار دوباره بررسی می‌شوند.</string>
-    <string name="ping_method_xray_summary">کل مسیر Xray را با درخواست HTTP بدون کش آزمایش می‌کند. پاسخ Google gen_204 فقط با کد دقیق ۲۰۴ معتبر شناخته می‌شود.</string>
+    <string name="ping_method_xray_summary">کل مسیر Xray را با چند مقصد اتصال معتبر، بدون کش و با جایگزینی خودکار مقصدهای مسدود یا ناسالم آزمایش می‌کند. مسیرهای generate_204 فقط با پاسخ دقیق ۲۰۴ معتبرند.</string>
     <string name="ping_attempts">تعداد نمونه در هر آزمایش</string>
     <string name="ping_test_url">آدرس آزمایش HTTP</string>
-    <string name="ping_test_url_hint">http://www.google.com/gen_204</string>
+    <string name="ping_test_url_hint">https://cp.cloudflare.com/generate_204</string>
     <string name="invalid_test_url">یک آدرس معتبر HTTP یا HTTPS وارد کنید.</string>
     <string name="xray_ping_requires_disconnect">برای آزمایش کانفیگ‌ها با Xray HTTP ابتدا اتصال را قطع کنید. پینگ زنده از پروکسی محلی اتصال فعال ادامه دارد.</string>
     <string name="ping_method_tcp_short">TCP</string>

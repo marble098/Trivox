@@ -23,6 +23,12 @@ object ConfigParser {
     )
 
     fun parseText(input: String): List<ConfigProfile> {
+        if (input.length > MAX_INPUT_CHARS) {
+            throw ConfigParseException(
+                "Configuration input exceeds the ${MAX_INPUT_CHARS / 1024} KiB safety limit"
+            )
+        }
+
         val text = input.trim().removePrefix("\uFEFF")
 
         if (text.isBlank()) {
@@ -33,11 +39,8 @@ object ConfigParser {
             return listOf(parseJson(text))
         }
 
-        val directLines = text
-            .lineSequence()
-            .map(String::trim)
-            .filter(String::isNotEmpty)
-            .toList()
+        val directLines =
+            boundedLines(text)
 
         val candidates = if (directLines.any { "://" in it }) {
             directLines
@@ -47,11 +50,7 @@ object ConfigParser {
                     "Input is neither a supported URI, Xray JSON, nor Base64 subscription content"
                 )
 
-            decoded
-                .lineSequence()
-                .map(String::trim)
-                .filter(String::isNotEmpty)
-                .toList()
+            boundedLines(decoded)
         }
 
         val unique = LinkedHashMap<String, ConfigProfile>()
@@ -64,7 +63,10 @@ object ConfigParser {
                 }.onSuccess {
                     unique.putIfAbsent(normalizeRaw(it.raw), it)
                 }.onFailure {
-                    errors += it.message ?: "Invalid JSON"
+                    addError(
+                        errors,
+                        it.message ?: "Invalid JSON"
+                    )
                 }
 
                 continue
@@ -79,7 +81,10 @@ object ConfigParser {
             }
 
             if (scheme !in supported) {
-                errors += "Unsupported scheme '$scheme' for the Xray adapter: ${line.take(80)}"
+                addError(
+                    errors,
+                    "Unsupported scheme '$scheme' for the Xray adapter"
+                )
                 continue
             }
 
@@ -88,7 +93,16 @@ object ConfigParser {
             }.onSuccess {
                 unique.putIfAbsent(normalizeRaw(it.raw), it)
             }.onFailure {
-                errors += it.message ?: "Malformed $scheme URI"
+                addError(
+                    errors,
+                    it.message ?: "Malformed $scheme URI"
+                )
+            }
+
+            if (unique.size > MAX_PROFILES) {
+                throw ConfigParseException(
+                    "Subscription contains more than $MAX_PROFILES unique profiles"
+                )
             }
         }
 
@@ -104,6 +118,10 @@ object ConfigParser {
     }
 
     fun decodeBase64OrNull(value: String): String? {
+        if (value.length > MAX_INPUT_CHARS) {
+            return null
+        }
+
         val compact = value.filterNot(Char::isWhitespace)
 
         if (compact.isBlank() || compact.length < 4) {
@@ -128,6 +146,12 @@ object ConfigParser {
     }
 
     fun parseUri(raw: String): ConfigProfile {
+        if (raw.length > MAX_LINE_CHARS) {
+            throw ConfigParseException(
+                "Configuration URI exceeds the ${MAX_LINE_CHARS / 1024} KiB safety limit"
+            )
+        }
+
         return when (
             raw.substringBefore("://").lowercase()
         ) {
@@ -139,12 +163,18 @@ object ConfigParser {
             "http", "https" -> parseHttp(raw)
 
             else -> throw ConfigParseException(
-                "Unsupported scheme in URI: ${raw.take(80)}"
+                "Unsupported configuration scheme"
             )
         }
     }
 
     fun parseJson(raw: String): ConfigProfile {
+        if (raw.length > MAX_JSON_CHARS) {
+            throw ConfigParseException(
+                "Xray JSON exceeds the ${MAX_JSON_CHARS / 1024} KiB safety limit"
+            )
+        }
+
         val root = runCatching {
             JSONObject(raw)
         }.getOrElse {
@@ -1077,9 +1107,12 @@ object ConfigParser {
                         endpoint,
                         "WireGuard"
                     )
-                }.getOrDefault(
-                    endpoint to 51820
-                )
+                }.getOrElse {
+                    parseEndpointWithDefaultPort(
+                        endpoint,
+                        51820
+                    )
+                }
             }
         }
 
@@ -1096,12 +1129,118 @@ object ConfigParser {
     }
 
     private fun decode(value: String): String {
+        /*
+         * Proxy URIs use RFC 3986 components. A literal '+' is data, not a
+         * form-encoded space; URLDecoder would otherwise corrupt passwords,
+         * UUID material and fragments.
+         */
         return runCatching {
             URLDecoder.decode(
-                value,
+                value.replace(
+                    "+",
+                    "%2B"
+                ),
                 StandardCharsets.UTF_8.name()
             )
         }.getOrDefault(value)
+    }
+
+    private fun boundedLines(
+        value: String
+    ): List<String> {
+        val result =
+            ArrayList<String>()
+
+        value.lineSequence()
+            .forEach {
+                    rawLine ->
+                val line =
+                    rawLine.trim()
+
+                if (line.isBlank()) {
+                    return@forEach
+                }
+
+                if (line.length > MAX_LINE_CHARS) {
+                    throw ConfigParseException(
+                        "A subscription line exceeds the ${MAX_LINE_CHARS / 1024} KiB safety limit"
+                    )
+                }
+
+                result += line
+
+                if (
+                    result.size >
+                    MAX_PROFILE_CANDIDATES
+                ) {
+                    throw ConfigParseException(
+                        "Subscription contains more than $MAX_PROFILE_CANDIDATES candidate lines"
+                    )
+                }
+            }
+
+        return result
+    }
+
+    private fun addError(
+        errors: MutableList<String>,
+        message: String
+    ) {
+        if (errors.size < MAX_REPORTED_ERRORS) {
+            errors +=
+                message
+                    .replace(
+                        Regex(
+                            "(?i)(token|password|secret|uuid)=([^&\\s]+)"
+                        ),
+                        "$1=<redacted>"
+                    )
+                    .take(MAX_ERROR_CHARS)
+        }
+    }
+
+    private fun parseEndpointWithDefaultPort(
+        value: String,
+        defaultPort: Int
+    ): Pair<String, Int> {
+        val clean =
+            value.trim()
+                .substringBefore('?')
+
+        if (clean.startsWith('[')) {
+            val end =
+                clean.indexOf(']')
+
+            if (end > 1) {
+                return clean
+                    .substring(
+                        1,
+                        end
+                    ) to defaultPort
+            }
+        }
+
+        if (
+            clean.count {
+                it == ':'
+            } > 1
+        ) {
+            return clean to defaultPort
+        }
+
+        val host =
+            clean.substringBeforeLast(
+                ':',
+                clean
+            ).trim()
+
+        if (host.isBlank()) {
+            throw ConfigParseException(
+                "WireGuard endpoint is missing"
+            )
+        }
+
+        return host to defaultPort
     }
 
     private fun decodeAnyBase64(
@@ -1132,4 +1271,19 @@ object ConfigParser {
     private fun normalizeRaw(raw: String): String {
         return raw.trim()
     }
+
+    private const val MAX_INPUT_CHARS =
+        4 * 1024 * 1024
+    private const val MAX_JSON_CHARS =
+        2 * 1024 * 1024
+    private const val MAX_LINE_CHARS =
+        64 * 1024
+    private const val MAX_PROFILE_CANDIDATES =
+        10_000
+    private const val MAX_PROFILES =
+        8_000
+    private const val MAX_REPORTED_ERRORS =
+        20
+    private const val MAX_ERROR_CHARS =
+        240
 }

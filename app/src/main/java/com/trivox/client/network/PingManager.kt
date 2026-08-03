@@ -10,6 +10,8 @@ import com.trivox.client.data.PingResult
 import java.io.File
 import java.net.ConnectException
 import java.net.HttpURLConnection
+import java.net.Inet4Address
+import java.net.Inet6Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Proxy
@@ -19,12 +21,16 @@ import java.net.URI
 import java.net.UnknownHostException
 import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.Future
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SNIHostName
 import javax.net.ssl.SSLParameters
@@ -45,12 +51,19 @@ class PingManager(
             namedFactory("trivox-xray-ping")
         )
     private val resolverExecutor =
-        Executors.newFixedThreadPool(
-            MAX_DNS_WORKERS,
-            namedFactory("trivox-dns")
+        AtomicReference<ExecutorService>(
+            newResolverExecutor()
         )
+    private val resolverRotationAt =
+        AtomicLong(0L)
     private val dnsCache =
         ConcurrentHashMap<String, CachedAddresses>()
+    private val negativeDnsCache =
+        ConcurrentHashMap<String, Long>()
+    private val preferredXrayTarget =
+        AtomicReference<String?>(null)
+    private val preferredLocalProxyTarget =
+        AtomicReference<String?>(null)
 
     fun measure(
         profile: ConfigProfile,
@@ -261,19 +274,13 @@ class PingManager(
                 errorCategory =
                     "core_unavailable"
             )
+        val targets =
+            connectivityTargets(
+                settings.testUrl,
+                preferredXrayTarget.get()
+            )
 
-        val uri =
-            runCatching {
-                URI(settings.testUrl)
-            }.getOrNull()
-
-        if (
-            uri == null ||
-            uri.host.isNullOrBlank() ||
-            uri.scheme
-                ?.lowercase() !in
-                setOf("http", "https")
-        ) {
+        if (targets.isEmpty()) {
             return PingResult(
                 method =
                     PingMethod
@@ -291,7 +298,7 @@ class PingManager(
         }
 
         val count =
-            attempts.coerceIn(3, 5)
+            attempts.coerceIn(2, 5)
         val boundedTimeout =
             timeoutSeconds.coerceIn(3, 15)
         val configFile =
@@ -310,11 +317,12 @@ class PingManager(
                     System.nanoTime() +
                     ".json"
             )
-
         val samples =
             mutableListOf<Long>()
         var lastError =
             "xray_test_failure"
+        var activeTarget:
+            String? = null
 
         return try {
             workDir.mkdirs()
@@ -328,7 +336,8 @@ class PingManager(
             )
 
             fun collect(sampleCount: Int) {
-                repeat(sampleCount) { index ->
+                repeat(sampleCount) {
+                        sampleIndex ->
                     if (
                         Thread.currentThread()
                             .isInterrupted
@@ -336,39 +345,85 @@ class PingManager(
                         return
                     }
 
-                    val xrayRequestUrl =
-                        cacheBustedUrl(
+                    val orderedTargets =
+                        connectivityTargets(
                             settings.testUrl,
-                            timestamp +
-                                samples.size +
-                                index
+                            activeTarget
+                                ?: preferredXrayTarget
+                                    .get()
                         )
-                    val result =
-                        adapter.realDelay(
-                            configFile.absolutePath,
-                            boundedTimeout,
-                            xrayRequestUrl
-                        )
-                    val delay =
-                        parseXrayDelay(
-                            result.data,
-                            boundedTimeout
-                        )
+                    var accepted = false
 
-                    if (
-                        result.success &&
-                        delay != null
-                    ) {
-                        samples +=
-                            delay *
-                                NANOS_PER_MILLISECOND
-                    } else {
-                        lastError =
-                            result.error
-                                .ifBlank {
-                                    "xray_test_failure"
+                    orderedTargets
+                        .take(MAX_HTTP_TARGETS_PER_SAMPLE)
+                        .forEachIndexed {
+                                targetIndex,
+                                target ->
+                            if (
+                                accepted ||
+                                Thread.currentThread()
+                                    .isInterrupted
+                            ) {
+                                return@forEachIndexed
+                            }
+
+                            val targetTimeout =
+                                if (targetIndex == 0) {
+                                    boundedTimeout
+                                } else {
+                                    boundedTimeout
+                                        .coerceAtMost(
+                                            FALLBACK_TARGET_TIMEOUT_SECONDS
+                                        )
                                 }
-                    }
+                            val result =
+                                adapter.realDelay(
+                                    configFile.absolutePath,
+                                    targetTimeout,
+                                    cacheBustedUrl(
+                                        target,
+                                        timestamp +
+                                            samples.size +
+                                            sampleIndex +
+                                            targetIndex
+                                    )
+                                )
+                            val delay =
+                                parseXrayDelay(
+                                    result.data,
+                                    targetTimeout
+                                )
+
+                            if (
+                                result.success &&
+                                delay != null
+                            ) {
+                                samples +=
+                                    delay *
+                                        NANOS_PER_MILLISECOND
+                                activeTarget = target
+                                preferredXrayTarget
+                                    .set(target)
+                                accepted = true
+                            } else {
+                                lastError =
+                                    classifyXrayFailure(
+                                        result.error
+                                    )
+
+                                if (
+                                    preferredXrayTarget
+                                        .get() ==
+                                    target
+                                ) {
+                                    preferredXrayTarget
+                                        .compareAndSet(
+                                            target,
+                                            null
+                                        )
+                                }
+                            }
+                        }
                 }
             }
 
@@ -383,9 +438,11 @@ class PingManager(
             if (
                 summary.success &&
                 (summary.latencyMs ?: Long.MAX_VALUE) <
-                    LOW_LATENCY_RECHECK_THRESHOLD_MS
+                LOW_LATENCY_RECHECK_THRESHOLD_MS
             ) {
-                collect(LOW_LATENCY_RECHECK_ATTEMPTS)
+                collect(
+                    LOW_LATENCY_RECHECK_ATTEMPTS
+                )
                 totalAttempts +=
                     LOW_LATENCY_RECHECK_ATTEMPTS
                 summary =
@@ -501,39 +558,44 @@ class PingManager(
         val timestamp =
             System.currentTimeMillis()
         val count =
-            attempts.coerceIn(3, 5)
+            attempts.coerceIn(2, 5)
         val boundedTimeout =
             timeoutMs.coerceIn(
                 1_500,
                 15_000
             )
-        val uri =
-            runCatching {
-                URI(url)
-            }.getOrNull()
+        val baseTargets =
+            connectivityTargets(
+                url,
+                preferredLocalProxyTarget
+                    .get()
+            )
 
-        if (
-            uri == null ||
-            uri.host.isNullOrBlank() ||
-            uri.scheme
-                ?.lowercase() !in
-                setOf("http", "https")
-        ) {
+        if (baseTargets.isEmpty()) {
             return PingResult(
-                method = PingMethod.XRAY_HTTP.name,
+                method =
+                    PingMethod
+                        .XRAY_HTTP
+                        .name,
                 success = false,
                 latencyMs = null,
                 jitterMs = null,
                 successRatio = 0.0,
                 resolvedIp = "127.0.0.1",
                 timestamp = timestamp,
-                errorCategory = "invalid_test_url"
+                errorCategory =
+                    "invalid_test_url"
             )
         }
 
-        var samples = mutableListOf<Long>()
-        var lastFailure: Throwable? = null
-        var activeProxyType = Proxy.Type.HTTP
+        var samples =
+            mutableListOf<Long>()
+        var lastFailure:
+            Throwable? = null
+        var activeProxyType =
+            Proxy.Type.HTTP
+        var activeTarget:
+            String? = null
 
         fun runSamples(
             proxyType: Proxy.Type,
@@ -541,93 +603,90 @@ class PingManager(
         ) {
             activeProxyType = proxyType
 
-            repeat(sampleCount) { index ->
-                if (Thread.currentThread().isInterrupted) {
+            repeat(sampleCount) {
+                    sampleIndex ->
+                if (
+                    Thread.currentThread()
+                        .isInterrupted
+                ) {
                     return
                 }
 
-                var connection: HttpURLConnection? = null
+                val targets =
+                    connectivityTargets(
+                        url,
+                        activeTarget
+                            ?: preferredLocalProxyTarget
+                                .get()
+                    )
+                var accepted = false
 
-                try {
-                    val proxy =
-                        Proxy(
-                            proxyType,
-                            InetSocketAddress(
-                                "127.0.0.1",
-                                settings.socksPort
+                targets
+                    .take(
+                        MAX_HTTP_TARGETS_PER_SAMPLE
+                    )
+                    .forEachIndexed {
+                            targetIndex,
+                            target ->
+                        if (
+                            accepted ||
+                            Thread.currentThread()
+                                .isInterrupted
+                        ) {
+                            return@forEachIndexed
+                        }
+
+                        val result =
+                            probeViaLocalProxy(
+                                settings = settings,
+                                proxyType =
+                                    proxyType,
+                                url = target,
+                                timeoutMs =
+                                    if (
+                                        targetIndex == 0
+                                    ) {
+                                        boundedTimeout
+                                    } else {
+                                        boundedTimeout
+                                            .coerceAtMost(
+                                                FALLBACK_TARGET_TIMEOUT_MS
+                                            )
+                                    },
+                                nonce =
+                                    timestamp +
+                                        sampleIndex +
+                                        samples.size +
+                                        targetIndex
                             )
-                        )
-                    val requestUrl =
-                        cacheBustedUrl(
-                            url,
-                            timestamp +
-                                samples.size +
-                                index
-                        )
-                    connection =
-                        URI(requestUrl)
-                            .toURL()
-                            .openConnection(proxy) as
-                            HttpURLConnection
-                    connection.connectTimeout =
-                        boundedTimeout
-                    connection.readTimeout =
-                        boundedTimeout
-                    connection.instanceFollowRedirects =
-                        false
-                    connection.useCaches = false
-                    connection.requestMethod = "GET"
-                    connection.setRequestProperty(
-                        "Connection",
-                        "close"
-                    )
-                    connection.setRequestProperty(
-                        "Cache-Control",
-                        "no-cache, no-store, max-age=0"
-                    )
-                    connection.setRequestProperty(
-                        "Pragma",
-                        "no-cache"
-                    )
-                    connection.setRequestProperty(
-                        "Accept",
-                        "*/*"
-                    )
-                    connection.setRequestProperty(
-                        "User-Agent",
-                        "Trivox-AlivePing/3"
-                    )
-                    connection.setRequestProperty(
-                        "X-Trivox-Ping",
-                        (timestamp + index).toString()
-                    )
 
-                    val startNanos =
-                        System.nanoTime()
-                    val code =
-                        connection.responseCode
-                    val elapsed =
-                        System.nanoTime() - startNanos
+                        if (
+                            result.elapsedNanos !=
+                            null
+                        ) {
+                            samples +=
+                                result.elapsedNanos
+                            activeTarget = target
+                            preferredLocalProxyTarget
+                                .set(target)
+                            accepted = true
+                        } else {
+                            lastFailure =
+                                result.failure
 
-                    if (isExpectedHttpResponse(uri, code)) {
-                        samples += elapsed
-                    } else {
-                        lastFailure =
-                            IllegalStateException(
-                                "Unexpected HTTP status $code"
-                            )
+                            if (
+                                preferredLocalProxyTarget
+                                    .get() ==
+                                target
+                            ) {
+                                preferredLocalProxyTarget
+                                    .compareAndSet(
+                                        target,
+                                        null
+                                    )
+                            }
+                        }
                     }
-                } catch (throwable: Throwable) {
-                    lastFailure = throwable
-                } finally {
-                    runCatching {
-                        connection?.inputStream?.close()
-                    }
-                    runCatching {
-                        connection?.errorStream?.close()
-                    }
-                    connection?.disconnect()
-                }
             }
         }
 
@@ -645,6 +704,8 @@ class PingManager(
         if (!summary.success) {
             samples = mutableListOf()
             lastFailure = null
+            activeTarget = null
+
             runSamples(
                 Proxy.Type.SOCKS,
                 count
@@ -660,7 +721,7 @@ class PingManager(
         if (
             summary.success &&
             (summary.latencyMs ?: Long.MAX_VALUE) <
-                LOW_LATENCY_RECHECK_THRESHOLD_MS
+            LOW_LATENCY_RECHECK_THRESHOLD_MS
         ) {
             runSamples(
                 activeProxyType,
@@ -676,11 +737,15 @@ class PingManager(
         }
 
         return PingResult(
-            method = PingMethod.XRAY_HTTP.name,
+            method =
+                PingMethod
+                    .XRAY_HTTP
+                    .name,
             success = summary.success,
             latencyMs = summary.latencyMs,
             jitterMs = summary.jitterMs,
-            successRatio = summary.successRatio,
+            successRatio =
+                summary.successRatio,
             resolvedIp = "127.0.0.1",
             timestamp = timestamp,
             errorCategory =
@@ -697,6 +762,150 @@ class PingManager(
         )
     }
 
+    private fun probeViaLocalProxy(
+        settings: AppSettings,
+        proxyType: Proxy.Type,
+        url: String,
+        timeoutMs: Int,
+        nonce: Long
+    ): HttpProbe {
+        var connection:
+            HttpURLConnection? = null
+
+        return try {
+            val uri =
+                URI(url)
+            val proxy =
+                Proxy(
+                    proxyType,
+                    InetSocketAddress(
+                        "127.0.0.1",
+                        settings.socksPort
+                    )
+                )
+            connection =
+                URI(
+                    cacheBustedUrl(
+                        url,
+                        nonce
+                    )
+                ).toURL()
+                    .openConnection(
+                        proxy
+                    ) as
+                    HttpURLConnection
+            connection.connectTimeout =
+                timeoutMs
+            connection.readTimeout =
+                timeoutMs
+            connection.instanceFollowRedirects =
+                false
+            connection.useCaches = false
+            connection.requestMethod = "GET"
+            connection.setRequestProperty(
+                "Connection",
+                "close"
+            )
+            connection.setRequestProperty(
+                "Cache-Control",
+                "no-cache, no-store, max-age=0"
+            )
+            connection.setRequestProperty(
+                "Pragma",
+                "no-cache"
+            )
+            connection.setRequestProperty(
+                "Accept",
+                "*/*"
+            )
+            connection.setRequestProperty(
+                "User-Agent",
+                "Trivox-AlivePing/4"
+            )
+
+            val startNanos =
+                System.nanoTime()
+            val code =
+                connection.responseCode
+            val elapsed =
+                (
+                    System.nanoTime() -
+                        startNanos
+                    ).coerceAtLeast(1L)
+
+            if (
+                isExpectedHttpResponse(
+                    uri,
+                    code
+                )
+            ) {
+                HttpProbe(
+                    elapsedNanos = elapsed
+                )
+            } else {
+                HttpProbe(
+                    failure =
+                        IllegalStateException(
+                            "Unexpected HTTP status $code"
+                        )
+                )
+            }
+        } catch (
+            throwable: Throwable
+        ) {
+            HttpProbe(
+                failure = throwable
+            )
+        } finally {
+            runCatching {
+                connection?.inputStream
+                    ?.close()
+            }
+            runCatching {
+                connection?.errorStream
+                    ?.close()
+            }
+            connection?.disconnect()
+        }
+    }
+
+    private fun connectivityTargets(
+        primary: String,
+        preferred: String?
+    ): List<String> =
+        buildList {
+            preferred
+                ?.takeIf(::isValidHttpUrl)
+                ?.let(::add)
+            primary
+                .takeIf(::isValidHttpUrl)
+                ?.let(::add)
+            FALLBACK_CONNECTIVITY_URLS
+                .forEach {
+                    if (isValidHttpUrl(it)) {
+                        add(it)
+                    }
+                }
+        }.distinct()
+
+    private fun isValidHttpUrl(
+        value: String
+    ): Boolean =
+        runCatching {
+            val uri =
+                URI(value)
+
+            uri.host
+                .orEmpty()
+                .isNotBlank() &&
+                uri.scheme
+                    ?.lowercase() in
+                    setOf(
+                        "http",
+                        "https"
+                    )
+        }.getOrDefault(false)
+
     private fun cacheBustedUrl(
         url: String,
         nonce: Long
@@ -711,14 +920,17 @@ class PingManager(
         uri: URI,
         statusCode: Int
     ): Boolean {
-        val googleGenerate204 =
-            uri.host.equals(
-                "www.google.com",
+        val generate204 =
+            uri.path.equals(
+                "/gen_204",
                 ignoreCase = true
-            ) &&
-                uri.path == "/gen_204"
+            ) ||
+                uri.path.equals(
+                    "/generate_204",
+                    ignoreCase = true
+                )
 
-        return if (googleGenerate204) {
+        return if (generate204) {
             statusCode == 204
         } else {
             statusCode in 200..399
@@ -1038,8 +1250,26 @@ class PingManager(
     override fun close() {
         tcpExecutor.shutdownNow()
         xrayExecutor.shutdownNow()
-        resolverExecutor.shutdownNow()
+        resolverExecutor
+            .getAndSet(
+                Executors
+                    .newSingleThreadExecutor {
+                        runnable ->
+                        Thread(
+                            runnable,
+                            "trivox-dns-closed"
+                        ).apply {
+                            isDaemon = true
+                        }
+                    }
+            )
+            .shutdownNow()
+        resolverExecutor.get()
+            .shutdownNow()
         dnsCache.clear()
+        negativeDnsCache.clear()
+        preferredXrayTarget.set(null)
+        preferredLocalProxyTarget.set(null)
     }
 
     private fun resolveAll(
@@ -1047,7 +1277,8 @@ class PingManager(
         timeoutMs: Int
     ): List<InetAddress> {
         val normalized =
-            host.trim().lowercase()
+            host.trim()
+                .lowercase()
         val now =
             System.currentTimeMillis()
         val cached =
@@ -1061,18 +1292,74 @@ class PingManager(
             return cached.addresses
         }
 
+        val negativeAt =
+            negativeDnsCache[normalized]
+
+        if (
+            negativeAt != null &&
+            now - negativeAt <
+            NEGATIVE_DNS_CACHE_TTL_MS
+        ) {
+            throw UnknownHostException(
+                "Recent DNS failure for $host"
+            )
+        }
+
+        val executor =
+            resolverExecutor.get()
         val task =
-            resolverExecutor.submit<
-                List<InetAddress>
-                > {
-                InetAddress
-                    .getAllByName(host)
-                    .distinctBy {
-                        it.hostAddress
-                    }
-                    .take(
-                        MAX_RESOLVED_ADDRESSES
-                    )
+            try {
+                executor.submit<
+                    List<InetAddress>
+                    > {
+                    val allowPrivate =
+                        allowsPrivateResolution(
+                            normalized
+                        )
+
+                    InetAddress
+                        .getAllByName(host)
+                        .asSequence()
+                        .filter {
+                            allowPrivate ||
+                                !isPrivateOrLocal(
+                                    it
+                                )
+                        }
+                        .distinctBy {
+                            it.hostAddress
+                        }
+                        .sortedWith(
+                            compareBy<InetAddress> {
+                                if (
+                                    it is Inet4Address
+                                ) {
+                                    0
+                                } else {
+                                    1
+                                }
+                            }.thenBy {
+                                it.hostAddress
+                            }
+                        )
+                        .take(
+                            MAX_RESOLVED_ADDRESSES
+                        )
+                        .toList()
+                }
+            } catch (
+                rejected:
+                    RejectedExecutionException
+            ) {
+                rotateResolverExecutor(
+                    executor
+                )
+
+                throw SocketTimeoutException(
+                    "DNS resolver is saturated"
+                ).apply {
+                    initCause(rejected)
+                }
             }
 
         return try {
@@ -1087,6 +1374,8 @@ class PingManager(
                 it.isNotEmpty()
             }
                 ?.also {
+                    negativeDnsCache
+                        .remove(normalized)
                     dnsCache[normalized] =
                         CachedAddresses(
                             addresses = it,
@@ -1094,15 +1383,162 @@ class PingManager(
                         )
                 }
                 ?: throw UnknownHostException(
-                    host
+                    "No safe address for $host"
                 )
         } catch (
-            _: TimeoutException
+            timeout: TimeoutException
         ) {
             task.cancel(true)
+            negativeDnsCache[normalized] =
+                now
+            rotateResolverExecutor(
+                executor
+            )
+
             throw SocketTimeoutException(
                 "DNS resolution timed out"
+            ).apply {
+                initCause(timeout)
+            }
+        } catch (
+            throwable: Throwable
+        ) {
+            negativeDnsCache[normalized] =
+                now
+            throw throwable
+        }
+    }
+
+    private fun rotateResolverExecutor(
+        stale: ExecutorService
+    ) {
+        val now =
+            System.currentTimeMillis()
+        val previous =
+            resolverRotationAt.get()
+
+        if (
+            now - previous <
+            RESOLVER_ROTATION_COOLDOWN_MS ||
+            !resolverRotationAt
+                .compareAndSet(
+                    previous,
+                    now
+                )
+        ) {
+            return
+        }
+
+        val replacement =
+            newResolverExecutor()
+
+        if (
+            resolverExecutor
+                .compareAndSet(
+                    stale,
+                    replacement
+                )
+        ) {
+            stale.shutdownNow()
+        } else {
+            replacement.shutdownNow()
+        }
+    }
+
+    private fun newResolverExecutor():
+        ExecutorService =
+        Executors.newFixedThreadPool(
+            MAX_DNS_WORKERS,
+            namedFactory(
+                "trivox-dns"
             )
+        )
+
+    private fun allowsPrivateResolution(
+        host: String
+    ): Boolean =
+        isLiteralAddress(host) ||
+            host == "localhost" ||
+            host.endsWith(".local") ||
+            host.endsWith(".lan") ||
+            host.endsWith(".home.arpa")
+
+    private fun isLiteralAddress(
+        host: String
+    ): Boolean {
+        if (
+            host.count {
+                it == '.'
+            } == 3 &&
+            host.split('.')
+                .all {
+                    it.toIntOrNull() in
+                        0..255
+                }
+        ) {
+            return true
+        }
+
+        return ':' in host
+    }
+
+    private fun isPrivateOrLocal(
+        address: InetAddress
+    ): Boolean {
+        if (
+            address.isAnyLocalAddress ||
+            address.isLoopbackAddress ||
+            address.isLinkLocalAddress ||
+            address.isSiteLocalAddress ||
+            address.isMulticastAddress
+        ) {
+            return true
+        }
+
+        return when (address) {
+            is Inet4Address -> {
+                val bytes =
+                    address.address.map {
+                        it.toInt() and 0xff
+                    }
+
+                bytes[0] == 0 ||
+                    bytes[0] == 10 ||
+                    bytes[0] == 127 ||
+                    (
+                        bytes[0] == 100 &&
+                        bytes[1] in 64..127
+                        ) ||
+                    (
+                        bytes[0] == 169 &&
+                        bytes[1] == 254
+                        ) ||
+                    (
+                        bytes[0] == 172 &&
+                        bytes[1] in 16..31
+                        ) ||
+                    (
+                        bytes[0] == 192 &&
+                        bytes[1] == 168
+                        ) ||
+                    bytes[0] >= 224
+            }
+
+            is Inet6Address -> {
+                val bytes =
+                    address.address
+
+                address.isIPv4CompatibleAddress ||
+                    (
+                        bytes.isNotEmpty() &&
+                        (
+                            bytes[0].toInt() and
+                                0xfe
+                            ) == 0xfc
+                        )
+            }
+
+            else -> true
         }
     }
 
@@ -1175,6 +1611,46 @@ class PingManager(
                         .toLong() *
                         1_000L
                     )
+        }
+    }
+
+    private fun classifyXrayFailure(
+        message: String
+    ): String {
+        val normalized =
+            message.lowercase()
+
+        return when {
+            normalized.isBlank() ->
+                "xray_test_failure"
+
+            "no such host" in
+                normalized ||
+                "lookup " in
+                normalized ->
+                "dns_failure"
+
+            "deadline exceeded" in
+                normalized ||
+                "timeout" in normalized ->
+                "timeout"
+
+            "connection refused" in
+                normalized ->
+                "connection_refused"
+
+            "connection abort" in
+                normalized ||
+                "closed pipe" in
+                normalized ->
+                "connection_aborted"
+
+            "illegal base64" in
+                normalized ->
+                "invalid_credentials"
+
+            else ->
+                "xray_test_failure"
         }
     }
 
@@ -1267,6 +1743,11 @@ class PingManager(
         }
     }
 
+    private data class HttpProbe(
+        val elapsedNanos: Long? = null,
+        val failure: Throwable? = null
+    )
+
     private data class CachedAddresses(
         val addresses: List<InetAddress>,
         val storedAt: Long
@@ -1296,7 +1777,29 @@ class PingManager(
         private const val
             DNS_CACHE_TTL_MS = 60_000L
         private const val
+            NEGATIVE_DNS_CACHE_TTL_MS =
+                15_000L
+        private const val
+            RESOLVER_ROTATION_COOLDOWN_MS =
+                5_000L
+        private const val
+            MAX_HTTP_TARGETS_PER_SAMPLE = 3
+        private const val
+            FALLBACK_TARGET_TIMEOUT_MS =
+                3_500
+        private const val
+            FALLBACK_TARGET_TIMEOUT_SECONDS =
+                5
+        private const val
             NANOS_PER_MILLISECOND =
                 1_000_000L
+
+        private val FALLBACK_CONNECTIVITY_URLS =
+            listOf(
+                "https://cp.cloudflare.com/generate_204",
+                "https://connectivitycheck.gstatic.com/generate_204",
+                "https://www.gstatic.com/generate_204",
+                "http://www.google.com/gen_204"
+            )
     }
 }

@@ -20,6 +20,12 @@ class ConfigRepository(context: Context) {
         @Volatile
         private var cachedItems:
             List<ConfigProfile>? = null
+
+        private const val
+            MAX_STORED_PROFILES = 10_000
+        private const val
+            MAX_STORED_JSON_CHARS =
+                12 * 1024 * 1024
     }
 
     fun all(): MutableList<ConfigProfile> =
@@ -141,15 +147,21 @@ class ConfigRepository(context: Context) {
     ) {
         synchronized(GLOBAL_LOCK) {
             val existing = read()
-            val previous =
-                existing
-                    .filter {
-                        it.subscriptionId ==
-                            subscriptionId
-                    }
+            val subscriptionProfiles =
+                existing.filter {
+                    it.subscriptionId ==
+                        subscriptionId
+                }
+            val previousByRaw =
+                subscriptionProfiles
                     .associateBy {
                         it.raw.trim()
                     }
+            val previousById =
+                subscriptionProfiles
+                    .associateBy(
+                        ConfigProfile::id
+                    )
 
             val retained =
                 existing
@@ -166,8 +178,10 @@ class ConfigRepository(context: Context) {
                             subscriptionId
                     )
                 val old =
-                    previous[
+                    previousByRaw[
                         incoming.raw.trim()
+                    ] ?: previousById[
+                        incoming.id
                     ]
 
                 val merged =
@@ -185,7 +199,8 @@ class ConfigRepository(context: Context) {
 
                 val duplicate =
                     retained.indexOfFirst {
-                        it.raw.trim() ==
+                        it.id == merged.id ||
+                            it.raw.trim() ==
                             merged.raw.trim()
                     }
 
@@ -358,6 +373,13 @@ class ConfigRepository(context: Context) {
     private fun write(
         items: Collection<ConfigProfile>
     ) {
+        check(
+            items.size <=
+                MAX_STORED_PROFILES
+        ) {
+            "Profile storage limit exceeded"
+        }
+
         val snapshot =
             items.map { it.copy() }
         val raw =
@@ -366,6 +388,13 @@ class ConfigRepository(context: Context) {
                     put(it.toJson())
                 }
             }.toString()
+
+        check(
+            raw.length <=
+                MAX_STORED_JSON_CHARS
+        ) {
+            "Profile storage exceeds the safety limit"
+        }
 
         cachedRaw = raw
         cachedItems = snapshot
