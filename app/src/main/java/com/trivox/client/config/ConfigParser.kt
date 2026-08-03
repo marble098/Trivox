@@ -190,6 +190,14 @@ object ConfigParser {
             outboundJson = JSONObject(outbound.toString())
                 .put("tag", "proxy")
                 .toString(),
+            probeServer =
+                endpoint.first,
+            probePort =
+                if (protocol == "wireguard") {
+                    443
+                } else {
+                    endpoint.second
+                },
             originalDnsJson = root
                 .optJSONObject("dns")
                 ?.toString()
@@ -459,6 +467,11 @@ object ConfigParser {
 
         val method = credential.substring(0, colon)
         val password = credential.substring(colon + 1)
+        val normalizedPassword =
+            Shadowsocks2022.normalizePassword(
+                method,
+                password
+            )
 
         val endpoint = parseHostPort(
             endpointPart,
@@ -469,7 +482,7 @@ object ConfigParser {
             .put("address", endpoint.first)
             .put("port", endpoint.second)
             .put("method", method)
-            .put("password", password)
+            .put("password", normalizedPassword)
 
         val outbound = JSONObject()
             .put("tag", "proxy")
@@ -1046,6 +1059,29 @@ object ConfigParser {
         val settings = outbound
             .optJSONObject("settings")
             ?: return "" to 0
+
+        if (
+            outbound.optString("protocol") ==
+            "wireguard"
+        ) {
+            val endpoint =
+                settings
+                    .optJSONArray("peers")
+                    ?.optJSONObject(0)
+                    ?.optString("endpoint")
+                    .orEmpty()
+
+            if (endpoint.isNotBlank()) {
+                return runCatching {
+                    parseHostPort(
+                        endpoint,
+                        "WireGuard"
+                    )
+                }.getOrDefault(
+                    endpoint to 51820
+                )
+            }
+        }
 
         val collection =
             settings.optJSONArray("vnext")
