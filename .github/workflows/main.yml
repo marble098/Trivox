@@ -161,6 +161,15 @@ jobs:
             app/src/main/AndroidManifest.xml
           grep -Fq 'BIND_QUICK_SETTINGS_TILE' \
             app/src/main/AndroidManifest.xml
+          grep -Fq 'TileServiceCompat.startActivityAndCollapse' \
+            app/src/main/java/com/trivox/client/service/QuickConnectTileService.kt
+          grep -Fq 'PendingIntentActivityWrapper' \
+            app/src/main/java/com/trivox/client/service/QuickConnectTileService.kt
+          if grep -Fq 'startActivityAndCollapse(intent)' \
+            app/src/main/java/com/trivox/client/service/QuickConnectTileService.kt; then
+            echo "Deprecated Quick Tile Intent launch detected." >&2
+            exit 1
+          fi
           grep -Fq 'http://www.google.com/gen_204' \
             app/src/main/java/com/trivox/client/ui/MainActivity.kt
           grep -Fq 'localProxyInVpn' \
