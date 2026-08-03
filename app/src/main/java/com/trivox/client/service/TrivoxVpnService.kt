@@ -474,6 +474,15 @@ class TrivoxVpnService : VpnService() {
                     startedElapsed
             )
 
+        QuickConnectStore.save(
+            this,
+            ConnectionMode.VPN,
+            profile.id,
+            profile.name
+        )
+        QuickConnectTileService
+            .requestUpdate(this)
+
         startForeground(
             NotificationSupport.ID,
             NotificationSupport.build(
@@ -906,6 +915,8 @@ class TrivoxVpnService : VpnService() {
             stopForeground(
                 STOP_FOREGROUND_REMOVE
             )
+            QuickConnectTileService
+                .requestUpdate(this)
             stopSelf()
         }
     }

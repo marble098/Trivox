@@ -229,7 +229,6 @@ class ConnectionService : Service() {
 
         profileName =
             profile.name
-
         ConnectionSessionStore
             .markDesired(
                 context = this,
@@ -358,6 +357,15 @@ class ConnectionService : Service() {
                 startedElapsed =
                     startedElapsed
             )
+
+        QuickConnectStore.save(
+            this,
+            ConnectionMode.PROXY,
+            profile.id,
+            profile.name
+        )
+        QuickConnectTileService
+            .requestUpdate(this)
 
         startForeground(
             NotificationSupport.ID,
@@ -562,6 +570,8 @@ class ConnectionService : Service() {
             stopForeground(
                 STOP_FOREGROUND_REMOVE
             )
+            QuickConnectTileService
+                .requestUpdate(this)
             stopSelf()
         }
     }

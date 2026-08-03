@@ -81,23 +81,15 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <TextView
+            <Button
                 android:id="@+id/livePingText"
+                style="@style/Widget.Trivox.Button.LivePing"
                 android:layout_width="wrap_content"
-                android:layout_height="38dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:clickable="true"
+                android:layout_height="40dp"
                 android:contentDescription="@string/live_ping_click_hint"
-                android:focusable="true"
-                android:gravity="center"
-                android:minWidth="112dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
+                android:minWidth="126dp"
                 android:text="@string/live_ping_off"
-                android:textColor="@color/blue"
-                android:textDirection="ltr"
-                android:textSize="12sp"
-                android:textStyle="bold" />
+                android:textDirection="ltr" />
 
             <TextView
                 android:id="@+id/exitInfoText"
@@ -168,23 +160,43 @@
             android:maxLines="1" />
     </LinearLayout>
 
-    <HorizontalScrollView
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="48dp"
         android:layout_marginTop="7dp"
-        android:fillViewport="false"
-        android:overScrollMode="never"
-        android:scrollbars="none">
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
-        <LinearLayout
-            android:id="@+id/subscriptionTabs"
-            android:layout_width="wrap_content"
+        <HorizontalScrollView
+            android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingStart="1dp"
-            android:paddingEnd="1dp" />
-    </HorizontalScrollView>
+            android:layout_weight="1"
+            android:fillViewport="false"
+            android:overScrollMode="never"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/subscriptionTabs"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="1dp"
+                android:paddingEnd="1dp" />
+        </HorizontalScrollView>
+
+        <Button
+            android:id="@+id/refreshSubscriptionsButton"
+            style="@style/Widget.Trivox.Button.Secondary"
+            android:layout_width="44dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="6dp"
+            android:contentDescription="@string/update_subscriptions"
+            android:minWidth="44dp"
+            android:padding="0dp"
+            android:text="↻"
+            android:textSize="20sp" />
+    </LinearLayout>
 
     <TextView
         style="@style/Widget.Trivox.SectionTitle"

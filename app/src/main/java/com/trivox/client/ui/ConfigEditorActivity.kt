@@ -13,12 +13,14 @@ import androidx.appcompat.widget.Toolbar
 import com.trivox.client.R
 import com.trivox.client.config.ConfigEditorCodec
 import com.trivox.client.config.ConfigEditorFields
+import com.trivox.client.config.ManualConfigFactory
 import com.trivox.client.data.ConfigProfile
 import com.trivox.client.data.ConfigRepository
 
-class ConfigEditorActivity : AppCompatActivity() {
+class ConfigEditorActivity : ThemedActivity() {
     private lateinit var repository: ConfigRepository
     private lateinit var profile: ConfigProfile
+    private var creating = false
 
     private lateinit var formContainer: View
     private lateinit var jsonContainer: View
@@ -49,12 +51,32 @@ class ConfigEditorActivity : AppCompatActivity() {
         setContentView(R.layout.activity_config_editor)
 
         repository = ConfigRepository(this)
-        val profileId = intent.getStringExtra(EXTRA_PROFILE_ID)
-        profile = repository.find(profileId) ?: run {
-            Toast.makeText(this, R.string.profile_not_found, Toast.LENGTH_LONG).show()
-            finish()
-            return
-        }
+        val newProtocol =
+            intent.getStringExtra(
+                EXTRA_NEW_PROTOCOL
+            )
+        creating =
+            !newProtocol.isNullOrBlank()
+        profile =
+            if (creating) {
+                ManualConfigFactory
+                    .draft(newProtocol!!)
+            } else {
+                val profileId =
+                    intent.getStringExtra(
+                        EXTRA_PROFILE_ID
+                    )
+                repository.find(profileId)
+                    ?: run {
+                        Toast.makeText(
+                            this,
+                            R.string.profile_not_found,
+                            Toast.LENGTH_LONG
+                        ).show()
+                        finish()
+                        return
+                    }
+            }
 
         bindViews()
         setupToolbar()
@@ -101,7 +123,11 @@ class ConfigEditorActivity : AppCompatActivity() {
     private fun setupToolbar() {
         findViewById<Toolbar>(R.id.toolbar).apply {
             title = getString(
-                R.string.edit_protocol_title,
+                if (creating) {
+                    R.string.add_protocol_title
+                } else {
+                    R.string.edit_protocol_title
+                },
                 profile.protocol.uppercase()
             )
             setNavigationOnClickListener { finish() }
@@ -221,8 +247,21 @@ class ConfigEditorActivity : AppCompatActivity() {
         }
 
         repository.save(replacement)
+        if (creating) {
+            repository.select(
+                replacement.id
+            )
+        }
         setResult(RESULT_OK)
-        Toast.makeText(this, R.string.config_updated, Toast.LENGTH_SHORT).show()
+        Toast.makeText(
+            this,
+            if (creating) {
+                R.string.config_added
+            } else {
+                R.string.config_updated
+            },
+            Toast.LENGTH_SHORT
+        ).show()
         finish()
     }
 
@@ -245,6 +284,7 @@ class ConfigEditorActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_PROFILE_ID = "profile_id"
+        const val EXTRA_NEW_PROTOCOL = "new_protocol"
 
         private val TRANSPORTS = arrayOf(
             "tcp",

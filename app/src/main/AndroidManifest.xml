@@ -12,6 +12,10 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="tg" />
+        </intent>
     </queries>
 
     <application
@@ -22,8 +26,25 @@
         android:localeConfig="@xml/locales_config"
         android:supportsRtl="true"
         android:theme="@style/Theme.Trivox"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:usesCleartextTraffic="false">
 
+        <activity
+            android:name=".service.QuickConnectActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:theme="@style/Theme.Trivox.Transparent" />
+        <activity
+            android:name=".ui.ProxyChainActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.AdvancedManualConfigActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".ui.ManualConfigActivity"
+            android:exported="false" />
         <activity
             android:name=".ui.ConfigEditorActivity"
             android:exported="false"
@@ -55,6 +76,20 @@
                 <data android:mimeType="application/json" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".service.QuickConnectTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_qs_trivox"
+            android:label="@string/quick_tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.ACTIVE_TILE"
+                android:value="true" />
+        </service>
 
         <service
             android:name=".service.ConnectionService"

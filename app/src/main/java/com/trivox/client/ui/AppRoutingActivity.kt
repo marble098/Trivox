@@ -23,7 +23,7 @@ import com.trivox.client.data.AppRoutingMode
 import com.trivox.client.data.SettingsRepository
 import java.util.concurrent.Executors
 
-class AppRoutingActivity : AppCompatActivity() {
+class AppRoutingActivity : ThemedActivity() {
     private data class Item(
         val label: String,
         val packageName: String,

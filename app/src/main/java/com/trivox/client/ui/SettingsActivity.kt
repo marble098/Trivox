@@ -1,6 +1,7 @@
 package com.trivox.client.ui
 
 import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -26,12 +27,14 @@ import com.trivox.client.data.PingMethod
 import com.trivox.client.data.ProfileSortMode
 import com.trivox.client.data.SettingsRepository
 import com.trivox.client.data.SubscriptionRepository
+import com.trivox.client.data.ThemeMode
+import com.trivox.client.update.UpdateChecker
 import org.json.JSONObject
 import java.net.URI
 import java.security.MessageDigest
 
 class SettingsActivity :
-    AppCompatActivity() {
+    ThemedActivity() {
     override fun onCreate(
         savedInstanceState: Bundle?
     ) {
@@ -60,6 +63,22 @@ class SettingsActivity :
         val darkMode =
             findViewById<SwitchCompat>(
                 R.id.darkModeSwitch
+            )
+        val themeMode =
+            findViewById<Spinner>(
+                R.id.themeModeSpinner
+            )
+        val localProxyInVpn =
+            findViewById<CheckBox>(
+                R.id.localProxyInVpnCheck
+            )
+        val autoUpdate =
+            findViewById<CheckBox>(
+                R.id.autoUpdateCheck
+            )
+        val updateStatus =
+            findViewById<TextView>(
+                R.id.updateStatus
             )
         val sortMode =
             findViewById<Spinner>(
@@ -153,38 +172,59 @@ class SettingsActivity :
             }
         )
 
+        val themeModes =
+            ThemeMode.entries
+        themeMode.adapter =
+            compactAdapter(
+                arrayOf(
+                    getString(R.string.theme_light),
+                    getString(R.string.theme_dark),
+                    getString(R.string.theme_neon)
+                )
+            )
+        themeMode.setSelection(
+            themeModes.indexOf(settings.themeMode)
+                .coerceAtLeast(0)
+        )
         darkMode.isChecked =
-            settings.darkMode
-
-        darkMode
-            .setOnCheckedChangeListener {
-                    _,
-                    checked ->
-                val latest =
-                    repository.load()
-
-                if (
-                    latest.darkMode !=
-                    checked
+            settings.themeMode != ThemeMode.LIGHT
+        var themeInitialized = false
+        themeMode.onItemSelectedListener =
+            object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(
+                    parent: AdapterView<*>?,
+                    view: View?,
+                    position: Int,
+                    id: Long
                 ) {
-                    latest.darkMode =
-                        checked
-                    repository.save(
-                        latest
+                    if (!themeInitialized) {
+                        themeInitialized = true
+                        return
+                    }
+                    val selected = themeModes[position]
+                    val latest = repository.load()
+                    if (latest.themeMode == selected) return
+                    latest.themeMode = selected
+                    latest.darkMode = selected != ThemeMode.LIGHT
+                    repository.save(latest)
+                    AppCompatDelegate.setDefaultNightMode(
+                        if (selected == ThemeMode.LIGHT) {
+                            AppCompatDelegate.MODE_NIGHT_NO
+                        } else {
+                            AppCompatDelegate.MODE_NIGHT_YES
+                        }
                     )
-
-                    AppCompatDelegate
-                        .setDefaultNightMode(
-                            if (checked) {
-                                AppCompatDelegate
-                                    .MODE_NIGHT_YES
-                            } else {
-                                AppCompatDelegate
-                                    .MODE_NIGHT_NO
-                            }
-                        )
+                    recreate()
                 }
+                override fun onNothingSelected(parent: AdapterView<*>?) = Unit
             }
+        darkMode.setOnCheckedChangeListener { _, checked ->
+            if (!themeInitialized) return@setOnCheckedChangeListener
+            val target = if (checked) ThemeMode.DARK else ThemeMode.LIGHT
+            if (themeMode.selectedItemPosition != themeModes.indexOf(target)) {
+                themeMode.setSelection(themeModes.indexOf(target))
+            }
+        }
 
         val sortModes =
             ProfileSortMode.entries
@@ -320,6 +360,62 @@ class SettingsActivity :
             settings.reconnectOnBoot
         blocking.isChecked =
             settings.blocking
+        localProxyInVpn.isChecked =
+            settings.localProxyInVpn
+        autoUpdate.isChecked =
+            settings.autoUpdateCheck
+
+        findViewById<Button>(
+            R.id.telegramProxyButton
+        ).setOnClickListener {
+            val port = mixedPort.text.toString()
+                .toIntOrNull()
+                ?.takeIf { it in 1..65535 }
+                ?: settings.socksPort
+            val uri = Uri.parse(
+                "tg://socks?server=localhost&port=$port"
+            )
+            runCatching {
+                startActivity(
+                    Intent(Intent.ACTION_VIEW, uri)
+                )
+            }.onFailure {
+                Toast.makeText(
+                    this,
+                    R.string.telegram_not_available,
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+
+        findViewById<Button>(
+            R.id.checkUpdateButton
+        ).setOnClickListener {
+            updateStatus.setText(
+                R.string.update_checking
+            )
+            UpdateChecker.check(
+                this,
+                showCurrentResult = true
+            ) { result ->
+                updateStatus.text = when {
+                    result.available ->
+                        getString(
+                            R.string.update_found,
+                            result.version
+                        )
+                    result.error.isNotBlank() ->
+                        getString(
+                            R.string.update_check_failed,
+                            result.error
+                        )
+                    else ->
+                        getString(
+                            R.string.update_current
+                        )
+                }
+            }
+        }
 
         val dnsModes =
             DnsMode.entries
@@ -487,8 +583,17 @@ class SettingsActivity :
                 boot.isChecked
             settings.blocking =
                 blocking.isChecked
+            settings.themeMode =
+                themeModes[
+                    themeMode.selectedItemPosition
+                ]
             settings.darkMode =
-                darkMode.isChecked
+                settings.themeMode !=
+                    ThemeMode.LIGHT
+            settings.localProxyInVpn =
+                localProxyInVpn.isChecked
+            settings.autoUpdateCheck =
+                autoUpdate.isChecked
             settings.sortMode =
                 sortModes[
                     sortMode

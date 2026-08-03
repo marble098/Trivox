@@ -51,6 +51,8 @@ import com.trivox.client.data.TestStatus
 import com.trivox.client.network.ConnectionInfoManager
 import com.trivox.client.network.PingManager
 import com.trivox.client.network.SubscriptionManager
+import com.trivox.client.network.SubscriptionRefreshCoordinator
+import com.trivox.client.update.UpdateChecker
 import com.trivox.client.service.ConnectionService
 import com.trivox.client.service.NotificationSupport
 import com.trivox.client.service.TrivoxVpnService
@@ -65,7 +67,7 @@ import java.util.concurrent.Future
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : ThemedActivity() {
     private lateinit var repository: ConfigRepository
     private lateinit var settingsRepository: SettingsRepository
     private lateinit var adapter: ProfileAdapter
@@ -75,7 +77,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var stateText: TextView
     private lateinit var durationText: TextView
     private lateinit var selectedText: TextView
-    private lateinit var livePingText: TextView
+    private lateinit var livePingText: Button
     private lateinit var exitInfoText: TextView
     private lateinit var emptyText: TextView
     private lateinit var connectButton: Button
@@ -83,6 +85,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var refreshExitButton: Button
     private lateinit var copySummaryButton: Button
     private lateinit var subscriptionTabs: LinearLayout
+    private lateinit var refreshSubscriptionsButton: Button
+    private lateinit var subscriptionUpdater: SubscriptionRefreshCoordinator
 
     private val worker = Executors.newSingleThreadExecutor()
     private val handler = Handler(Looper.getMainLooper())
@@ -94,6 +98,8 @@ class MainActivity : AppCompatActivity() {
         AtomicLong(0)
     private val pingTasks =
         mutableListOf<Future<*>>()
+    private val subscriptionRefreshBusy =
+        AtomicBoolean(false)
 
     @Volatile
     private var livePingResult:
@@ -156,6 +162,8 @@ class MainActivity : AppCompatActivity() {
             PingManager(
                 CoreManager(this).adapter
             )
+        subscriptionUpdater =
+            SubscriptionRefreshCoordinator(this)
 
         bindViews()
         setupToolbar()
@@ -185,6 +193,8 @@ class MainActivity : AppCompatActivity() {
         refreshExitButton = findViewById(R.id.refreshExitButton)
         copySummaryButton = findViewById(R.id.copySummaryButton)
         subscriptionTabs = findViewById(R.id.subscriptionTabs)
+        refreshSubscriptionsButton =
+            findViewById(R.id.refreshSubscriptionsButton)
     }
 
     private fun setupToolbar() {
@@ -341,7 +351,9 @@ class MainActivity : AppCompatActivity() {
             )
 
         findViewById<Button>(R.id.addButton)
-            .setOnClickListener { showImportDialog() }
+            .setOnClickListener { showAddOptions() }
+        refreshSubscriptionsButton
+            .setOnClickListener { refreshSubscriptionsFromMain() }
         findViewById<Button>(R.id.testButton)
             .setOnClickListener { testProfiles() }
         connectButton.setOnClickListener { toggleConnection() }
@@ -351,6 +363,63 @@ class MainActivity : AppCompatActivity() {
         copySummaryButton.setOnClickListener { copyConnectionSummary() }
     }
 
+
+    private fun showAddOptions() {
+        val labels = arrayOf(
+            getString(R.string.import_existing),
+            getString(R.string.add_manual_config),
+            getString(R.string.add_proxy_chain)
+        )
+        AlertDialog.Builder(this)
+            .setTitle(R.string.add_options)
+            .setItems(labels) { _, position ->
+                when (position) {
+                    0 -> showImportDialog()
+                    1 -> startActivity(
+                        Intent(this, ManualConfigActivity::class.java)
+                    )
+                    2 -> startActivity(
+                        Intent(this, ProxyChainActivity::class.java)
+                    )
+                }
+            }
+            .show()
+    }
+
+    private fun refreshSubscriptionsFromMain() {
+        if (!subscriptionRefreshBusy.compareAndSet(false, true)) {
+            toast(getString(R.string.subscription_update_busy))
+            return
+        }
+
+        refreshSubscriptionsButton.isEnabled = false
+        refreshSubscriptionsButton.text = "…"
+        val accepted = subscriptionUpdater.refreshEnabled { summary ->
+            runOnUiThread {
+                subscriptionRefreshBusy.set(false)
+                refreshSubscriptionsButton.isEnabled = true
+                refreshSubscriptionsButton.text = "↻"
+                subscriptionTabsSignature = ""
+                renderSubscriptionTabs(force = true)
+                refresh()
+                toast(
+                    getString(
+                        R.string.subscription_update_done,
+                        summary.updated,
+                        summary.profiles,
+                        summary.failed
+                    )
+                )
+            }
+        }
+
+        if (!accepted) {
+            subscriptionRefreshBusy.set(false)
+            refreshSubscriptionsButton.isEnabled = true
+            refreshSubscriptionsButton.text = "↻"
+            toast(getString(R.string.subscription_update_busy))
+        }
+    }
 
     private fun requestLivePingNow() {
         val snapshot =
@@ -711,6 +780,10 @@ class MainActivity : AppCompatActivity() {
                 )
             }
 
+        livePingText.isEnabled =
+            connectedProfile != null &&
+                !livePingBusy.get()
+
         exitInfoText.text =
             connectedProfile
                 ?.let { profile ->
@@ -893,9 +966,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun editProfile(profile: ConfigProfile) {
+        val target =
+            if (profile.protocol == "chain") {
+                ProxyChainActivity::class.java
+            } else {
+                ConfigEditorActivity::class.java
+            }
         startActivity(
-            Intent(this, ConfigEditorActivity::class.java)
-                .putExtra(ConfigEditorActivity.EXTRA_PROFILE_ID, profile.id)
+            Intent(this, target)
+                .putExtra(
+                    if (profile.protocol == "chain") {
+                        ProxyChainActivity.EXTRA_PROFILE_ID
+                    } else {
+                        ConfigEditorActivity.EXTRA_PROFILE_ID
+                    },
+                    profile.id
+                )
         )
     }
 
@@ -1762,11 +1848,10 @@ class MainActivity : AppCompatActivity() {
                                     .XRAY_HTTP ->
                                     pingManager
                                         .httpViaLocalProxy(
-                                            settings =
-                                                settings,
-                                            attempts = 2,
-                                            timeoutMs =
-                                                5_000
+                                            settings = settings,
+                                            url = LIVE_PING_URL,
+                                            attempts = 3,
+                                            timeoutMs = 7_000
                                         )
                             }
                         }.getOrElse {
@@ -2092,6 +2177,7 @@ class MainActivity : AppCompatActivity() {
             force = true
         )
         refresh()
+        UpdateChecker.checkIfDue(this)
     }
 
     override fun onDestroy() {
@@ -2105,6 +2191,7 @@ class MainActivity : AppCompatActivity() {
             )
         cancelPingTasks()
         pingManager.close()
+        subscriptionUpdater.close()
         worker.shutdownNow()
         super.onDestroy()
     }
@@ -2118,7 +2205,9 @@ class MainActivity : AppCompatActivity() {
         private const val MENU_SETTINGS = 105
         private const val MENU_ROUTING = 106
         private const val MENU_DIAGNOSTICS = 107
-        private const val LIVE_PING_INTERVAL_MS = 5_000L
+        private const val LIVE_PING_INTERVAL_MS = 8_000L
+        private const val LIVE_PING_URL =
+            "http://www.google.com/gen_204"
         private const val CONNECTION_ACTION_COOLDOWN_MS = 1_500L
         private const val MAIN_UI_PREFS = "main_ui"
         private const val KEY_ACTIVE_SUBSCRIPTION =

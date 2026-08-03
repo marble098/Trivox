@@ -420,7 +420,8 @@ class PingManager(
     fun httpViaLocalProxy(
         settings: AppSettings,
         attempts: Int = 2,
-        timeoutMs: Int = 5_000
+        timeoutMs: Int = 5_000,
+        url: String = settings.testUrl
     ): PingResult {
         val timestamp =
             System.currentTimeMillis()
@@ -433,7 +434,7 @@ class PingManager(
             )
         val uri =
             runCatching {
-                URI(settings.testUrl)
+                URI(url)
             }.getOrNull()
 
         if (
@@ -459,116 +460,123 @@ class PingManager(
             )
         }
 
-        val proxy =
-            Proxy(
-                Proxy.Type.HTTP,
-                InetSocketAddress(
-                    "127.0.0.1",
-                    settings.socksPort
-                )
-            )
-        val samples =
+        var samples =
             mutableListOf<Long>()
         var lastFailure:
             Throwable? = null
 
-        repeat(count) {
-            if (
-                Thread.currentThread()
-                    .isInterrupted
-            ) {
-                return cancelled(
-                    PingMethod
-                        .XRAY_HTTP
-                        .name,
-                    timestamp
-                )
-            }
+        fun runSamples(
+            proxyType: Proxy.Type
+        ) {
+            repeat(count) {
+                if (
+                    Thread.currentThread()
+                        .isInterrupted
+                ) {
+                    return
+                }
 
-            var connection:
-                HttpURLConnection? = null
+                var connection:
+                    HttpURLConnection? = null
 
-            try {
-                connection =
-                    URL(
-                        settings.testUrl
-                    ).openConnection(
-                        proxy
-                    ) as
-                        HttpURLConnection
-
-                connection.connectTimeout =
-                    boundedTimeout
-                connection.readTimeout =
-                    boundedTimeout
-                connection.instanceFollowRedirects =
-                    false
-                connection.useCaches = false
-                connection.setRequestProperty(
-                    "Connection",
-                    "close"
-                )
-                connection.setRequestProperty(
-                    "Cache-Control",
-                    "no-cache"
-                )
-                connection.setRequestProperty(
-                    "User-Agent",
-                    "Trivox-Ping/1"
-                )
-
-                connection.requestMethod =
-                    if (
-                        connection is
-                        HttpsURLConnection
-                    ) {
-                        "GET"
-                    } else {
-                        "HEAD"
-                    }
-
-                val start =
-                    System.nanoTime()
-                val code =
-                    connection.responseCode
-                val elapsed =
-                    System.nanoTime() -
-                        start
-
-                if (code in 200..499) {
-                    samples += elapsed
-                } else {
-                    lastFailure =
-                        IllegalStateException(
-                            "HTTP $code"
+                try {
+                    val proxy =
+                        Proxy(
+                            proxyType,
+                            InetSocketAddress(
+                                "127.0.0.1",
+                                settings.socksPort
+                            )
                         )
-                }
-            } catch (
-                throwable: Throwable
-            ) {
-                lastFailure =
-                    throwable
-            } finally {
-                runCatching {
+                    connection =
+                        URL(url)
+                            .openConnection(
+                                proxy
+                            ) as
+                            HttpURLConnection
+                    connection.connectTimeout =
+                        boundedTimeout
+                    connection.readTimeout =
+                        boundedTimeout
+                    connection.instanceFollowRedirects =
+                        false
+                    connection.useCaches = false
+                    connection.requestMethod =
+                        "GET"
+                    connection.setRequestProperty(
+                        "Connection",
+                        "close"
+                    )
+                    connection.setRequestProperty(
+                        "Cache-Control",
+                        "no-cache"
+                    )
+                    connection.setRequestProperty(
+                        "Accept",
+                        "*/*"
+                    )
+                    connection.setRequestProperty(
+                        "User-Agent",
+                        "Trivox-LivePing/2"
+                    )
+
+                    val startNanos =
+                        System.nanoTime()
+                    val code =
+                        connection.responseCode
+                    val elapsed =
+                        System.nanoTime() -
+                            startNanos
+
+                    if (code in 200..399) {
+                        samples += elapsed
+                    } else {
+                        lastFailure =
+                            IllegalStateException(
+                                "HTTP $code"
+                            )
+                    }
+                } catch (
+                    throwable: Throwable
+                ) {
+                    lastFailure = throwable
+                } finally {
+                    runCatching {
+                        connection
+                            ?.inputStream
+                            ?.close()
+                    }
+                    runCatching {
+                        connection
+                            ?.errorStream
+                            ?.close()
+                    }
                     connection
-                        ?.inputStream
-                        ?.close()
+                        ?.disconnect()
                 }
-                runCatching {
-                    connection
-                        ?.errorStream
-                        ?.close()
-                }
-                connection
-                    ?.disconnect()
             }
         }
 
-        val summary =
+        runSamples(
+            Proxy.Type.HTTP
+        )
+        var summary =
             PingStatistics.summarize(
                 samples,
                 count
             )
+
+        if (!summary.success) {
+            samples = mutableListOf()
+            runSamples(
+                Proxy.Type.SOCKS
+            )
+            summary =
+                PingStatistics.summarize(
+                    samples,
+                    count
+                )
+        }
 
         return PingResult(
             method =
@@ -592,7 +600,7 @@ class PingManager(
                     classify(
                         lastFailure
                             ?: SocketTimeoutException(
-                                "Proxy HTTP test failed"
+                                "Local mixed proxy did not answer"
                             )
                     )
                 }

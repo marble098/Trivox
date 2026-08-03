@@ -5,6 +5,7 @@ import android.app.Application
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatDelegate
 import com.trivox.client.data.SettingsRepository
+import com.trivox.client.data.ThemeMode
 import com.trivox.client.ui.UiInsets
 import com.trivox.client.util.Diagnostics
 
@@ -12,19 +13,22 @@ class TrivoxApp : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        val darkMode =
+        val themeMode =
             SettingsRepository(this)
                 .load()
-                .darkMode
+                .themeMode
 
         AppCompatDelegate
             .setDefaultNightMode(
-                if (darkMode) {
-                    AppCompatDelegate
-                        .MODE_NIGHT_YES
-                } else {
+                if (
+                    themeMode ==
+                    ThemeMode.LIGHT
+                ) {
                     AppCompatDelegate
                         .MODE_NIGHT_NO
+                } else {
+                    AppCompatDelegate
+                        .MODE_NIGHT_YES
                 }
             )
 

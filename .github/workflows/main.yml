@@ -155,6 +155,20 @@ jobs:
             app/src/main/res/layout/activity_main.xml
           grep -Fq 'requestLivePingNow' \
             app/src/main/java/com/trivox/client/ui/MainActivity.kt
+          grep -Fq 'QuickConnectTileService' \
+            app/src/main/AndroidManifest.xml
+          grep -Fq 'BIND_QUICK_SETTINGS_TILE' \
+            app/src/main/AndroidManifest.xml
+          grep -Fq 'http://www.google.com/gen_204' \
+            app/src/main/java/com/trivox/client/ui/MainActivity.kt
+          grep -Fq 'localProxyInVpn' \
+            app/src/main/java/com/trivox/client/config/XrayConfigBuilder.kt
+          grep -Fq 'proxySettings' \
+            app/src/main/java/com/trivox/client/config/XrayConfigBuilder.kt
+          grep -Fq 'Theme.Trivox.Neon' \
+            app/src/main/res/values/neon_styles.xml
+          grep -Fq 'ManualConfigActivity' \
+            app/src/main/AndroidManifest.xml
           if grep -Fq 'attempts = 1'             app/src/main/java/com/trivox/client/ui/MainActivity.kt; then
             echo "Single-sample ping regression detected." >&2
             exit 1

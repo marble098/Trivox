@@ -25,8 +25,7 @@ import java.util.Date
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
-class SubscriptionManagementActivity :
-    AppCompatActivity() {
+class SubscriptionManagementActivity : ThemedActivity() {
     private lateinit var sourceRepository:
         SubscriptionRepository
     private lateinit var configRepository:

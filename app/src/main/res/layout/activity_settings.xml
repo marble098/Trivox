@@ -84,6 +84,20 @@
                     android:text="@string/dark_theme_summary"
                     android:textColor="@color/muted"
                     android:textSize="10sp" />
+
+                <TextView
+                    style="@style/Widget.Trivox.FieldLabel"
+                    android:layout_marginTop="10dp"
+                    android:text="@string/theme_mode" />
+
+                <Spinner
+                    android:id="@+id/themeModeSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="42dp"
+                    android:layout_marginTop="3dp"
+                    android:background="@drawable/input_background"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="8dp" />
             </LinearLayout>
 
             <TextView
@@ -229,6 +243,20 @@
                     android:hint="@string/mixed_port"
                     android:inputType="number"
                     android:textDirection="ltr" />
+
+                <CheckBox
+                    android:id="@+id/localProxyInVpnCheck"
+                    style="@style/Widget.Trivox.CheckBox"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/local_proxy_in_vpn" />
+
+                <Button
+                    android:id="@+id/telegramProxyButton"
+                    style="@style/Widget.Trivox.Button.Secondary"
+                    android:layout_width="match_parent"
+                    android:layout_height="42dp"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/open_telegram_proxy" />
             </LinearLayout>
 
             <TextView
@@ -317,6 +345,39 @@
                     android:id="@+id/reconnectBoot"
                     style="@style/Widget.Trivox.CheckBox"
                     android:text="@string/reconnect_boot" />
+            </LinearLayout>
+
+            <TextView
+                style="@style/Widget.Trivox.SectionTitle"
+                android:text="@string/update_section" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/panel_background"
+                android:orientation="vertical"
+                android:padding="10dp">
+
+                <CheckBox
+                    android:id="@+id/autoUpdateCheck"
+                    style="@style/Widget.Trivox.CheckBox"
+                    android:text="@string/auto_update_check" />
+
+                <Button
+                    android:id="@+id/checkUpdateButton"
+                    style="@style/Widget.Trivox.Button.Secondary"
+                    android:layout_width="match_parent"
+                    android:layout_height="42dp"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/check_update_now" />
+
+                <TextView
+                    android:id="@+id/updateStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:textColor="@color/muted"
+                    android:textSize="10sp" />
             </LinearLayout>
 
             <TextView

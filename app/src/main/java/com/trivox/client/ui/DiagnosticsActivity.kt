@@ -18,8 +18,7 @@ import com.trivox.client.core.CoreManifest
 import com.trivox.client.data.SettingsRepository
 import com.trivox.client.util.Diagnostics
 
-class DiagnosticsActivity :
-    AppCompatActivity() {
+class DiagnosticsActivity : ThemedActivity() {
     private lateinit var reportText:
         TextView
 
