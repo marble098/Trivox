@@ -329,4 +329,17 @@
     <string name="pause_minutes_hint">Minutes, 1–1440</string>
     <string name="invalid_pause_minutes">Enter a pause duration from 1 to 1440 minutes.</string>
     <string name="pause_scheduled">Connection paused for %1$d minutes and will resume automatically.</string>
+
+    <string name="add_short">＋ Add</string>
+    <string name="connecting_now">Starting…</string>
+    <string name="subscription_header_empty">No subscription sources</string>
+    <string name="subscription_header_hint">Updates are isolated, cancellable, and preserve the previous working profiles if a provider returns only partial data.</string>
+    <string name="subscription_header_summary">%1$d sources • %2$d enabled • %3$d configurations</string>
+    <string name="subscription_progress_format">%1$d/%2$d • Updating %3$s</string>
+    <string name="subscription_update_result_detailed">%1$d configurations loaded • %2$d partial sources • %3$d failed</string>
+    <string name="subscription_update_done_detailed">%1$d sources updated • %2$d configurations loaded • %3$d partial • %4$d failed</string>
+    <string name="url_subscription_short">URL</string>
+    <string name="nordvpn_subscription_short">NORD</string>
+    <string name="subscription_warning_format">Partial update: %1$s</string>
+    <string name="connection_start_failed">Connection could not be started. Check diagnostics and try again.</string>
 </resources>

@@ -19,14 +19,16 @@ import com.trivox.client.data.ConnectionState
 import com.trivox.client.data.SubscriptionKind
 import com.trivox.client.data.SubscriptionRepository
 import com.trivox.client.data.SubscriptionSource
+import com.trivox.client.network.SubscriptionManager
 import com.trivox.client.network.SubscriptionProfileLoader
+import com.trivox.client.network.isSubscriptionCancellation
 import com.trivox.client.util.SecretStore
 import com.trivox.client.util.Diagnostics
-import java.net.URI
 import java.text.DateFormat
 import java.util.Date
 import java.util.UUID
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.concurrent.atomic.AtomicBoolean
 
 class SubscriptionManagementActivity : ThemedActivity() {
@@ -40,6 +42,8 @@ class SubscriptionManagementActivity : ThemedActivity() {
         TextView
     private lateinit var progressText:
         TextView
+    private lateinit var headerSummary:
+        TextView
     private lateinit var addButton:
         Button
     private lateinit var updateAllButton:
@@ -49,6 +53,12 @@ class SubscriptionManagementActivity : ThemedActivity() {
         Executors.newSingleThreadExecutor()
     private val operationBusy =
         AtomicBoolean(false)
+    private val destroyed =
+        AtomicBoolean(false)
+
+    @Volatile
+    private var activeTask:
+        Future<*>? = null
 
     override fun onCreate(
         savedInstanceState: Bundle?
@@ -83,6 +93,10 @@ class SubscriptionManagementActivity : ThemedActivity() {
         progressText =
             findViewById(
                 R.id.subscriptionProgress
+            )
+        headerSummary =
+            findViewById(
+                R.id.subscriptionHeaderSummary
             )
         addButton =
             findViewById(
@@ -173,6 +187,28 @@ class SubscriptionManagementActivity : ThemedActivity() {
                 View.GONE
             }
 
+        val enabledCount =
+            sources.count {
+                it.enabled
+            }
+        val profileCount =
+            sources.sumOf {
+                source ->
+                configRepository
+                    .countForSubscription(
+                        source.id
+                    )
+            }
+
+        headerSummary.text =
+            getString(
+                R.string
+                    .subscription_header_summary,
+                sources.size,
+                enabledCount,
+                profileCount
+            )
+
         sources.forEach { source ->
             val row =
                 layoutInflater.inflate(
@@ -185,6 +221,14 @@ class SubscriptionManagementActivity : ThemedActivity() {
             val name =
                 row.findViewById<TextView>(
                     R.id.subscriptionName
+                )
+            val kindBadge =
+                row.findViewById<TextView>(
+                    R.id.subscriptionKindBadge
+                )
+            val statusBadge =
+                row.findViewById<TextView>(
+                    R.id.subscriptionStatusBadge
                 )
             val url =
                 row.findViewById<TextView>(
@@ -222,6 +266,39 @@ class SubscriptionManagementActivity : ThemedActivity() {
                     )
 
             name.text = source.name
+            kindBadge.text =
+                getString(
+                    if (
+                        source.kind ==
+                        SubscriptionKind.NORDVPN
+                    ) {
+                        R.string
+                            .nordvpn_subscription_short
+                    } else {
+                        R.string
+                            .url_subscription_short
+                    }
+                )
+            statusBadge.setText(
+                if (source.enabled) {
+                    R.string
+                        .subscription_enabled
+                } else {
+                    R.string
+                        .subscription_disabled
+                }
+            )
+            statusBadge.setTextColor(
+                androidx.core.content.ContextCompat
+                    .getColor(
+                        this,
+                        if (source.enabled) {
+                            R.color.green
+                        } else {
+                            R.color.muted
+                        }
+                    )
+            )
             url.text =
                 if (
                     source.kind ==
@@ -264,14 +341,36 @@ class SubscriptionManagementActivity : ThemedActivity() {
                 error.visibility =
                     View.GONE
             } else {
+                val partialSuccess =
+                    source.lastSuccessAt >
+                        0L &&
+                        count > 0
+
                 error.visibility =
                     View.VISIBLE
                 error.text =
                     getString(
-                        R.string
-                            .subscription_error_format,
+                        if (partialSuccess) {
+                            R.string
+                                .subscription_warning_format
+                        } else {
+                            R.string
+                                .subscription_error_format
+                        },
                         source.lastError
                     )
+                error.setTextColor(
+                    androidx.core.content
+                        .ContextCompat
+                        .getColor(
+                            this,
+                            if (partialSuccess) {
+                                R.color.blue
+                            } else {
+                                R.color.red
+                            }
+                        )
+                )
             }
 
             update.isEnabled =
@@ -761,62 +860,106 @@ class SubscriptionManagementActivity : ThemedActivity() {
         progressText.visibility =
             View.VISIBLE
         progressText.setText(
-            R.string
-                .subscription_updating
+            R.string.subscription_updating
         )
         render()
 
-        worker.execute {
-            var updatedProfiles = 0
-            var failures = 0
+        activeTask =
+            worker.submit {
+                var updatedProfiles = 0
+                var failures = 0
+                var partial = 0
+                var cancelled = false
 
-            sources.forEach { source ->
-                runCatching {
-                    updatedProfiles +=
-                        updateOne(source)
-                }.onFailure {
-                    failures += 1
-                    Diagnostics
-                        .recordThrowable(
-                            "Subscription update",
-                            it
+                sources.forEachIndexed {
+                        index,
+                        source ->
+                    if (
+                        Thread.currentThread()
+                            .isInterrupted
+                    ) {
+                        cancelled = true
+                        return@forEachIndexed
+                    }
+
+                    runOnUiThreadIfAlive {
+                        progressText.text =
+                            getString(
+                                R.string
+                                    .subscription_progress_format,
+                                index + 1,
+                                sources.size,
+                                source.name
+                            )
+                    }
+
+                    try {
+                        val result =
+                            updateOne(source)
+
+                        updatedProfiles +=
+                            result.first
+
+                        if (result.second) {
+                            partial += 1
+                        }
+                    } catch (
+                        error: Throwable
+                    ) {
+                        if (
+                            error
+                                .isSubscriptionCancellation()
+                        ) {
+                            cancelled = true
+                            return@forEachIndexed
+                        }
+
+                        failures += 1
+                        Diagnostics
+                            .recordThrowable(
+                                "Subscription update",
+                                error
+                            )
+                    }
+                }
+
+                operationBusy.set(false)
+                activeTask = null
+
+                runOnUiThreadIfAlive {
+                    progressText.visibility =
+                        View.GONE
+                    render()
+
+                    if (!cancelled) {
+                        toast(
+                            getString(
+                                R.string
+                                    .subscription_update_result_detailed,
+                                updatedProfiles,
+                                partial,
+                                failures
+                            )
                         )
+                    }
                 }
             }
-
-            operationBusy.set(false)
-
-            runOnUiThread {
-                progressText.visibility =
-                    View.GONE
-                render()
-
-                toast(
-                    getString(
-                        R.string
-                            .subscription_update_result,
-                        updatedProfiles,
-                        failures
-                    )
-                )
-            }
-        }
     }
 
     private fun updateOne(
         requested:
             SubscriptionSource
-    ): Int {
+    ): Pair<Int, Boolean> {
         val latest =
             sourceRepository
                 .find(requested.id)
-                ?: return 0
+                ?: return 0 to false
 
-        return try {
+        try {
             val result =
                 SubscriptionProfileLoader
                     .load(
-                        this,
+                        applicationContext,
                         latest
                     )
             val profiles =
@@ -829,11 +972,19 @@ class SubscriptionManagementActivity : ThemedActivity() {
                     )
                 }
 
-            configRepository
-                .replaceSubscription(
-                    latest.id,
-                    profiles
-                )
+            if (result.complete) {
+                configRepository
+                    .replaceSubscription(
+                        latest.id,
+                        profiles
+                    )
+            } else {
+                configRepository
+                    .mergeSubscription(
+                        latest.id,
+                        profiles
+                    )
+            }
 
             if (
                 latest.kind ==
@@ -842,20 +993,59 @@ class SubscriptionManagementActivity : ThemedActivity() {
                 latest.url =
                     result.finalUrl
             }
+
             latest.lastSuccessAt =
                 System.currentTimeMillis()
-            latest.lastError = ""
+            latest.lastError =
+                result.warnings
+                    .take(3)
+                    .joinToString(" • ")
             sourceRepository.save(latest)
 
-            profiles.size
-        } catch (error: Throwable) {
+            return profiles.size to
+                !result.complete
+        } catch (
+            error: Throwable
+        ) {
+            if (
+                error
+                    .isSubscriptionCancellation()
+            ) {
+                throw error
+            }
+
             latest.lastError =
-                error.message
-                    ?: error
-                        .javaClass
-                        .simpleName
+                (
+                    error.message
+                        ?: error
+                            .javaClass
+                            .simpleName
+                    )
+                    .replace(
+                        Regex("\\s+"),
+                        " "
+                    )
+                    .take(280)
             sourceRepository.save(latest)
             throw error
+        }
+    }
+
+    private fun runOnUiThreadIfAlive(
+        action: () -> Unit
+    ) {
+        if (destroyed.get()) {
+            return
+        }
+
+        runOnUiThread {
+            if (
+                !destroyed.get() &&
+                !isFinishing &&
+                !isDestroyed
+            ) {
+                action()
+            }
         }
     }
 
@@ -953,18 +1143,9 @@ class SubscriptionManagementActivity : ThemedActivity() {
         value: String
     ): Boolean =
         runCatching {
-            URI(value)
-        }.getOrNull()
-            ?.let { uri ->
-                uri.scheme
-                    ?.equals(
-                        "https",
-                        ignoreCase = true
-                    ) == true &&
-                    !uri.host
-                        .isNullOrBlank() &&
-                    uri.userInfo == null
-            } == true
+            SubscriptionManager
+                .normalizeUrl(value)
+        }.isSuccess
 
     private fun toast(
         message: String
@@ -984,6 +1165,9 @@ class SubscriptionManagementActivity : ThemedActivity() {
     }
 
     override fun onDestroy() {
+        destroyed.set(true)
+        activeTask?.cancel(true)
+        activeTask = null
         worker.shutdownNow()
         super.onDestroy()
     }

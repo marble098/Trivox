@@ -255,7 +255,10 @@ class PingManager(
         workDir: File,
         attempts: Int =
             settings.testAttempts,
-        timeoutSeconds: Int = 8
+        timeoutSeconds: Int = 8,
+        allowSingleSample: Boolean = false,
+        maxTargetsPerSample: Int =
+            MAX_HTTP_TARGETS_PER_SAMPLE
     ): PingResult {
         val timestamp =
             System.currentTimeMillis()
@@ -297,8 +300,18 @@ class PingManager(
             )
         }
 
+        val minimumSamples =
+            if (allowSingleSample) 1 else 2
         val count =
-            attempts.coerceIn(2, 5)
+            attempts.coerceIn(
+                minimumSamples,
+                5
+            )
+        val targetLimit =
+            maxTargetsPerSample.coerceIn(
+                1,
+                MAX_HTTP_TARGETS_PER_SAMPLE
+            )
         val boundedTimeout =
             timeoutSeconds.coerceIn(3, 15)
         val configFile =
@@ -355,7 +368,7 @@ class PingManager(
                     var accepted = false
 
                     orderedTargets
-                        .take(MAX_HTTP_TARGETS_PER_SAMPLE)
+                        .take(targetLimit)
                         .forEachIndexed {
                                 targetIndex,
                                 target ->
@@ -434,23 +447,6 @@ class PingManager(
                     samples,
                     totalAttempts
                 )
-
-            if (
-                summary.success &&
-                (summary.latencyMs ?: Long.MAX_VALUE) <
-                LOW_LATENCY_RECHECK_THRESHOLD_MS
-            ) {
-                collect(
-                    LOW_LATENCY_RECHECK_ATTEMPTS
-                )
-                totalAttempts +=
-                    LOW_LATENCY_RECHECK_ATTEMPTS
-                summary =
-                    PingStatistics.summarize(
-                        samples,
-                        totalAttempts
-                    )
-            }
 
             PingResult(
                 method =
@@ -1186,13 +1182,34 @@ class PingManager(
             executor = executor,
             workers = workers
         ) { profile ->
+            val result =
+                if (
+                    settings.pingMethod ==
+                    PingMethod.XRAY_HTTP
+                ) {
+                    realXray(
+                        profile = profile,
+                        settings = settings,
+                        workDir = workDir,
+                        attempts =
+                            BATCH_XRAY_ATTEMPTS,
+                        timeoutSeconds =
+                            BATCH_XRAY_TIMEOUT_SECONDS,
+                        allowSingleSample = true,
+                        maxTargetsPerSample =
+                            BATCH_XRAY_MAX_TARGETS
+                    )
+                } else {
+                    measure(
+                        profile,
+                        settings,
+                        workDir
+                    )
+                }
+
             callback(
                 profile,
-                measure(
-                    profile,
-                    settings,
-                    workDir
-                )
+                result
             )
         }
     }
@@ -1599,6 +1616,7 @@ class PingManager(
                 is String ->
                     raw.toLongOrNull()
 
+                null -> null
                 else -> null
             }
                 ?: return null
@@ -1782,6 +1800,12 @@ class PingManager(
         private const val
             RESOLVER_ROTATION_COOLDOWN_MS =
                 5_000L
+        private const val
+            BATCH_XRAY_ATTEMPTS = 1
+        private const val
+            BATCH_XRAY_TIMEOUT_SECONDS = 4
+        private const val
+            BATCH_XRAY_MAX_TARGETS = 2
         private const val
             MAX_HTTP_TARGETS_PER_SAMPLE = 3
         private const val

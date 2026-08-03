@@ -36,11 +36,22 @@ import javax.net.ssl.SSLSocketFactory
  * Android/system resolver cannot redirect API credentials to a private host.
  */
 class NordVpnSubscriptionManager {
+    data class CatalogResult(
+        val profiles: List<ConfigProfile>,
+        val complete: Boolean,
+        val warnings: List<String>
+    )
+
     private val resolver = TrustedDohResolver()
 
     fun fetchAllCountries(
         token: String
-    ): List<ConfigProfile> {
+    ): List<ConfigProfile> =
+        fetchCatalog(token).profiles
+
+    fun fetchCatalog(
+        token: String
+    ): CatalogResult {
         val normalizedToken = token.trim()
 
         require(normalizedToken.isNotBlank()) {
@@ -90,30 +101,43 @@ class NordVpnSubscriptionManager {
             mutableListOf<String>()
 
         return try {
-            countries.forEach { country ->
-                completion.submit(
-                    Callable {
-                        runCatching {
-                            CountryFetchResult(
-                                country = country,
-                                profiles =
-                                    fetchCountryProfiles(
-                                        country = country,
-                                        privateKey =
-                                            privateKey,
-                                        apiAddresses =
-                                            apiAddresses
-                                    )
-                            )
-                        }.getOrElse {
-                            CountryFetchResult(
-                                country = country,
-                                error = unwrap(it)
-                            )
+            val futures =
+                countries.map { country ->
+                    completion.submit(
+                        Callable {
+                            try {
+                                ensureActive()
+
+                                CountryFetchResult(
+                                    country = country,
+                                    profiles =
+                                        fetchCountryProfiles(
+                                            country = country,
+                                            privateKey =
+                                                privateKey,
+                                            apiAddresses =
+                                                apiAddresses
+                                        )
+                                )
+                            } catch (
+                                throwable: Throwable
+                            ) {
+                                if (
+                                    throwable
+                                        .isSubscriptionCancellation()
+                                ) {
+                                    throw throwable
+                                }
+
+                                CountryFetchResult(
+                                    country = country,
+                                    error =
+                                        unwrap(throwable)
+                                )
+                            }
                         }
-                    }
-                )
-            }
+                    )
+                }
 
             val profiles =
                 ArrayList<ConfigProfile>()
@@ -134,23 +158,50 @@ class NordVpnSubscriptionManager {
                 }
 
                 val future =
-                    completion.poll(
-                        remaining,
-                        TimeUnit.NANOSECONDS
-                    ) ?: break
+                    try {
+                        completion.poll(
+                            remaining,
+                            TimeUnit.NANOSECONDS
+                        )
+                    } catch (
+                        interrupted:
+                            InterruptedException
+                    ) {
+                        futures.forEach {
+                            it.cancel(true)
+                        }
+                        throwSubscriptionCancelled(
+                            interrupted
+                        )
+                    } ?: break
                 completed += 1
 
                 val result =
-                    runCatching {
+                    try {
                         future.get()
-                    }.getOrElse {
+                    } catch (
+                        throwable: Throwable
+                    ) {
+                        if (
+                            throwable
+                                .isSubscriptionCancellation()
+                        ) {
+                            futures.forEach {
+                                it.cancel(true)
+                            }
+                            throwSubscriptionCancelled(
+                                throwable
+                            )
+                        }
+
                         CountryFetchResult(
                             country = CountryInfo(
                                 id = -1,
                                 code = "unknown",
                                 name = "Unknown"
                             ),
-                            error = unwrap(it)
+                            error =
+                                unwrap(throwable)
                         )
                     }
 
@@ -206,14 +257,47 @@ class NordVpnSubscriptionManager {
                 )
             }
 
-            distinct
+            CatalogResult(
+                profiles = distinct,
+                complete =
+                    completed ==
+                        countries.size &&
+                        failures.isEmpty(),
+                warnings =
+                    failures.toList()
+            )
+        } catch (
+            throwable: Throwable
+        ) {
+            if (
+                throwable
+                    .isSubscriptionCancellation()
+            ) {
+                throwSubscriptionCancelled(
+                    throwable
+                )
+            }
+
+            throw throwable
         } finally {
             executor.shutdownNow()
-            runCatching {
-                executor.awaitTermination(
-                    EXECUTOR_SHUTDOWN_WAIT_SECONDS,
-                    TimeUnit.SECONDS
-                )
+
+            if (
+                !Thread.currentThread()
+                    .isInterrupted
+            ) {
+                try {
+                    executor.awaitTermination(
+                        EXECUTOR_SHUTDOWN_WAIT_SECONDS,
+                        TimeUnit.SECONDS
+                    )
+                } catch (
+                    interrupted:
+                        InterruptedException
+                ) {
+                    Thread.currentThread()
+                        .interrupt()
+                }
             }
         }
     }
@@ -223,9 +307,7 @@ class NordVpnSubscriptionManager {
         privateKey: String,
         apiAddresses: List<String>
     ): List<ConfigProfile> {
-        if (Thread.currentThread().isInterrupted) {
-            return emptyList()
-        }
+        ensureActive()
 
         val uri =
             URI(
@@ -576,14 +658,7 @@ class NordVpnSubscriptionManager {
                 attempt ->
             resolvedAddresses.forEach {
                     address ->
-                if (
-                    Thread.currentThread()
-                        .isInterrupted
-                ) {
-                    throw InterruptedException(
-                        "NordVPN update cancelled"
-                    )
-                }
+                ensureActive()
 
                 try {
                     return requestMapped(
@@ -597,6 +672,15 @@ class NordVpnSubscriptionManager {
                 } catch (
                     throwable: Throwable
                 ) {
+                    if (
+                        throwable
+                            .isSubscriptionCancellation()
+                    ) {
+                        throwSubscriptionCancelled(
+                            throwable
+                        )
+                    }
+
                     lastError = throwable
 
                     if (
@@ -621,9 +705,9 @@ class NordVpnSubscriptionManager {
                     interrupted:
                         InterruptedException
                 ) {
-                    Thread.currentThread()
-                        .interrupt()
-                    throw interrupted
+                    throwSubscriptionCancelled(
+                        interrupted
+                    )
                 }
             }
         }
@@ -959,6 +1043,15 @@ class NordVpnSubscriptionManager {
         return current
     }
 
+    private fun ensureActive() {
+        if (
+            Thread.currentThread()
+                .isInterrupted
+        ) {
+            throwSubscriptionCancelled()
+        }
+    }
+
     private fun Int?.orZero(): Int =
         this ?: 0
 
@@ -981,15 +1074,15 @@ class NordVpnSubscriptionManager {
                 "%5Bid%5D=35" +
                 "&filters%5Bcountry_id%5D="
         private const val NORDLYNX_PORT = 51820
-        private const val COUNTRY_WORKERS = 4
+        private const val COUNTRY_WORKERS = 6
         private const val ALL_COUNTRIES_TIMEOUT_SECONDS =
-            240L
+            150L
         private const val EXECUTOR_SHUTDOWN_WAIT_SECONDS =
             2L
-        private const val CONNECT_TIMEOUT_MS = 8_000
-        private const val READ_TIMEOUT_MS = 25_000
-        private const val REQUEST_ATTEMPTS = 2
-        private const val RETRY_DELAY_MS = 350L
+        private const val CONNECT_TIMEOUT_MS = 6_000
+        private const val READ_TIMEOUT_MS = 18_000
+        private const val REQUEST_ATTEMPTS = 3
+        private const val RETRY_DELAY_MS = 300L
         private const val MAX_CREDENTIALS_RESPONSE_BYTES =
             1024 * 1024
         private const val MAX_COUNTRIES_RESPONSE_BYTES =
@@ -1435,15 +1528,27 @@ internal class TrustedDohResolver {
         val answers =
             PROVIDERS.mapNotNull {
                     provider ->
-                runCatching {
+                try {
                     query(
                         provider,
                         normalized
-                    )
-                }.getOrNull()
-                    ?.takeIf(
+                    ).takeIf(
                         Set<String>::isNotEmpty
                     )
+                } catch (
+                    throwable: Throwable
+                ) {
+                    if (
+                        throwable
+                            .isSubscriptionCancellation()
+                    ) {
+                        throwSubscriptionCancelled(
+                            throwable
+                        )
+                    }
+
+                    null
+                }
             }
 
         check(answers.isNotEmpty()) {

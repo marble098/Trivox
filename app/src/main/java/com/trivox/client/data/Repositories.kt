@@ -213,6 +213,70 @@ class ConfigRepository(context: Context) {
         }
     }
 
+
+    fun mergeSubscription(
+        subscriptionId: String,
+        profiles: Collection<ConfigProfile>
+    ): Int =
+        synchronized(GLOBAL_LOCK) {
+            if (profiles.isEmpty()) {
+                return@synchronized 0
+            }
+
+            val items = read()
+            var mergedCount = 0
+
+            profiles.forEach { profile ->
+                val incoming =
+                    profile.copy(
+                        subscriptionId =
+                            subscriptionId
+                    )
+                val index =
+                    items.indexOfFirst {
+                        it.subscriptionId ==
+                            subscriptionId &&
+                            (
+                                it.id ==
+                                    incoming.id ||
+                                    it.raw.trim() ==
+                                    incoming.raw.trim()
+                                )
+                    }
+
+                if (index >= 0) {
+                    val old =
+                        items[index]
+
+                    items[index] =
+                        mergePreserved(
+                            incoming =
+                                incoming.copy(
+                                    id = old.id
+                                ),
+                            old = old
+                        )
+                } else {
+                    val duplicate =
+                        items.indexOfFirst {
+                            it.id ==
+                                incoming.id ||
+                                it.raw.trim() ==
+                                incoming.raw.trim()
+                        }
+
+                    if (duplicate < 0) {
+                        items += incoming
+                    }
+                }
+
+                mergedCount += 1
+            }
+
+            write(items)
+            mergedCount
+        }
+
     fun renameSubscription(
         subscriptionId: String,
         groupName: String

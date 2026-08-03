@@ -15,6 +15,13 @@ import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.io.InterruptedIOException
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.CancellationException
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 object Diagnostics {
@@ -43,12 +50,43 @@ object Diagnostics {
     private const val MAX_EXIT_RECORDS = 8
     private const val RECENT_NATIVE_CRASH_MS =
         30 * 60 * 1000L
+    private const val MAX_THROWABLE_STACK_CHARS =
+        96 * 1024
+    private const val THROWABLE_DEDUP_WINDOW_MS =
+        60_000L
+    private const val LOG_FLUSH_TIMEOUT_MS =
+        750L
+    private const val EXIT_REASON_USER_REQUESTED = 10
+    private const val EXIT_REASON_USER_STOPPED = 11
+    private const val EXIT_REASON_OTHER = 13
+    private const val EXIT_REASON_PACKAGE_STATE_CHANGE = 15
+    private const val EXIT_REASON_PACKAGE_UPDATED = 16
 
     private val initialized =
         AtomicBoolean(false)
     private val handlingCrash =
         AtomicBoolean(false)
     private val lock = Any()
+    private val throwableFingerprints =
+        ConcurrentHashMap<String, Long>()
+    private val writer =
+        ThreadPoolExecutor(
+            1,
+            1,
+            0L,
+            TimeUnit.MILLISECONDS,
+            ArrayBlockingQueue(128),
+            { runnable ->
+                Thread(
+                    runnable,
+                    "trivox-diagnostics-writer"
+                ).apply {
+                    isDaemon = true
+                }
+            },
+            ThreadPoolExecutor
+                .DiscardOldestPolicy()
+        )
 
     private lateinit var appContext:
         Context
@@ -132,13 +170,13 @@ object Diagnostics {
             return
         }
 
-        runCatching {
-            synchronized(lock) {
-                val line =
-                    "${timestamp()} " +
-                        "${level.name} " +
-                        "${sanitize(message)}\n"
+        val line =
+            "${timestamp()} " +
+                "${level.name} " +
+                "${sanitize(message)}\n"
 
+        submitRuntimeWrite {
+            synchronized(lock) {
                 rotateIfNeeded(
                     runtimeFile,
                     MAX_RUNTIME_BYTES,
@@ -181,11 +219,36 @@ object Diagnostics {
             return
         }
 
+        if (isCancellation(throwable)) {
+            preserveInterruptedStatus(throwable)
+            debug(
+                "$category cancelled"
+            )
+            return
+        }
+
+        val fingerprint =
+            throwableFingerprint(
+                category,
+                throwable
+            )
+
+        if (
+            shouldSuppressThrowable(
+                fingerprint
+            )
+        ) {
+            return
+        }
+
         val stack = StringWriter().also {
             throwable.printStackTrace(
                 PrintWriter(it)
             )
         }.toString()
+            .take(
+                MAX_THROWABLE_STACK_CHARS
+            )
 
         appendCrash(
             buildString {
@@ -252,11 +315,21 @@ object Diagnostics {
             )
             .commit()
 
-        info(
+        val checkpointMessage =
             "Native checkpoint: " +
                 "$operation/$phase " +
                 detail
-        )
+
+        if (
+            phase.equals(
+                "failed",
+                ignoreCase = true
+            )
+        ) {
+            warning(checkpointMessage)
+        } else {
+            debug(checkpointMessage)
+        }
     }
 
     fun xrayErrorLogPath(): String {
@@ -312,7 +385,7 @@ object Diagnostics {
             )
             .apply()
 
-        info(
+        debug(
             "Native session passed the " +
                 "stability window"
         )
@@ -362,6 +435,8 @@ object Diagnostics {
             return
         }
 
+        flushRuntimeWrites()
+
         synchronized(lock) {
             diagnosticsDir
                 .listFiles()
@@ -392,8 +467,10 @@ object Diagnostics {
         state: String,
         profile: String,
         lastError: String
-    ): String =
-        buildString {
+    ): String {
+        flushRuntimeWrites()
+
+        return buildString {
             appendLine(
                 "Trivox diagnostics"
             )
@@ -472,6 +549,7 @@ object Diagnostics {
                     }
             )
         }
+    }
 
     fun sanitize(input: String): String =
         input
@@ -530,9 +608,7 @@ object Diagnostics {
                                 "Uncaught JVM crash"
                             )
                             appendLine(
-                                "Thread: " +
-                                    "${thread.name} " +
-                                    "(${thread.id})"
+                                "Thread: ${thread.name}"
                             )
                             appendLine(
                                 "Native checkpoint: " +
@@ -644,7 +720,7 @@ object Diagnostics {
                     0L
                 )
 
-            val exits:
+            val allExits:
                 List<ApplicationExitInfo> =
                 manager
                     .getHistoricalProcessExitReasons(
@@ -658,8 +734,21 @@ object Diagnostics {
                     .sortedBy {
                         it.timestamp
                     }
-
-            var newest = lastSeen
+            val exits =
+                allExits.filter { info ->
+                    isActionableExit(
+                        reason = info.reason,
+                        descriptionValue =
+                            info.description
+                                .orEmpty()
+                    )
+                }
+            var newest =
+                allExits
+                    .maxOfOrNull {
+                        it.timestamp
+                    }
+                    ?: lastSeen
 
             exits.forEach {
                     info: ApplicationExitInfo ->
@@ -1179,6 +1268,195 @@ object Diagnostics {
             .distinct()
             .take(32)
             .toList()
+    }
+
+    private fun submitRuntimeWrite(
+        action: () -> Unit
+    ) {
+        if (!initialized.get()) {
+            return
+        }
+
+        runCatching {
+            writer.execute {
+                runCatching(action)
+            }
+        }
+    }
+
+    private fun flushRuntimeWrites() {
+        if (!initialized.get()) {
+            return
+        }
+
+        val latch =
+            CountDownLatch(1)
+
+        runCatching {
+            writer.execute {
+                latch.countDown()
+            }
+            latch.await(
+                LOG_FLUSH_TIMEOUT_MS,
+                TimeUnit.MILLISECONDS
+            )
+        }.onFailure {
+            if (
+                it is InterruptedException
+            ) {
+                Thread.currentThread()
+                    .interrupt()
+            }
+        }
+    }
+
+    private fun isCancellation(
+        throwable: Throwable
+    ): Boolean {
+        var current: Throwable? =
+            throwable
+        val visited =
+            HashSet<Throwable>()
+
+        while (
+            current != null &&
+            visited.add(current)
+        ) {
+            if (
+                current is InterruptedException ||
+                current is InterruptedIOException ||
+                current is CancellationException ||
+                current.javaClass.simpleName ==
+                "SubscriptionCancelledException"
+            ) {
+                return true
+            }
+
+            current = current.cause
+        }
+
+        return false
+    }
+
+    private fun preserveInterruptedStatus(
+        throwable: Throwable
+    ) {
+        var current: Throwable? =
+            throwable
+        val visited =
+            HashSet<Throwable>()
+
+        while (
+            current != null &&
+            visited.add(current)
+        ) {
+            if (
+                current is InterruptedException ||
+                current is InterruptedIOException
+            ) {
+                Thread.currentThread()
+                    .interrupt()
+                return
+            }
+
+            current = current.cause
+        }
+    }
+
+    private fun throwableFingerprint(
+        category: String,
+        throwable: Throwable
+    ): String {
+        var root: Throwable =
+            throwable
+        val visited =
+            HashSet<Throwable>()
+
+        while (
+            root.cause != null &&
+            visited.add(root)
+        ) {
+            root = root.cause!!
+        }
+
+        return sanitize(category) +
+            "|" +
+            root.javaClass.name +
+            "|" +
+            sanitize(
+                root.message.orEmpty()
+            ).take(180)
+    }
+
+    private fun shouldSuppressThrowable(
+        fingerprint: String
+    ): Boolean {
+        val now =
+            System.currentTimeMillis()
+        val previous =
+            throwableFingerprints.put(
+                fingerprint,
+                now
+            )
+
+        if (
+            throwableFingerprints.size >
+            128
+        ) {
+            throwableFingerprints
+                .entries
+                .removeIf {
+                    now - it.value >
+                        THROWABLE_DEDUP_WINDOW_MS
+                }
+        }
+
+        return previous != null &&
+            now - previous <
+            THROWABLE_DEDUP_WINDOW_MS
+    }
+
+    private fun isActionableExit(
+        reason: Int,
+        descriptionValue: String
+    ): Boolean {
+        if (
+            reason in
+            setOf(
+                EXIT_REASON_USER_REQUESTED,
+                EXIT_REASON_USER_STOPPED,
+                EXIT_REASON_PACKAGE_STATE_CHANGE,
+                EXIT_REASON_PACKAGE_UPDATED
+            )
+        ) {
+            return false
+        }
+
+        if (
+            reason ==
+            EXIT_REASON_OTHER
+        ) {
+            val description =
+                descriptionValue.lowercase(
+                    Locale.ROOT
+                )
+
+            if (
+                listOf(
+                    "onekeyclean",
+                    "swipeupclean",
+                    "lockscreen",
+                    "optimizationclean",
+                    "securitycenter"
+                ).any {
+                    it in description
+                }
+            ) {
+                return false
+            }
+        }
+
+        return true
     }
 
     private fun reasonLabel(

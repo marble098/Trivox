@@ -119,16 +119,16 @@ class TrivoxApp : Application() {
     ) {
         when {
             level >=
-                TRIM_MEMORY_COMPLETE ->
+                TRIM_MEMORY_BACKGROUND ->
                 Diagnostics.warning(
-                    "Critical memory trim: " +
+                    "Background memory trim: " +
                         level
                 )
 
             level >=
-                TRIM_MEMORY_BACKGROUND ->
-                Diagnostics.info(
-                    "Background memory trim: " +
+                TRIM_MEMORY_RUNNING_CRITICAL ->
+                Diagnostics.warning(
+                    "Critical running memory trim: " +
                         level
                 )
 

@@ -112,6 +112,26 @@ jobs:
           python3 -m py_compile tools/validate-android-resources.py
           python3 tools/validate-android-resources.py
           python3 tools/audit-trivox.py --ci
+          grep -Fq 'SubscriptionCancelledException' \
+            app/src/main/java/com/trivox/client/network/SubscriptionSupport.kt
+          grep -Fq 'fun normalizeUrl' \
+            app/src/main/java/com/trivox/client/network/SubscriptionManager.kt
+          grep -Fq 'fetchCatalog' \
+            app/src/main/java/com/trivox/client/network/NordVpnSubscriptionManager.kt
+          grep -Fq 'BATCH_XRAY_ATTEMPTS = 1' app/src/main/java/com/trivox/client/network/PingManager.kt
+          grep -Fq 'BATCH_XRAY_MAX_TARGETS = 2' app/src/main/java/com/trivox/client/network/PingManager.kt
+          grep -Fq 'allowSingleSample = true' app/src/main/java/com/trivox/client/network/PingManager.kt
+          grep -Fq 'showConnectionStartPending' \
+            app/src/main/java/com/trivox/client/ui/MainActivity.kt
+          grep -Fq 'EXIT_REASON_PACKAGE_UPDATED' \
+            app/src/main/java/com/trivox/client/util/Diagnostics.kt
+          if grep -Fq 'info: ApplicationExitInfo' \
+            app/src/main/java/com/trivox/client/util/Diagnostics.kt; then
+            echo "ApplicationExitInfo escaped the API-30 guarded scope." >&2
+            exit 1
+          fi
+          grep -Fq 'subscriptionHeaderSummary' \
+            app/src/main/res/layout/activity_subscriptions.xml
           if grep -R --fixed-strings             "registerController(null)"             app/src/main/java; then
             echo "Unsafe null native controller registration detected." >&2
             exit 1
@@ -234,6 +254,17 @@ jobs:
         run: |
           set -euo pipefail
           ./gradlew --no-daemon --stacktrace test lint
+
+      - name: Upload lint diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-diagnostics-${{ github.run_id }}
+          path: |
+            app/build/reports/lint-results-*.html
+            app/build/intermediates/lint_intermediate_text_report/**/lint-results-*.txt
+          if-no-files-found: ignore
+          retention-days: 7
 
   build:
     name: Build direct-download APKs

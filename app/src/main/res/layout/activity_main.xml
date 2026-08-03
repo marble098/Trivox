@@ -194,10 +194,13 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="44dp"
-        android:layout_marginTop="5dp"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/panel_background"
         android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp">
 
         <HorizontalScrollView
             android:layout_width="0dp"
@@ -220,9 +223,9 @@
         <Button
             android:id="@+id/refreshSubscriptionsButton"
             style="@style/Widget.Trivox.Button.Secondary"
-            android:layout_width="42dp"
-            android:layout_height="38dp"
-            android:layout_marginStart="5dp"
+            android:layout_width="48dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="6dp"
             android:contentDescription="@string/update_subscriptions"
             android:minWidth="42dp"
             android:padding="0dp"
@@ -257,38 +260,47 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="42dp"
-        android:layout_marginTop="5dp"
-        android:orientation="horizontal">
+        android:layout_height="46dp"
+        android:layout_marginTop="6dp"
+        android:baselineAligned="false"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:weightSum="3">
 
         <Button
             android:id="@+id/addButton"
             style="@style/Widget.Trivox.Button.Secondary"
-            android:layout_width="48dp"
-            android:layout_height="42dp"
+            android:layout_width="0dp"
+            android:layout_height="46dp"
+            android:layout_marginEnd="3dp"
+            android:layout_weight="1"
             android:contentDescription="@string/add"
-            android:minWidth="48dp"
-            android:padding="0dp"
-            android:text="＋"
-            android:textSize="20sp" />
+            android:minWidth="0dp"
+            android:text="@string/add_short"
+            android:textSize="11sp" />
 
         <Button
             android:id="@+id/testButton"
             style="@style/Widget.Trivox.Button.Secondary"
             android:layout_width="0dp"
-            android:layout_height="42dp"
-            android:layout_marginStart="5dp"
+            android:layout_height="46dp"
+            android:layout_marginStart="3dp"
+            android:layout_marginEnd="3dp"
             android:layout_weight="1"
-            android:text="@string/tcp_ping_icon" />
+            android:minWidth="0dp"
+            android:text="@string/tcp_ping_icon"
+            android:textSize="11sp" />
 
         <Button
             android:id="@+id/realDelayAllButton"
             style="@style/Widget.Trivox.Button.Secondary"
             android:layout_width="0dp"
-            android:layout_height="42dp"
-            android:layout_marginStart="5dp"
+            android:layout_height="46dp"
+            android:layout_marginStart="3dp"
             android:layout_weight="1"
-            android:text="@string/real_delay_all_icon" />
+            android:minWidth="0dp"
+            android:text="@string/real_delay_all_icon"
+            android:textSize="11sp" />
     </LinearLayout>
 
     <LinearLayout

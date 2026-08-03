@@ -78,6 +78,7 @@ import kotlin.math.abs
 class MainActivity : ThemedActivity() {
     private lateinit var repository: ConfigRepository
     private lateinit var settingsRepository: SettingsRepository
+    private lateinit var coreManager: CoreManager
     private lateinit var adapter: ProfileAdapter
     private lateinit var pingManager: PingManager
 
@@ -115,11 +116,15 @@ class MainActivity : ThemedActivity() {
         AtomicBoolean(false)
     private val connectionActionBusy =
         AtomicBoolean(false)
+    private val connectionStartPending =
+        AtomicBoolean(false)
     private val pingGeneration =
         AtomicLong(0)
     private val pingTasks =
         mutableListOf<Future<*>>()
     private val subscriptionRefreshBusy =
+        AtomicBoolean(false)
+    private val activityDestroyed =
         AtomicBoolean(false)
     private val pingResultBuffer =
         ConcurrentHashMap<String, PingResult>()
@@ -190,10 +195,18 @@ class MainActivity : ThemedActivity() {
             val id = pendingVpnProfile
             pendingVpnProfile = null
 
-            if (id != null && VpnService.prepare(this) == null) {
+            if (
+                id != null &&
+                VpnService.prepare(this) == null
+            ) {
                 startVpn(id)
             } else if (id != null) {
-                toast(getString(R.string.permission_required))
+                clearConnectionStartPending()
+                toast(
+                    getString(
+                        R.string.permission_required
+                    )
+                )
             }
         }
 
@@ -225,9 +238,10 @@ class MainActivity : ThemedActivity() {
 
         repository = ConfigRepository(this)
         settingsRepository = SettingsRepository(this)
+        coreManager = CoreManager(this)
         pingManager =
             PingManager(
-                CoreManager(this).adapter
+                coreManager.adapter
             )
         subscriptionUpdater =
             SubscriptionRefreshCoordinator(this)
@@ -578,37 +592,119 @@ class MainActivity : ThemedActivity() {
     }
 
     private fun refreshSubscriptionsFromMain() {
-        if (!subscriptionRefreshBusy.compareAndSet(false, true)) {
-            toast(getString(R.string.subscription_update_busy))
+        if (
+            !subscriptionRefreshBusy
+                .compareAndSet(
+                    false,
+                    true
+                )
+        ) {
+            toast(
+                getString(
+                    R.string
+                        .subscription_update_busy
+                )
+            )
             return
         }
 
-        refreshSubscriptionsButton.isEnabled = false
+        refreshSubscriptionsButton.isEnabled =
+            false
         refreshSubscriptionsButton.text = "…"
-        val accepted = subscriptionUpdater.refreshEnabled { summary ->
-            runOnUiThread {
-                subscriptionRefreshBusy.set(false)
-                refreshSubscriptionsButton.isEnabled = true
-                refreshSubscriptionsButton.text = "↻"
-                subscriptionTabsSignature = ""
-                renderSubscriptionTabs(force = true)
-                refresh()
-                toast(
-                    getString(
-                        R.string.subscription_update_done,
-                        summary.updated,
-                        summary.profiles,
-                        summary.failed
-                    )
+        refreshSubscriptionsButton
+            .contentDescription =
+            getString(
+                R.string.subscription_updating
+            )
+
+        val accepted =
+            subscriptionUpdater
+                .refreshEnabled(
+                    progress = {
+                        progress ->
+                        runOnUiThreadIfAlive {
+                            if (
+                                subscriptionRefreshBusy
+                                    .get()
+                            ) {
+                                refreshSubscriptionsButton
+                                    .text =
+                                    if (
+                                        progress.total >
+                                        0
+                                    ) {
+                                        "${progress.completed + 1}/" +
+                                            progress.total
+                                    } else {
+                                        "…"
+                                    }
+                                refreshSubscriptionsButton
+                                    .contentDescription =
+                                    getString(
+                                        R.string
+                                            .subscription_progress_format,
+                                        progress.completed +
+                                            1,
+                                        progress.total,
+                                        progress.sourceName
+                                    )
+                            }
+                        }
+                    },
+                    callback = {
+                        summary ->
+                        runOnUiThreadIfAlive {
+                            subscriptionRefreshBusy
+                                .set(false)
+                            refreshSubscriptionsButton
+                                .isEnabled = true
+                            refreshSubscriptionsButton
+                                .text = "↻"
+                            refreshSubscriptionsButton
+                                .contentDescription =
+                                getString(
+                                    R.string
+                                        .update_subscriptions
+                                )
+                            subscriptionTabsSignature =
+                                ""
+                            renderSubscriptionTabs(
+                                force = true
+                            )
+                            refresh()
+
+                            if (!summary.cancelled) {
+                                toast(
+                                    getString(
+                                        R.string
+                                            .subscription_update_done_detailed,
+                                        summary.updated,
+                                        summary.profiles,
+                                        summary.partial,
+                                        summary.failed
+                                    )
+                                )
+                            }
+                        }
+                    }
                 )
-            }
-        }
 
         if (!accepted) {
             subscriptionRefreshBusy.set(false)
-            refreshSubscriptionsButton.isEnabled = true
+            refreshSubscriptionsButton.isEnabled =
+                true
             refreshSubscriptionsButton.text = "↻"
-            toast(getString(R.string.subscription_update_busy))
+            refreshSubscriptionsButton
+                .contentDescription =
+                getString(
+                    R.string.update_subscriptions
+                )
+            toast(
+                getString(
+                    R.string
+                        .subscription_update_busy
+                )
+            )
         }
     }
 
@@ -1617,13 +1713,24 @@ class MainActivity : ThemedActivity() {
                     TestStatus.TESTING
             }
 
-            runOnUiThread(::refresh)
+            runOnUiThread {
+                refresh()
+                val total = profiles.size
+                if (method == PingMethod.XRAY_HTTP) {
+                    realDelayAllButton.text = "0/$total"
+                } else {
+                    tcpPingButton.text = "0/$total"
+                }
+            }
 
             val settings =
                 settingsRepository.load()
             settings.pingMethod = method
+            val totalProfiles = profiles.size
             val remaining =
-                AtomicInteger(profiles.size)
+                AtomicInteger(totalProfiles)
+            val completed =
+                AtomicInteger(0)
             val tasks =
                 pingManager.batch(
                     profiles = profiles,
@@ -1640,6 +1747,39 @@ class MainActivity : ThemedActivity() {
                         schedulePingFlush(
                             generation
                         )
+                    }
+
+                    val completedCount =
+                        completed.incrementAndGet()
+
+                    if (
+                        completedCount == totalProfiles ||
+                        completedCount == 1 ||
+                        completedCount %
+                            maxOf(
+                                1,
+                                totalProfiles / 20
+                            ) == 0
+                    ) {
+                        runOnUiThreadIfAlive {
+                            if (
+                                pingGeneration.get() ==
+                                generation
+                            ) {
+                                val label =
+                                    "$completedCount/$totalProfiles"
+                                if (
+                                    method ==
+                                    PingMethod.XRAY_HTTP
+                                ) {
+                                    realDelayAllButton.text =
+                                        label
+                                } else {
+                                    tcpPingButton.text =
+                                        label
+                                }
+                            }
+                        }
                     }
 
                     if (
@@ -1667,6 +1807,15 @@ class MainActivity : ThemedActivity() {
     ) {
         tcpPingButton.isEnabled = enabled
         realDelayAllButton.isEnabled = enabled
+
+        if (enabled) {
+            tcpPingButton.setText(
+                R.string.tcp_ping_icon
+            )
+            realDelayAllButton.setText(
+                R.string.real_delay_all_icon
+            )
+        }
     }
 
     private fun schedulePingFlush(
@@ -2107,7 +2256,7 @@ class MainActivity : ThemedActivity() {
                 rawRoot.has("routing")
 
         return if (complete) {
-            rawRoot!!.toString(2)
+            checkNotNull(rawRoot).toString(2)
         } else {
             XrayConfigBuilder.build(
                 profile = profile,
@@ -2395,39 +2544,141 @@ class MainActivity : ThemedActivity() {
             return
         }
 
-        val profile = repository.find(repository.selectedId())
-        if (profile == null || !profile.enabled) {
-            toast(getString(R.string.select_profile))
-            return
-        }
-        if (!CoreManager(this).adapter.isAvailable()) {
-            toast(getString(R.string.core_missing))
+        val profile =
+            repository.find(
+                repository.selectedId()
+            )
+
+        if (
+            profile == null ||
+            !profile.enabled
+        ) {
+            toast(
+                getString(
+                    R.string.select_profile
+                )
+            )
             return
         }
 
         if (
-            Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
-            android.content.pm.PackageManager.PERMISSION_GRANTED
+            !coreManager.adapter
+                .isAvailable()
         ) {
-            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            toast(
+                getString(
+                    R.string.core_missing
+                )
+            )
+            return
         }
 
-        ConnectionPauseController.cancel(this)
+        showConnectionStartPending(
+            profile.name
+        )
 
-        if (settingsRepository.load().mode == ConnectionMode.PROXY) {
+        if (
+            Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(
+                Manifest.permission
+                    .POST_NOTIFICATIONS
+            ) !=
+            android.content.pm.PackageManager
+                .PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(
+                Manifest.permission
+                    .POST_NOTIFICATIONS
+            )
+        }
+
+        ConnectionPauseController
+            .cancel(this)
+
+        if (
+            settingsRepository.load().mode ==
+            ConnectionMode.PROXY
+        ) {
             startProxy(profile.id)
         } else {
             requestVpn(profile.id)
         }
     }
 
+    private fun showConnectionStartPending(
+        profileName: String
+    ) {
+        connectionStartPending.set(true)
+        handler.removeCallbacks(
+            connectionStartTimeout
+        )
+
+        stateText.setText(
+            R.string.state_preparing
+        )
+        stateText.setTextColor(
+            ContextCompat.getColor(
+                this,
+                R.color.blue
+            )
+        )
+        selectedText.text = profileName
+        connectButton.setText(
+            R.string.connecting_now
+        )
+        connectButton.isEnabled = false
+
+        handler.postDelayed(
+            connectionStartTimeout,
+            CONNECTION_START_UI_TIMEOUT_MS
+        )
+    }
+
+    private fun clearConnectionStartPending() {
+        if (
+            connectionStartPending
+                .compareAndSet(
+                    true,
+                    false
+                )
+        ) {
+            handler.removeCallbacks(
+                connectionStartTimeout
+            )
+            renderState(
+                ConnectionRuntime.current()
+            )
+        }
+    }
+
+    private val connectionStartTimeout =
+        Runnable {
+            if (
+                connectionStartPending
+                    .compareAndSet(
+                        true,
+                        false
+                    ) &&
+                ConnectionRuntime.current()
+                    .state in
+                setOf(
+                    ConnectionState
+                        .DISCONNECTED,
+                    ConnectionState.ERROR
+                )
+            ) {
+                renderState(
+                    ConnectionRuntime.current()
+                )
+            }
+        }
+
     private fun startProxy(id: String) {
-        ContextCompat.startForegroundService(
-            this,
+        startConnectionService(
             Intent(this, ConnectionService::class.java)
                 .setAction(ConnectionService.ACTION_START)
-                .putExtra(ConnectionService.EXTRA_PROFILE_ID, id)
+                .putExtra(ConnectionService.EXTRA_PROFILE_ID, id),
+            "proxy"
         )
     }
 
@@ -2442,25 +2693,81 @@ class MainActivity : ThemedActivity() {
     }
 
     private fun startVpn(id: String) {
-        ContextCompat.startForegroundService(
-            this,
+        startConnectionService(
             Intent(this, TrivoxVpnService::class.java)
                 .setAction(TrivoxVpnService.ACTION_START)
-                .putExtra(TrivoxVpnService.EXTRA_PROFILE_ID, id)
+                .putExtra(TrivoxVpnService.EXTRA_PROFILE_ID, id),
+            "vpn"
         )
     }
 
-    private fun renderState(snapshot: ConnectionRuntime.Snapshot) {
+    private fun startConnectionService(
+        intent: Intent,
+        mode: String
+    ) {
+        runCatching {
+            ContextCompat.startForegroundService(
+                this,
+                intent
+            )
+        }.onFailure {
+            error ->
+            clearConnectionStartPending()
+            Diagnostics.recordThrowable(
+                "Start $mode connection service",
+                error
+            )
+            toast(
+                getString(
+                    R.string.connection_start_failed
+                )
+            )
+        }
+    }
+
+    private fun renderState(
+        snapshot:
+            ConnectionRuntime.Snapshot
+    ) {
+        connectionStartPending.set(false)
+        handler.removeCallbacks(
+            connectionStartTimeout
+        )
+
         stateText.setText(
             when (snapshot.state) {
-                ConnectionState.DISCONNECTED -> R.string.state_disconnected
-                ConnectionState.PREPARING -> R.string.state_preparing
-                ConnectionState.CONNECTING -> R.string.state_connecting
-                ConnectionState.CONNECTED -> R.string.state_connected
-                ConnectionState.RECONNECTING -> R.string.state_reconnecting
-                ConnectionState.STOPPING -> R.string.state_stopping
-                ConnectionState.ERROR -> R.string.state_error
+                ConnectionState.DISCONNECTED ->
+                    R.string.state_disconnected
+                ConnectionState.PREPARING ->
+                    R.string.state_preparing
+                ConnectionState.CONNECTING ->
+                    R.string.state_connecting
+                ConnectionState.CONNECTED ->
+                    R.string.state_connected
+                ConnectionState.RECONNECTING ->
+                    R.string.state_reconnecting
+                ConnectionState.STOPPING ->
+                    R.string.state_stopping
+                ConnectionState.ERROR ->
+                    R.string.state_error
             }
+        )
+        stateText.setTextColor(
+            ContextCompat.getColor(
+                this,
+                when (snapshot.state) {
+                    ConnectionState.CONNECTED ->
+                        R.color.green
+                    ConnectionState.ERROR ->
+                        R.color.red
+                    ConnectionState.PREPARING,
+                    ConnectionState.CONNECTING,
+                    ConnectionState.RECONNECTING ->
+                        R.color.blue
+                    else ->
+                        R.color.text_primary
+                }
+            )
         )
 
         connectButton.setText(
@@ -3008,6 +3315,24 @@ class MainActivity : ThemedActivity() {
         }
     }
 
+    private fun runOnUiThreadIfAlive(
+        action: () -> Unit
+    ) {
+        if (activityDestroyed.get()) {
+            return
+        }
+
+        runOnUiThread {
+            if (
+                !activityDestroyed.get() &&
+                !isFinishing &&
+                !isDestroyed
+            ) {
+                action()
+            }
+        }
+    }
+
     private fun toast(message: String) =
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
 
@@ -3021,6 +3346,7 @@ class MainActivity : ThemedActivity() {
     }
 
     override fun onDestroy() {
+        activityDestroyed.set(true)
         ConnectionRuntime
             .removeListener(
                 runtimeListener
@@ -3055,8 +3381,14 @@ class MainActivity : ThemedActivity() {
             50L
         private const val LIVE_PING_URL =
             "https://cp.cloudflare.com/generate_204"
-        private const val CONNECTION_ACTION_COOLDOWN_MS = 1_500L
-        private const val PROFILE_SWITCH_DELAY_MS = 350L
+        private const val
+            CONNECTION_ACTION_COOLDOWN_MS =
+                1_200L
+        private const val
+            CONNECTION_START_UI_TIMEOUT_MS =
+                6_000L
+        private const val
+            PROFILE_SWITCH_DELAY_MS = 350L
         private const val PING_RESULT_FLUSH_MS = 220L
         private const val MAIN_UI_PREFS = "main_ui"
         private const val KEY_ACTIVE_SUBSCRIPTION =

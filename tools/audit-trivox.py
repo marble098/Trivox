@@ -109,7 +109,15 @@ def audit(root: Path) -> tuple[list[Finding], dict[str, object]]:
         "app/src/main/java/com/trivox/client/core/XrayCoreAdapter.kt":
             "logFailure = false",
         "app/src/main/java/com/trivox/client/network/SubscriptionManager.kt":
-            "uri.userInfo == null",
+            "fun normalizeUrl",
+        "app/src/main/java/com/trivox/client/network/SubscriptionSupport.kt":
+            "isSubscriptionCancellation",
+        "app/src/main/java/com/trivox/client/network/SubscriptionRefreshCoordinator.kt":
+            "mergeSubscription",
+        "app/src/main/java/com/trivox/client/ui/SubscriptionManagementActivity.kt":
+            "runOnUiThreadIfAlive",
+        "app/src/main/java/com/trivox/client/util/Diagnostics.kt":
+            "isActionableExit",
         ".github/workflows/main.yml":
             "python3 tools/audit-trivox.py --ci",
         ".gitignore":
@@ -155,6 +163,10 @@ def audit(root: Path) -> tuple[list[Finding], dict[str, object]]:
             add("error", "ping-negative-dns-cache", ping, "Negative DNS cache is missing.")
         if "preferredXrayTarget" not in text:
             add("error", "ping-single-target", ping, "Real delay still depends on one target.")
+        if "BATCH_XRAY_ATTEMPTS = 1" not in text:
+            add("error", "ping-batch-slow", ping, "Batch real-delay is not using the adaptive single-sample ranking pass.")
+        if "BATCH_XRAY_MAX_TARGETS = 2" not in text or "allowSingleSample = true" not in text:
+            add("error", "ping-batch-fallback", ping, "Batch real-delay fallback targets are not bounded.")
 
     main = root / "app/src/main/java/com/trivox/client/ui/MainActivity.kt"
     if main.is_file():
@@ -169,6 +181,30 @@ def audit(root: Path) -> tuple[list[Finding], dict[str, object]]:
             add("error", "share-input-limit", main, "External share text has no explicit size limit.")
         if "readConfigurationText" not in text:
             add("error", "file-import-limit", main, "Selected-file import is not streamed through a bounded reader.")
+        if "showConnectionStartPending" not in text:
+            add("error", "connect-feedback", main, "First-tap connection feedback is missing.")
+        if "subscription_progress_format" not in text:
+            add("error", "subscription-progress", main, "Main subscription refresh has no per-source progress.")
+        if "activityDestroyed" not in text or "runOnUiThreadIfAlive" not in text:
+            add("error", "ui-lifecycle-callback", main, "Background callbacks are not guarded after Activity destruction.")
+        if "startConnectionService" not in text:
+            add("error", "connect-start-recovery", main, "Foreground-service start failures do not restore the connection UI.")
+
+    coordinator = root / "app/src/main/java/com/trivox/client/network/SubscriptionRefreshCoordinator.kt"
+    if coordinator.is_file():
+        text = read(coordinator)
+        if "activeTask" not in text or "closed" not in text:
+            add("error", "subscription-lifecycle", coordinator, "Subscription refresh work is not owned and cancelled by its coordinator.")
+
+    diagnostics = root / "app/src/main/java/com/trivox/client/util/Diagnostics.kt"
+    if diagnostics.is_file():
+        text = read(diagnostics)
+        if "isActionableExit" not in text:
+            add("error", "diagnostics-noise", diagnostics, "Non-actionable process exits are not filtered.")
+        if "submitRuntimeWrite" not in text:
+            add("error", "diagnostics-blocking", diagnostics, "Routine log writes still block caller threads.")
+        if "isCancellation" not in text:
+            add("error", "diagnostics-cancellation", diagnostics, "Expected cancellation is logged as a crash.")
 
     updater = root / "app/src/main/java/com/trivox/client/update/UpdateChecker.kt"
     if updater.is_file():
@@ -179,6 +215,12 @@ def audit(root: Path) -> tuple[list[Finding], dict[str, object]]:
             add("error", "update-retry-policy", updater, "Transient update failures still use the daily interval.")
         if "checkInProgress" not in text:
             add("error", "update-overlap", updater, "Overlapping update checks are not prevented.")
+
+    main_layout = root / "app/src/main/res/layout/activity_main.xml"
+    if main_layout.is_file():
+        text = read(main_layout)
+        if 'android:weightSum="3"' not in text:
+            add("error", "main-action-alignment", main_layout, "The three main action buttons are not equally weighted.")
 
     for path in kotlin:
         text = read(path)

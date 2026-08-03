@@ -80,6 +80,16 @@ audit. See `docs/TRIVOX_FULL_TECHNICAL_AUDIT_V3.md`. Run:
 python3 tools/audit-trivox.py --ci
 ```
 
+
+## Subscription and diagnostics hardening v4.2
+
+The v4.2 corrective pass adds tolerant HTTPS subscription normalization,
+bounded gzip/deflate downloads, redirect-loop and retry handling, cancellation
+semantics, partial NordVPN catalogue preservation, optimized batch real-delay,
+instant first-tap connection feedback, actionable-only diagnostics and refreshed
+subscription/main layouts. Run `python3 tools/audit-trivox.py --ci` to validate
+the guards.
+
 ## License
 
 Trivox source is Apache-2.0. Xray-core is MPL-2.0 and libXray is MIT. The core binary is downloaded separately from its official release and remains under its upstream license. See [LICENSES.md](LICENSES.md).

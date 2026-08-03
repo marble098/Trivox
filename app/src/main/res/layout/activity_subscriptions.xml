@@ -19,14 +19,43 @@
         android:title="@string/manage_subscriptions"
         app:navigationIcon="?attr/homeAsUpIndicator" />
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/panel_background"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <TextView
+            android:id="@+id/subscriptionHeaderSummary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/subscription_header_empty"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/subscription_header_hint"
+            android:textColor="@color/text_secondary"
+            android:textSize="10sp" />
+    </LinearLayout>
+
     <TextView
         android:id="@+id/subscriptionProgress"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:background="@drawable/panel_background"
+        android:background="@drawable/input_background"
         android:gravity="center"
-        android:padding="10dp"
+        android:paddingStart="10dp"
+        android:paddingTop="9dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="9dp"
         android:text="@string/subscription_updating"
         android:textColor="@color/blue"
         android:textSize="11sp"
@@ -42,14 +71,16 @@
         <ScrollView
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:fillViewport="true">
+            android:clipToPadding="false"
+            android:fillViewport="true"
+            android:overScrollMode="ifContentScrolls">
 
             <LinearLayout
                 android:id="@+id/subscriptionList"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:paddingBottom="6dp" />
+                android:paddingBottom="8dp" />
         </ScrollView>
 
         <TextView
@@ -66,25 +97,29 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:layout_height="48dp"
+        android:baselineAligned="false"
+        android:orientation="horizontal"
+        android:weightSum="2">
 
         <Button
             android:id="@+id/addSubscriptionButton"
             style="@style/Widget.Trivox.Button.Secondary"
             android:layout_width="0dp"
-            android:layout_height="46dp"
+            android:layout_height="48dp"
             android:layout_marginEnd="4dp"
             android:layout_weight="1"
+            android:minWidth="0dp"
             android:text="@string/add_subscription" />
 
         <Button
             android:id="@+id/updateAllSubscriptionsButton"
             style="@style/Widget.Trivox.Button.Primary"
             android:layout_width="0dp"
-            android:layout_height="46dp"
+            android:layout_height="48dp"
             android:layout_marginStart="4dp"
             android:layout_weight="1"
+            android:minWidth="0dp"
             android:text="@string/update_all_subscriptions" />
     </LinearLayout>
 </LinearLayout>

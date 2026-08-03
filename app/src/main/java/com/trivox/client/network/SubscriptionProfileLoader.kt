@@ -8,9 +8,11 @@ import com.trivox.client.util.SecretStore
 
 object SubscriptionProfileLoader {
     data class Result(
-        val profiles:
-            List<ConfigProfile>,
-        val finalUrl: String
+        val profiles: List<ConfigProfile>,
+        val finalUrl: String,
+        val complete: Boolean = true,
+        val warnings: List<String> =
+            emptyList()
     )
 
     fun load(
@@ -33,28 +35,33 @@ object SubscriptionProfileLoader {
                 )
             }
 
-            SubscriptionKind
-                .NORDVPN -> {
+            SubscriptionKind.NORDVPN -> {
                 val token =
                     SecretStore.get(
-                        context,
+                        context.applicationContext,
                         source.secretAlias
                     )
                         ?.trim()
                         .orEmpty()
 
                 check(token.isNotBlank()) {
-                    "NordVPN token is unavailable. Edit the subscription and enter it again."
+                    "NordVPN token is unavailable. " +
+                        "Edit the subscription and enter it again."
                 }
+
+                val result =
+                    NordVpnSubscriptionManager()
+                        .fetchCatalog(token)
 
                 Result(
                     profiles =
-                        NordVpnSubscriptionManager()
-                            .fetchAllCountries(
-                                token
-                            ),
+                        result.profiles,
                     finalUrl =
-                        source.url
+                        source.url,
+                    complete =
+                        result.complete,
+                    warnings =
+                        result.warnings
                 )
             }
         }
