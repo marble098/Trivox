@@ -43,11 +43,22 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 tools/prepare-multicore-binaries.py
 
+      - name: Fix native core packaging
+        run: python3 tools/fix-native-core-packaging.py
+
+      - name: Verify native core libs
+        run: |
+          test -f app/src/main/jniLibs/arm64-v8a/libtrivox_sing_box.so
+          test -f app/src/main/jniLibs/arm64-v8a/libtrivox_mihomo.so
+          test -f app/src/main/jniLibs/armeabi-v7a/libtrivox_sing_box.so
+          test -f app/src/main/jniLibs/armeabi-v7a/libtrivox_mihomo.so
+          ls -lh app/src/main/jniLibs/arm64-v8a app/src/main/jniLibs/armeabi-v7a
+
       - name: Commit prepared multicore files
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add app/src/main tools docs .github/workflows
+          git add app/src/main tools docs .github/workflows app/build.gradle.kts
 
           if git diff --cached --quiet; then
             echo "No multicore changes to commit"

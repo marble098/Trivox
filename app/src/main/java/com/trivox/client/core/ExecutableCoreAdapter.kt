@@ -11,18 +11,19 @@ import java.util.concurrent.atomic.AtomicReference
 abstract class ExecutableCoreAdapter(
     private val context: Context,
     private val binaryName: String,
+    private val libraryFileName: String,
     private val displayName: String
 ) : CoreAdapter {
     private val activeProcess = AtomicReference<Process?>(null)
 
     override fun isAvailable(): Boolean = runCatching {
-        preparedBinary().isFile
+        executableBinaryOrNull()?.isFile == true
     }.getOrDefault(false)
 
     override fun version(): String = runCatching {
-        val binary = preparedBinary()
-        if (!binary.isFile) return@runCatching "missing"
+        val binary = executableBinaryOrNull() ?: return@runCatching "missing"
         val process = ProcessBuilder(binary.absolutePath, "version")
+            .directory(coreWorkDir())
             .redirectErrorStream(true)
             .start()
         process.waitFor(1600, TimeUnit.MILLISECONDS)
@@ -34,7 +35,7 @@ abstract class ExecutableCoreAdapter(
     }.getOrDefault("unknown")
 
     override fun validate(configJson: String): CoreResult {
-        val binary = preparedBinaryOrError() ?: return missing()
+        val binary = executableBinaryOrNull() ?: return missing()
         val config = writeConfig(configJson, "validate")
         val args = validationArgs(binary, config)
         return runCatching {
@@ -64,7 +65,7 @@ abstract class ExecutableCoreAdapter(
         if (protectSocket != null) {
             return CoreResult(false, "$displayName standalone binary mode supports local proxy mode only in this patch. Use Xray for Android VPN TUN mode.")
         }
-        val binary = preparedBinaryOrError() ?: return missing()
+        val binary = executableBinaryOrNull() ?: return missing()
         stop()
         val config = writeConfig(configJson, "run")
         val args = runArgs(binary, config)
@@ -110,22 +111,35 @@ abstract class ExecutableCoreAdapter(
     protected abstract fun validationArgs(binary: File, config: File): List<String>
     protected abstract fun runArgs(binary: File, config: File): List<String>
 
-    private fun preparedBinaryOrError(): File? = preparedBinary().takeIf { it.isFile && it.canExecute() }
+    private fun executableBinaryOrNull(): File? {
+        nativeBinary()?.let { return it }
+        return legacyAssetBinaryForOldAndroid()
+    }
 
-    private fun preparedBinary(): File {
-        val abi = preferredAbi()
-        val out = File(coreWorkDir(), binaryName)
-        if (out.isFile && out.canExecute()) return out
-        val asset = "cores/$abi/$binaryName"
-        context.assets.open(asset).use { input ->
-            out.outputStream().use { output -> input.copyTo(output) }
-        }
-        out.setExecutable(true, true)
-        return out
+    private fun nativeBinary(): File? {
+        val dir = context.applicationInfo.nativeLibraryDir ?: return null
+        val file = File(dir, libraryFileName)
+        return file.takeIf { it.isFile && it.canExecute() }
+    }
+
+    private fun legacyAssetBinaryForOldAndroid(): File? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) return null
+        return runCatching {
+            val abi = preferredAbi()
+            val out = File(coreWorkDir(), binaryName)
+            if (!out.isFile) {
+                val asset = "cores/$abi/$binaryName"
+                context.assets.open(asset).use { input ->
+                    out.outputStream().use { output -> input.copyTo(output) }
+                }
+            }
+            out.setExecutable(true, true)
+            out.takeIf { it.isFile && it.canExecute() }
+        }.getOrNull()
     }
 
     private fun preferredAbi(): String = Build.SUPPORTED_ABIS.firstOrNull { abi ->
-        abi == "arm64-v8a" || abi == "armeabi-v7a" || abi == "x86_64"
+        abi == "arm64-v8a" || abi == "armeabi-v7a"
     } ?: Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
 
     private fun coreWorkDir(): File = File(context.filesDir, "trivox-cores/$binaryName").apply { mkdirs() }
@@ -133,10 +147,15 @@ abstract class ExecutableCoreAdapter(
     private fun writeConfig(configJson: String, name: String): File =
         File(coreWorkDir(), "$name-${System.nanoTime()}.json").apply { writeText(configJson) }
 
-    private fun missing(): CoreResult = CoreResult(false, "$displayName binary is missing. Run the Trivox multicore GitHub Action first.")
+    private fun missing(): CoreResult = CoreResult(false, "$displayName binary is missing or not executable. Rebuild APK with native jniLibs packaging.")
 }
 
-class SingBoxCoreAdapter(context: Context) : ExecutableCoreAdapter(context, "sing-box", "sing-box") {
+class SingBoxCoreAdapter(context: Context) : ExecutableCoreAdapter(
+    context,
+    "sing-box",
+    "libtrivox_sing_box.so",
+    "sing-box"
+) {
     override val id = "sing-box"
     override val capabilities = CoreCapabilities(
         protocols = setOf("vless", "vmess", "trojan", "shadowsocks", "socks", "http", "wireguard", "hysteria2", "tuic"),
@@ -149,7 +168,12 @@ class SingBoxCoreAdapter(context: Context) : ExecutableCoreAdapter(context, "sin
     override fun runArgs(binary: File, config: File) = listOf(binary.absolutePath, "run", "-c", config.absolutePath)
 }
 
-class MihomoCoreAdapter(context: Context) : ExecutableCoreAdapter(context, "mihomo", "mihomo") {
+class MihomoCoreAdapter(context: Context) : ExecutableCoreAdapter(
+    context,
+    "mihomo",
+    "libtrivox_mihomo.so",
+    "mihomo"
+) {
     override val id = "mihomo"
     override val capabilities = CoreCapabilities(
         protocols = setOf("vless", "vmess", "trojan", "shadowsocks", "socks", "http", "wireguard", "hysteria2", "tuic"),
