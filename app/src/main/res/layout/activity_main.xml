@@ -1,223 +1,235 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:layoutDirection="locale"
     android:orientation="vertical"
-    android:paddingStart="10dp"
-    android:paddingTop="3dp"
-    android:paddingEnd="10dp"
-    android:paddingBottom="8dp"
+    android:background="?android:attr/colorBackground"
+    android:paddingStart="16dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="16dp"
     android:textDirection="locale">
 
+    <!-- Toolbar:保持原样，仅微调间距 -->
     <androidx.appcompat.widget.Toolbar
         android:id="@+id/toolbar"
         style="@style/Widget.Trivox.Toolbar"
         android:layout_width="match_parent"
-        android:layout_height="50dp"
-        android:minHeight="50dp"
+        android:layout_height="?attr/actionBarSize"
+        android:layout_marginBottom="8dp"
         android:title="@string/app_name" />
 
+    <!-- Main Status Card: 更加简洁和突出 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="3dp"
+        android:layout_marginBottom="16dp"
         android:background="@drawable/panel_background"
+        android:elevation="2dp"
         android:orientation="vertical"
-        android:padding="11dp">
+        android:padding="20dp">
 
-        <LinearLayout
+        <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:gravity="center_vertical">
 
             <TextView
                 android:id="@+id/stateText"
-                android:layout_width="0dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
+                android:layout_alignParentStart="true"
+                android:layout_centerVertical="true"
+                android:layout_toStartOf="@+id/durationText"
+                android:layout_marginEnd="12dp"
                 android:text="@string/state_disconnected"
                 android:textColor="@color/text_primary"
-                android:textSize="16sp"
+                android:textSize="20sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/durationText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_centerVertical="true"
+                android:layout_toStartOf="@+id/quickToolsToggle"
                 android:fontFamily="@font/vazirmatn_bold"
                 android:gravity="center"
-                android:minWidth="66dp"
+                android:minWidth="70dp"
                 android:text="00:00"
                 android:textColor="@color/text_primary"
                 android:textDirection="ltr"
-                android:textSize="13sp"
+                android:textSize="15sp"
                 android:textStyle="bold" />
 
             <androidx.appcompat.widget.AppCompatImageButton
                 android:id="@+id/quickToolsToggle"
-                android:layout_width="38dp"
-                android:layout_height="36dp"
-                android:layout_marginStart="5dp"
-                android:background="@drawable/input_background"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:layout_marginStart="8dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/toggle_connection_tools"
-                android:elevation="0dp"
-                android:minWidth="38dp"
-                android:padding="7dp"
+                android:padding="8dp"
                 android:scaleType="centerInside"
                 android:src="@drawable/ic_expand_more_rounded"
-                android:stateListAnimator="@null"
                 android:tint="@color/text_primary" />
-        </LinearLayout>
+        </RelativeLayout>
 
         <TextView
             android:id="@+id/selectedText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="3dp"
+            android:layout_marginTop="8dp"
             android:ellipsize="end"
             android:maxLines="1"
-            android:minHeight="18dp"
+            android:minHeight="20dp"
             android:textColor="@color/text_secondary"
-            android:textSize="11sp" />
+            android:textSize="13sp" />
 
+        <!-- Quick Tools Panel: 保持逻辑，优化布局 -->
         <LinearLayout
             android:id="@+id/quickToolsPanel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="16dp"
             android:orientation="vertical"
             android:visibility="gone">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
                 android:orientation="horizontal">
 
                 <Button
                     android:id="@+id/livePingText"
                     style="@style/Widget.Trivox.Button.LivePing"
                     android:layout_width="0dp"
-                    android:layout_height="38dp"
-                    android:layout_marginEnd="3dp"
+                    android:layout_height="42dp"
+                    android:layout_marginEnd="4dp"
                     android:layout_weight="1"
                     android:contentDescription="@string/live_ping_click_hint"
                     android:elevation="0dp"
-                    android:minWidth="0dp"
                     android:stateListAnimator="@null"
                     android:text="@string/live_ping_off"
                     android:textDirection="ltr"
-                    android:textSize="11sp" />
+                    android:textSize="12sp" />
 
                 <Button
                     android:id="@+id/realDelayText"
                     style="@style/Widget.Trivox.Button.Secondary"
                     android:layout_width="0dp"
-                    android:layout_height="38dp"
-                    android:layout_marginStart="3dp"
+                    android:layout_height="42dp"
+                    android:layout_marginStart="4dp"
                     android:layout_weight="1"
                     android:contentDescription="@string/real_delay_click_hint"
                     android:elevation="0dp"
-                    android:minWidth="0dp"
                     android:stateListAnimator="@null"
                     android:text="@string/real_delay_off"
                     android:textDirection="ltr"
-                    android:textSize="11sp" />
+                    android:textSize="12sp" />
             </LinearLayout>
 
             <TextView
                 android:id="@+id/exitInfoText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="7dp"
+                android:layout_marginTop="10dp"
                 android:ellipsize="end"
                 android:maxLines="1"
+                android:paddingStart="4dp"
                 android:text="@string/exit_info_off"
                 android:textColor="@color/text_secondary"
-                android:textSize="10sp" />
+                android:textSize="12sp" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="7dp"
+                android:layout_marginTop="10dp"
                 android:orientation="horizontal">
 
                 <Button
                     android:id="@+id/refreshExitButton"
                     style="@style/Widget.Trivox.Button.Secondary"
                     android:layout_width="0dp"
-                    android:layout_height="36dp"
-                    android:layout_marginEnd="3dp"
+                    android:layout_height="40dp"
+                    android:layout_marginEnd="4dp"
                     android:layout_weight="1"
                     android:contentDescription="@string/refresh_exit_info"
-                    android:elevation="0dp"
                     android:enabled="false"
                     android:stateListAnimator="@null"
                     android:text="↻"
-                    android:textSize="17sp" />
+                    android:textSize="18sp" />
 
                 <Button
                     android:id="@+id/copySummaryButton"
                     style="@style/Widget.Trivox.Button.Secondary"
                     android:layout_width="0dp"
-                    android:layout_height="36dp"
-                    android:layout_marginStart="3dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="4dp"
                     android:layout_weight="1"
                     android:contentDescription="@string/copy_summary"
-                    android:elevation="0dp"
                     android:enabled="false"
                     android:stateListAnimator="@null"
                     android:text="⧉"
-                    android:textSize="15sp" />
+                    android:textSize="16sp" />
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 
+    <!-- Search and Mode Row: More balanced -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="7dp"
+        android:layout_marginBottom="12dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
         <Spinner
             android:id="@+id/modeSpinner"
-            android:layout_width="120dp"
-            android:layout_height="42dp"
+            android:layout_width="130dp"
+            android:layout_height="48dp"
             android:background="@drawable/input_background"
-            android:paddingStart="9dp"
-            android:paddingEnd="9dp" />
+            android:elevation="1dp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp" />
 
         <EditText
             android:id="@+id/searchInput"
             style="@style/Widget.Trivox.Input"
             android:layout_width="0dp"
-            android:layout_height="42dp"
-            android:layout_marginStart="7dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="12dp"
             android:layout_weight="1"
+            android:elevation="1dp"
             android:hint="@string/search"
             android:imeOptions="actionDone"
             android:inputType="text"
-            android:maxLines="1" />
+            android:maxLines="1"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp" />
     </LinearLayout>
 
+    <!-- Subscriptions Panel: Cleaner look -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="6dp"
+        android:layout_height="56dp"
+        android:layout_marginBottom="12dp"
         android:background="@drawable/panel_background"
+        android:elevation="1dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp">
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp">
 
         <HorizontalScrollView
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:fillViewport="false"
+            android:fillViewport="true"
             android:overScrollMode="never"
             android:scrollbars="none">
 
@@ -227,55 +239,57 @@
                 android:layout_height="match_parent"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingStart="1dp"
-                android:paddingEnd="1dp" />
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp" />
         </HorizontalScrollView>
 
         <Button
             android:id="@+id/refreshSubscriptionsButton"
             style="@style/Widget.Trivox.Button.Secondary"
             android:layout_width="48dp"
-            android:layout_height="40dp"
-            android:layout_marginStart="6dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/update_subscriptions"
-            android:elevation="0dp"
-            android:minWidth="42dp"
+            android:minWidth="48dp"
             android:padding="0dp"
             android:stateListAnimator="@null"
             android:text="↻"
-            android:textSize="19sp" />
+            android:textSize="20sp" />
     </LinearLayout>
 
+    <!-- Profile List Area: Maximize space -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_weight="1"
+        android:layout_marginBottom="16dp">
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/profileList"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clipToPadding="false"
-            android:paddingTop="2dp"
-            android:paddingBottom="5dp" />
+            android:paddingTop="4dp"
+            android:paddingBottom="8dp" />
 
         <TextView
             android:id="@+id/emptyText"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:gravity="center"
-            android:padding="28dp"
+            android:padding="32dp"
             android:text="@string/no_profiles"
             android:textColor="@color/muted"
-            android:textSize="13sp"
+            android:textSize="14sp"
             android:visibility="gone" />
     </FrameLayout>
 
+    <!-- Quick Action Buttons: Standardized and User-Friendly -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="5dp"
-        android:baselineAligned="false"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="12dp"
         android:gravity="center"
         android:orientation="horizontal"
         android:weightSum="3">
@@ -283,90 +297,87 @@
         <Button
             android:id="@+id/addButton"
             android:layout_width="0dp"
-            android:layout_height="44dp"
-            android:layout_marginEnd="2dp"
+            android:layout_height="50dp"
+            android:layout_marginEnd="6dp"
             android:layout_weight="1"
             android:background="@drawable/quick_action_primary"
             android:contentDescription="@string/add"
-            android:elevation="0dp"
-            android:minWidth="0dp"
-            android:paddingStart="4dp"
-            android:paddingEnd="4dp"
+            android:elevation="2dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
             android:stateListAnimator="@null"
             android:text="@string/add_short"
             android:textAllCaps="false"
             android:textColor="@color/blue"
-            android:textSize="10.5sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
         <Button
             android:id="@+id/testButton"
             android:layout_width="0dp"
-            android:layout_height="44dp"
-            android:layout_marginStart="2dp"
-            android:layout_marginEnd="2dp"
+            android:layout_height="50dp"
+            android:layout_marginStart="6dp"
+            android:layout_marginEnd="6dp"
             android:layout_weight="1"
             android:background="@drawable/quick_action_secondary"
-            android:elevation="0dp"
-            android:minWidth="0dp"
-            android:paddingStart="4dp"
-            android:paddingEnd="4dp"
+            android:elevation="1dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
             android:stateListAnimator="@null"
             android:text="@string/tcp_ping_icon"
             android:textAllCaps="false"
             android:textColor="@color/text_primary"
-            android:textSize="10.5sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
         <Button
             android:id="@+id/realDelayAllButton"
             android:layout_width="0dp"
-            android:layout_height="44dp"
-            android:layout_marginStart="2dp"
+            android:layout_height="50dp"
+            android:layout_marginStart="6dp"
             android:layout_weight="1"
             android:background="@drawable/quick_action_secondary"
-            android:elevation="0dp"
-            android:minWidth="0dp"
-            android:paddingStart="4dp"
-            android:paddingEnd="4dp"
+            android:elevation="1dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
             android:stateListAnimator="@null"
             android:text="@string/real_delay_all_icon"
             android:textAllCaps="false"
             android:textColor="@color/blue"
-            android:textSize="10.5sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
     </LinearLayout>
 
+    <!-- Main Connect Button Area -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="6dp"
-        android:orientation="horizontal">
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
 
         <Button
             android:id="@+id/connectButton"
             style="@style/Widget.Trivox.Button.Primary"
             android:layout_width="0dp"
-            android:layout_height="48dp"
+            android:layout_height="56dp"
             android:layout_weight="1"
-            android:elevation="0dp"
-            android:stateListAnimator="@null"
+            android:elevation="4dp"
             android:text="@string/connect"
-            android:textSize="14sp" />
+            android:textSize="16sp"
+            android:textStyle="bold" />
 
         <Button
             android:id="@+id/pauseButton"
             style="@style/Widget.Trivox.Button.Secondary"
-            android:layout_width="52dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="6dp"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_marginStart="12dp"
             android:contentDescription="@string/pause_connection"
-            android:elevation="0dp"
-            android:minWidth="52dp"
+            android:elevation="2dp"
+            android:minWidth="56dp"
             android:padding="0dp"
-            android:stateListAnimator="@null"
-            android:text="⏸"
-            android:textSize="19sp"
+            android:text="||"
+            android:textSize="22sp"
             android:visibility="gone" />
     </LinearLayout>
 </LinearLayout>
