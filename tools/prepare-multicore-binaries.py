@@ -29,6 +29,33 @@ def download(url, dst):
     req=urllib.request.Request(url, headers=HDR)
     with urllib.request.urlopen(req, timeout=180) as r, open(dst,'wb') as f: shutil.copyfileobj(r,f)
 
+def is_elf(path):
+    try:
+        with open(path, 'rb') as f:
+            return f.read(4) == b'\x7fELF'
+    except Exception:
+        return False
+
+def extract_nested_if_needed(path, binary):
+    name = path.name.lower()
+    if is_elf(path):
+        return path
+    tmp = path.parent / (path.name + '.unpacked')
+    tmp.mkdir(exist_ok=True)
+    if name.endswith('.gz'):
+        out = tmp / binary
+        with gzip.open(path, 'rb') as i, open(out, 'wb') as o:
+            shutil.copyfileobj(i, o)
+        if is_elf(out):
+            return out
+    if name.endswith('.xz'):
+        out = tmp / binary
+        with lzma.open(path, 'rb') as i, open(out, 'wb') as o:
+            shutil.copyfileobj(i, o)
+        if is_elf(out):
+            return out
+    return path
+
 def extract_binary(archive, binary, dst):
     tmp=Path(tempfile.mkdtemp())
     try:
@@ -46,8 +73,11 @@ def extract_binary(archive, binary, dst):
         else:
             out=tmp/binary; shutil.copy2(archive,out)
         candidates=[p for p in tmp.rglob('*') if p.is_file() and p.name in (binary, binary+'.exe')]
-        if not candidates: candidates=[p for p in tmp.rglob('*') if p.is_file() and binary in p.name.lower()]
-        if not candidates: raise RuntimeError('binary not found in '+archive.name)
+        candidates += [p for p in tmp.rglob('*') if p.is_file() and binary in p.name.lower()]
+        candidates = [extract_nested_if_needed(p, binary) for p in candidates]
+        candidates = [p for p in candidates if p.is_file() and is_elf(p)]
+        if not candidates:
+            raise RuntimeError('ELF binary not found in '+archive.name)
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(candidates[0], dst)
         dst.chmod(dst.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)

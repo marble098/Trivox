@@ -8,8 +8,7 @@ plugins {
 
 val supportedAbis = listOf(
     "arm64-v8a",
-    "armeabi-v7a",
-    "x86_64"
+    "armeabi-v7a"
 )
 
 val requestedAbis = providers
@@ -210,7 +209,7 @@ android {
                 *requestedAbis
                     .toTypedArray()
             )
-            isUniversalApk = true
+            isUniversalApk = false
         }
     }
 
