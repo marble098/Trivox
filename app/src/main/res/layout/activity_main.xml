@@ -261,47 +261,64 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="46dp"
+        android:layout_height="54dp"
         android:layout_marginTop="6dp"
+        android:background="@drawable/panel_background"
         android:baselineAligned="false"
         android:gravity="center"
         android:orientation="horizontal"
+        android:padding="4dp"
         android:weightSum="3">
 
         <Button
             android:id="@+id/addButton"
-            style="@style/Widget.Trivox.Button.Secondary"
             android:layout_width="0dp"
             android:layout_height="46dp"
             android:layout_marginEnd="3dp"
             android:layout_weight="1"
+            android:background="@drawable/quick_action_primary"
             android:contentDescription="@string/add"
             android:minWidth="0dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
             android:text="@string/add_short"
-            android:textSize="11sp" />
+            android:textAllCaps="false"
+            android:textColor="@color/blue"
+            android:textSize="10.5sp"
+            android:textStyle="bold" />
 
         <Button
             android:id="@+id/testButton"
-            style="@style/Widget.Trivox.Button.Secondary"
             android:layout_width="0dp"
             android:layout_height="46dp"
             android:layout_marginStart="3dp"
             android:layout_marginEnd="3dp"
             android:layout_weight="1"
+            android:background="@drawable/quick_action_secondary"
             android:minWidth="0dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
             android:text="@string/tcp_ping_icon"
-            android:textSize="11sp" />
+            android:textAllCaps="false"
+            android:textColor="@color/text_primary"
+            android:textSize="10.5sp"
+            android:textStyle="bold" />
 
         <Button
             android:id="@+id/realDelayAllButton"
-            style="@style/Widget.Trivox.Button.Secondary"
             android:layout_width="0dp"
             android:layout_height="46dp"
             android:layout_marginStart="3dp"
             android:layout_weight="1"
+            android:background="@drawable/quick_action_secondary"
             android:minWidth="0dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
             android:text="@string/real_delay_all_icon"
-            android:textSize="11sp" />
+            android:textAllCaps="false"
+            android:textColor="@color/blue"
+            android:textSize="10.5sp"
+            android:textStyle="bold" />
     </LinearLayout>
 
     <LinearLayout

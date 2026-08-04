@@ -9,14 +9,14 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.trivox.client.R
 import com.trivox.client.data.ConfigProfile
-import com.trivox.client.data.PingMethod
 import com.trivox.client.data.TestStatus
 
 class ProfileAdapter(
     private val onClick: (ConfigProfile) -> Unit,
     private val onLongClick: (ConfigProfile) -> Unit,
     private val onAction: (ConfigProfile) -> Unit,
-    private val onPing: (ConfigProfile) -> Unit
+    private val onTcpPing: (ConfigProfile) -> Unit,
+    private val onRealPing: (ConfigProfile) -> Unit
 ) : RecyclerView.Adapter<ProfileAdapter.Holder>() {
     private data class Row(
         val profile: ConfigProfile,
@@ -89,12 +89,12 @@ class ProfileAdapter(
     override fun getItemCount(): Int = differ.currentList.size
 
     inner class Holder(view: View) : RecyclerView.ViewHolder(view) {
-        private val favorite = view.findViewById<TextView>(R.id.favoriteText)
         private val name = view.findViewById<TextView>(R.id.nameText)
         private val detail = view.findViewById<TextView>(R.id.detailText)
         private val location = view.findViewById<TextView>(R.id.locationText)
         private val status = view.findViewById<TextView>(R.id.statusText)
-        private val latency = view.findViewById<TextView>(R.id.latencyText)
+        private val tcpLatency = view.findViewById<TextView>(R.id.tcpLatencyText)
+        private val realLatency = view.findViewById<TextView>(R.id.realLatencyText)
         private val ping = view.findViewById<TextView>(R.id.pingActionText)
         private val action = view.findViewById<TextView>(R.id.actionText)
 
@@ -104,9 +104,12 @@ class ProfileAdapter(
             connected: Boolean,
             hideIp: Boolean
         ) {
+            itemView.setBackgroundResource(
+                if (profile.favorite) R.drawable.row_background_favorite
+                else R.drawable.row_background
+            )
             itemView.isActivated = selected
             itemView.alpha = if (profile.enabled) 1f else 0.52f
-            favorite.text = if (profile.favorite) "★" else "☆"
             name.text = profile.name
             detail.text = if (hideIp) {
                 itemView.context.getString(
@@ -155,13 +158,20 @@ class ProfileAdapter(
                 else -> View.GONE
             }
 
-            latency.text = profile.latencyMs?.let { value ->
-                itemView.context.getString(
-                    R.string.latency_method_format,
-                    pingMethodLabel(profile.latencyMethod),
-                    value
-                )
-            } ?: "—"
+            tcpLatency.text = metricText(
+                value = profile.tcpLatencyMs,
+                status = profile.tcpTestStatus,
+                valueRes = R.string.tcp_result_value,
+                failedRes = R.string.tcp_result_failed,
+                emptyRes = R.string.tcp_result_empty
+            )
+            realLatency.text = metricText(
+                value = profile.realLatencyMs,
+                status = profile.realTestStatus,
+                valueRes = R.string.real_result_value,
+                failedRes = R.string.real_result_failed,
+                emptyRes = R.string.real_result_empty
+            )
             ping.text = if (profile.testStatus == TestStatus.TESTING) "…" else "⚡"
             action.text = "⋮"
             action.contentDescription = itemView.context.getString(R.string.config_actions)
@@ -172,22 +182,28 @@ class ProfileAdapter(
                 onLongClick(profile)
                 true
             }
-            latency.setOnClickListener { onPing(profile) }
-            ping.setOnClickListener { onPing(profile) }
+            tcpLatency.setOnClickListener { onTcpPing(profile) }
+            realLatency.setOnClickListener { onRealPing(profile) }
+            ping.setOnClickListener { onTcpPing(profile) }
             action.setOnClickListener { onAction(profile) }
+        }
+
+        private fun metricText(
+            value: Long?,
+            status: TestStatus,
+            valueRes: Int,
+            failedRes: Int,
+            emptyRes: Int
+        ): String = when {
+            value != null && status == TestStatus.ALIVE ->
+                itemView.context.getString(valueRes, value)
+            status == TestStatus.DEAD || status == TestStatus.ERROR ->
+                itemView.context.getString(failedRes)
+            else -> itemView.context.getString(emptyRes)
         }
 
         private fun rowIsGrid(): Boolean =
             itemViewType == VIEW_GRID
-
-        private fun pingMethodLabel(stored: String): String = when (
-            PingMethod.fromStored(stored, PingMethod.TCP_CONNECT)
-        ) {
-            PingMethod.TCP_CONNECT ->
-                itemView.context.getString(R.string.ping_method_tcp_short)
-            PingMethod.XRAY_HTTP ->
-                itemView.context.getString(R.string.ping_method_xray_short)
-        }
     }
 
     companion object {

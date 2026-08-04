@@ -942,7 +942,7 @@ class PingManager(
         return if (generate204) {
             statusCode == 204
         } else {
-            statusCode in 200..399
+            statusCode in 200..299
         }
     }
 
@@ -1208,7 +1208,7 @@ class PingManager(
                             BATCH_XRAY_ATTEMPTS,
                         timeoutSeconds =
                             BATCH_XRAY_TIMEOUT_SECONDS,
-                        allowSingleSample = true,
+                        allowSingleSample = false,
                         maxTargetsPerSample =
                             BATCH_XRAY_MAX_TARGETS
                     )
@@ -1814,7 +1814,7 @@ class PingManager(
             RESOLVER_ROTATION_COOLDOWN_MS =
                 5_000L
         private const val
-            BATCH_XRAY_ATTEMPTS = 1
+            BATCH_XRAY_ATTEMPTS = 2
         private const val
             BATCH_XRAY_TIMEOUT_SECONDS = 4
         private const val

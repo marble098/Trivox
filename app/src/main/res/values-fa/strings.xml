@@ -342,4 +342,18 @@
     <string name="nordvpn_subscription_short">NORD</string>
     <string name="subscription_warning_format">به‌روزرسانی ناقص: %1$s</string>
     <string name="connection_start_failed">شروع اتصال ممکن نشد. گزارش خطا را بررسی کنید و دوباره تلاش کنید.</string>
+<string name="tcp_result_value">TCP %1$d ms</string>
+<string name="real_result_value">Real %1$d ms</string>
+<string name="tcp_result_failed">TCP ناموفق</string>
+<string name="real_result_failed">Real ناموفق</string>
+<string name="tcp_result_empty">TCP —</string>
+<string name="real_result_empty">Real —</string>
+<string name="subscription_open_settings">تنظیمات ساب</string>
+<string name="subscription_delete_all_profiles">حذف همه کانفیگ‌ها</string>
+<string name="subscription_delete_without_tcp">حذف کانفیگ‌های بدون نتیجه TCP</string>
+<string name="subscription_delete_without_real">حذف کانفیگ‌های بدون Real Delay</string>
+<string name="subscription_delete_without_both">حذف کانفیگ‌های بدون هر دو نتیجه</string>
+<string name="subscription_cleanup_confirm">%1$d کانفیگ مطابق از %2$s حذف شود؟</string>
+<string name="subscription_cleanup_done">%1$d کانفیگ حذف شد.</string>
+<string name="subscription_cleanup_none">کانفیگ مطابقی پیدا نشد.</string>
 </resources>

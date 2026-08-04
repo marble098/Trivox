@@ -594,6 +594,24 @@ class ConfigRepository(context: Context) {
                 old.latencyMethod,
             testStatus = old.testStatus,
             lastTestAt = old.lastTestAt,
+            tcpLatencyMs = old.tcpLatencyMs,
+            tcpLatencyJitterMs =
+                old.tcpLatencyJitterMs,
+            tcpSuccessRatio =
+                old.tcpSuccessRatio,
+            tcpTestStatus =
+                old.tcpTestStatus,
+            tcpLastTestAt =
+                old.tcpLastTestAt,
+            realLatencyMs = old.realLatencyMs,
+            realLatencyJitterMs =
+                old.realLatencyJitterMs,
+            realSuccessRatio =
+                old.realSuccessRatio,
+            realTestStatus =
+                old.realTestStatus,
+            realLastTestAt =
+                old.realLastTestAt,
             cumulativeSessionMs =
                 old.cumulativeSessionMs,
             lastSessionMs = old.lastSessionMs,

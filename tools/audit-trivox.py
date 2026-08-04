@@ -163,10 +163,12 @@ def audit(root: Path) -> tuple[list[Finding], dict[str, object]]:
             add("error", "ping-negative-dns-cache", ping, "Negative DNS cache is missing.")
         if "preferredXrayTarget" not in text:
             add("error", "ping-single-target", ping, "Real delay still depends on one target.")
-        if "BATCH_XRAY_ATTEMPTS = 1" not in text:
-            add("error", "ping-batch-slow", ping, "Batch real-delay is not using the adaptive single-sample ranking pass.")
-        if "BATCH_XRAY_MAX_TARGETS = 2" not in text or "allowSingleSample = true" not in text:
-            add("error", "ping-batch-fallback", ping, "Batch real-delay fallback targets are not bounded.")
+        if "BATCH_XRAY_ATTEMPTS = 2" not in text:
+            add("error", "ping-batch-verification", ping, "Batch real-delay is not requiring a confirmation sample.")
+        if "BATCH_XRAY_MAX_TARGETS = 2" not in text or "allowSingleSample = false" not in text:
+            add("error", "ping-batch-fallback", ping, "Batch real-delay verification or fallback bounds regressed.")
+        if "statusCode in 200..299" not in text:
+            add("error", "ping-redirect", ping, "HTTP redirects can still be accepted as successful probes.")
 
     main = root / "app/src/main/java/com/trivox/client/ui/MainActivity.kt"
     if main.is_file():
@@ -189,6 +191,10 @@ def audit(root: Path) -> tuple[list[Finding], dict[str, object]]:
             add("error", "ui-lifecycle-callback", main, "Background callbacks are not guarded after Activity destruction.")
         if "startConnectionService" not in text:
             add("error", "connect-start-recovery", main, "Foreground-service start failures do not restore the connection UI.")
+        if "tcpLatencyMs" not in text or "realLatencyMs" not in text:
+            add("error", "dual-latency-storage", main, "TCP and Real Delay results are not stored independently.")
+        if "showSubscriptionActions" not in text:
+            add("error", "subscription-cleanup-menu", main, "Subscription long-press cleanup actions are missing.")
 
     coordinator = root / "app/src/main/java/com/trivox/client/network/SubscriptionRefreshCoordinator.kt"
     if coordinator.is_file():
@@ -221,6 +227,8 @@ def audit(root: Path) -> tuple[list[Finding], dict[str, object]]:
         text = read(main_layout)
         if 'android:weightSum="3"' not in text:
             add("error", "main-action-alignment", main_layout, "The three main action buttons are not equally weighted.")
+        if "quick_action_primary" not in text or "quick_action_secondary" not in text:
+            add("error", "main-action-design", main_layout, "Lightweight quick-action backgrounds are missing.")
 
     for path in kotlin:
         text = read(path)

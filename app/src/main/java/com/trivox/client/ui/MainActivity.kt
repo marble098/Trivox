@@ -381,7 +381,18 @@ class MainActivity : ThemedActivity() {
             onClick = ::selectProfile,
             onLongClick = ::showActions,
             onAction = ::showActions,
-            onPing = ::testSingleProfile
+            onTcpPing = {
+                testSingleProfile(
+                    it,
+                    PingMethod.TCP_CONNECT
+                )
+            },
+            onRealPing = {
+                testSingleProfile(
+                    it,
+                    PingMethod.XRAY_HTTP
+                )
+            }
         )
 
         list.adapter = adapter
@@ -951,7 +962,8 @@ class MainActivity : ThemedActivity() {
                 runCatching {
                     TunnelHealthVerifier.measure(
                         settings = settings,
-                        attempts = settings.testAttempts.coerceAtMost(2),
+                        mode = snapshot.mode,
+                        attempts = settings.testAttempts.coerceIn(2, 3),
                         budgetMs = REAL_DELAY_BUDGET_MS
                     )
                 }.getOrElse {
@@ -1124,10 +1136,10 @@ class MainActivity : ThemedActivity() {
                 isClickable = true
                 isFocusable = true
                 setOnLongClickListener {
-                    openSubscriptionManager(
-                        sourceId = id
+                    id?.let(
+                        ::showSubscriptionActions
                     )
-                    true
+                    id != null
                 }
                 setOnClickListener {
                     if (
@@ -1169,6 +1181,121 @@ class MainActivity : ThemedActivity() {
                 activeSubscriptionId
             )
             .apply()
+    }
+
+
+    private fun showSubscriptionActions(
+        subscriptionId: String
+    ) {
+        val source =
+            SubscriptionRepository(this)
+                .find(subscriptionId)
+                ?: return
+        val profiles =
+            repository.all()
+                .filter {
+                    it.subscriptionId ==
+                        subscriptionId
+                }
+        val labels = arrayOf(
+            getString(R.string.subscription_open_settings),
+            getString(R.string.subscription_delete_all_profiles),
+            getString(R.string.subscription_delete_without_tcp),
+            getString(R.string.subscription_delete_without_real),
+            getString(R.string.subscription_delete_without_both)
+        )
+
+        AlertDialog.Builder(this)
+            .setTitle(source.name)
+            .setItems(labels) { _, which ->
+                when (which) {
+                    0 -> openSubscriptionManager(sourceId = subscriptionId)
+                    1 -> confirmSubscriptionProfileCleanup(
+                        source = source,
+                        profiles = profiles,
+                        title = labels[which]
+                    ) { true }
+                    2 -> confirmSubscriptionProfileCleanup(
+                        source = source,
+                        profiles = profiles,
+                        title = labels[which]
+                    ) {
+                        it.tcpTestStatus != TestStatus.ALIVE ||
+                            it.tcpLatencyMs == null
+                    }
+                    3 -> confirmSubscriptionProfileCleanup(
+                        source = source,
+                        profiles = profiles,
+                        title = labels[which]
+                    ) {
+                        it.realTestStatus != TestStatus.ALIVE ||
+                            it.realLatencyMs == null
+                    }
+                    4 -> confirmSubscriptionProfileCleanup(
+                        source = source,
+                        profiles = profiles,
+                        title = labels[which]
+                    ) {
+                        (it.tcpTestStatus != TestStatus.ALIVE || it.tcpLatencyMs == null) &&
+                            (it.realTestStatus != TestStatus.ALIVE || it.realLatencyMs == null)
+                    }
+                }
+            }
+            .show()
+    }
+
+    private fun confirmSubscriptionProfileCleanup(
+        source: SubscriptionSource,
+        profiles: List<ConfigProfile>,
+        title: String,
+        predicate: (ConfigProfile) -> Boolean
+    ) {
+        val targets = profiles.filter(predicate)
+        val runtime = ConnectionRuntime.current()
+        if (
+            runtime.state !in setOf(
+                ConnectionState.DISCONNECTED,
+                ConnectionState.ERROR
+            ) &&
+            targets.any { it.id == runtime.profileId }
+        ) {
+            toast(getString(R.string.disconnect_subscription_first))
+            return
+        }
+        if (targets.isEmpty()) {
+            toast(getString(R.string.subscription_cleanup_none))
+            return
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(
+                getString(
+                    R.string.subscription_cleanup_confirm,
+                    targets.size,
+                    source.name
+                )
+            )
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.delete) { _, _ ->
+                storageWorker.execute {
+                    val removed = repository.deleteMany(
+                        targets.map(ConfigProfile::id)
+                    )
+                    runOnUiThread {
+                        subscriptionTabsSignature = ""
+                        renderSubscriptionTabs(force = true)
+                        refresh()
+                        toast(
+                            getString(
+                                R.string.subscription_cleanup_done,
+                                removed
+                            )
+                        )
+                    }
+                }
+            }
+            .show()
     }
 
     private fun dp(value: Int): Int =
@@ -1660,12 +1787,24 @@ class MainActivity : ThemedActivity() {
     }
 
     private fun testSingleProfile(
-        profile: ConfigProfile
+        profile: ConfigProfile,
+        method: PingMethod = PingMethod.TCP_CONNECT
     ) {
         if (
             profile.testStatus ==
             TestStatus.TESTING
         ) {
+            return
+        }
+
+        if (
+            method == PingMethod.XRAY_HTTP &&
+            ConnectionRuntime.current().state !in setOf(
+                ConnectionState.DISCONNECTED,
+                ConnectionState.ERROR
+            )
+        ) {
+            toast(getString(R.string.xray_ping_requires_disconnect))
             return
         }
 
@@ -1683,8 +1822,7 @@ class MainActivity : ThemedActivity() {
 
             val settings =
                 settingsRepository.load()
-            settings.pingMethod =
-                PingMethod.TCP_CONNECT
+            settings.pingMethod = method
             val result =
                 runCatching {
                     pingManager.measure(
@@ -1970,23 +2108,17 @@ class MainActivity : ThemedActivity() {
     }
 
     private fun selectFastestProfile() {
-        val selectedMethod =
-            PingMethod
-                .TCP_CONNECT
-                .name
         val fastest =
             repository.all()
                 .filter {
                     it.enabled &&
-                        it.testStatus ==
+                        it.tcpTestStatus ==
                         TestStatus.ALIVE &&
-                        it.latencyMs !=
-                        null &&
-                        it.latencyMethod ==
-                        selectedMethod
+                        it.tcpLatencyMs !=
+                        null
                 }
                 .minByOrNull {
-                    it.latencyMs
+                    it.tcpLatencyMs
                         ?: Long.MAX_VALUE
                 }
 
@@ -2009,7 +2141,7 @@ class MainActivity : ThemedActivity() {
                 R.string
                     .fastest_selected,
                 fastest.name,
-                fastest.latencyMs
+                fastest.tcpLatencyMs
                     ?: 0
             )
         )
@@ -2996,16 +3128,20 @@ class MainActivity : ThemedActivity() {
 
                 latencyWorker.execute {
                     val result = runCatching {
-                        when (settings.livePingMethod) {
-                            PingMethod.TCP_CONNECT -> pingManager.tcp(
+                        if (
+                            settings.livePingMethod == PingMethod.TCP_CONNECT &&
+                            snapshot.mode == ConnectionMode.PROXY
+                        ) {
+                            pingManager.tcp(
                                 profile = profile,
                                 attempts = settings.testAttempts,
                                 timeoutMs = 5_000
                             )
-
-                            PingMethod.XRAY_HTTP -> TunnelHealthVerifier.measure(
+                        } else {
+                            TunnelHealthVerifier.measure(
                                 settings = settings,
-                                attempts = settings.testAttempts.coerceAtMost(2),
+                                mode = snapshot.mode,
+                                attempts = settings.testAttempts.coerceIn(2, 3),
                                 budgetMs = LIVE_PING_BUDGET_MS,
                                 isCancelled = {
                                     val latest = ConnectionRuntime.current()
@@ -3057,31 +3193,48 @@ class MainActivity : ThemedActivity() {
         profile: ConfigProfile,
         result: PingResult
     ) {
-        profile.latencyMs =
-            result.latencyMs
-        profile.latencyJitterMs =
-            result.jitterMs
-        profile.latencySuccessRatio =
-            result.successRatio
-        profile.latencyMethod =
-            result.method
-        profile.lastTestAt =
-            result.timestamp
-        profile.testStatus =
-            when {
-                result.success ->
-                    TestStatus.ALIVE
-                result.errorCategory ==
-                    "cancelled" ->
-                    TestStatus.UNTESTED
-                result.errorCategory in
-                    setOf(
-                        "core_unavailable",
-                        "invalid_test_url"
-                    ) ->
-                    TestStatus.ERROR
-                else -> TestStatus.DEAD
+        val method = PingMethod.fromStored(
+            result.method,
+            PingMethod.TCP_CONNECT
+        )
+        val status = when {
+            result.success -> TestStatus.ALIVE
+            result.errorCategory == "cancelled" -> TestStatus.UNTESTED
+            result.errorCategory in setOf(
+                "core_unavailable",
+                "invalid_test_url"
+            ) -> TestStatus.ERROR
+            else -> TestStatus.DEAD
+        }
+
+        when (method) {
+            PingMethod.TCP_CONNECT -> {
+                profile.tcpLatencyMs = result.latencyMs
+                profile.tcpLatencyJitterMs = result.jitterMs
+                profile.tcpSuccessRatio = result.successRatio
+                profile.tcpTestStatus = status
+                profile.tcpLastTestAt = result.timestamp
             }
+            PingMethod.XRAY_HTTP -> {
+                profile.realLatencyMs = result.latencyMs
+                profile.realLatencyJitterMs = result.jitterMs
+                profile.realSuccessRatio = result.successRatio
+                profile.realTestStatus = status
+                profile.realLastTestAt = result.timestamp
+            }
+        }
+
+        // Retain legacy fields for backup compatibility and older installs.
+        profile.latencyMs = result.latencyMs
+        profile.latencyJitterMs = result.jitterMs
+        profile.latencySuccessRatio = result.successRatio
+        profile.latencyMethod = method.name
+        profile.lastTestAt = maxOf(
+            profile.tcpLastTestAt,
+            profile.realLastTestAt,
+            result.timestamp
+        )
+        profile.testStatus = status
     }
 
     private fun failedPingResult(
@@ -3135,9 +3288,6 @@ class MainActivity : ThemedActivity() {
                 .AppSettings,
         connectedId: String?
     ): Comparator<ConfigProfile> {
-        val selectedMethod =
-            PingMethod.TCP_CONNECT.name
-
         val base =
             when (settings.sortMode) {
                 ProfileSortMode.SMART ->
@@ -3148,16 +3298,13 @@ class MainActivity : ThemedActivity() {
                     }
                         .thenBy {
                             if (
-                                it.latencyMethod ==
-                                selectedMethod
-                            ) {
-                                0
-                            } else {
-                                1
-                            }
+                                it.tcpTestStatus ==
+                                TestStatus.ALIVE &&
+                                it.tcpLatencyMs != null
+                            ) 0 else 1
                         }
                         .thenBy {
-                            it.latencyMs
+                            it.tcpLatencyMs
                                 ?: Long.MAX_VALUE
                         }
                         .thenBy {
@@ -3181,7 +3328,7 @@ class MainActivity : ThemedActivity() {
                         }
                     }
                         .thenBy {
-                            it.latencyMs
+                            it.tcpLatencyMs
                                 ?: Long.MAX_VALUE
                         }
                         .thenBy {

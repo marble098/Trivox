@@ -122,9 +122,9 @@ jobs:
             app/src/main/java/com/trivox/client/network/SubscriptionManager.kt
           grep -Fq 'fetchCatalog' \
             app/src/main/java/com/trivox/client/network/NordVpnSubscriptionManager.kt
-          grep -Fq 'BATCH_XRAY_ATTEMPTS = 1' app/src/main/java/com/trivox/client/network/PingManager.kt
+          grep -Fq 'BATCH_XRAY_ATTEMPTS = 2' app/src/main/java/com/trivox/client/network/PingManager.kt
           grep -Fq 'BATCH_XRAY_MAX_TARGETS = 2' app/src/main/java/com/trivox/client/network/PingManager.kt
-          grep -Fq 'allowSingleSample = true' app/src/main/java/com/trivox/client/network/PingManager.kt
+          grep -Fq 'allowSingleSample = false' app/src/main/java/com/trivox/client/network/PingManager.kt
           grep -Fq 'showConnectionStartPending' \
             app/src/main/java/com/trivox/client/ui/MainActivity.kt
           grep -Fq 'EXIT_REASON_PACKAGE_UPDATED' \
@@ -213,6 +213,14 @@ jobs:
             app/src/main/java/com/trivox/client/network/NordVpnSubscriptionManager.kt
           grep -Fq 'UUID.nameUUIDFromBytes' \
             app/src/main/java/com/trivox/client/network/NordVpnSubscriptionManager.kt
+          grep -Fq 'tcpLatencyMs' \
+            app/src/main/java/com/trivox/client/data/Models.kt
+          grep -Fq 'realLatencyMs' \
+            app/src/main/java/com/trivox/client/data/Models.kt
+          grep -Fq 'acceptsHttpStatus' \
+            app/src/main/java/com/trivox/client/network/TunnelHealthVerifier.kt
+          grep -Fq 'showSubscriptionActions' \
+            app/src/main/java/com/trivox/client/ui/MainActivity.kt
           grep -Fq 'REQUIRED_SUCCESS_NUMERATOR' \
             app/src/main/java/com/trivox/client/network/PingStatistics.kt
           if grep -R -n -E \

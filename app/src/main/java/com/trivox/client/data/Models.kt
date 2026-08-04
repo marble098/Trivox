@@ -65,6 +65,16 @@ data class ConfigProfile(
     var latencyMethod: String = "",
     var testStatus: TestStatus = TestStatus.UNTESTED,
     var lastTestAt: Long = 0,
+    var tcpLatencyMs: Long? = null,
+    var tcpLatencyJitterMs: Long? = null,
+    var tcpSuccessRatio: Double = 0.0,
+    var tcpTestStatus: TestStatus = TestStatus.UNTESTED,
+    var tcpLastTestAt: Long = 0,
+    var realLatencyMs: Long? = null,
+    var realLatencyJitterMs: Long? = null,
+    var realSuccessRatio: Double = 0.0,
+    var realTestStatus: TestStatus = TestStatus.UNTESTED,
+    var realLastTestAt: Long = 0,
     var lastSessionMs: Long = 0,
     var cumulativeSessionMs: Long = 0,
     var exitIp: String = "",
@@ -74,6 +84,16 @@ data class ConfigProfile(
     var exitIsp: String = "",
     var lastExitCheckAt: Long = 0
 ) {
+    fun latencyFor(method: PingMethod): Long? = when (method) {
+        PingMethod.TCP_CONNECT -> tcpLatencyMs
+        PingMethod.XRAY_HTTP -> realLatencyMs
+    }
+
+    fun statusFor(method: PingMethod): TestStatus = when (method) {
+        PingMethod.TCP_CONNECT -> tcpTestStatus
+        PingMethod.XRAY_HTTP -> realTestStatus
+    }
+
     fun toJson() = JSONObject()
         .put("id", id).put("name", name).put("protocol", protocol)
         .put("server", server).put("port", port).put("raw", raw)
@@ -83,31 +103,89 @@ data class ConfigProfile(
         .put("subscriptionId", subscriptionId).put("latencyMs", latencyMs)
         .put("latencyJitterMs", latencyJitterMs).put("latencySuccessRatio", latencySuccessRatio)
         .put("latencyMethod", latencyMethod).put("testStatus", testStatus.name)
-        .put("lastTestAt", lastTestAt).put("lastSessionMs", lastSessionMs)
+        .put("lastTestAt", lastTestAt)
+        .put("tcpLatencyMs", tcpLatencyMs).put("tcpLatencyJitterMs", tcpLatencyJitterMs)
+        .put("tcpSuccessRatio", tcpSuccessRatio).put("tcpTestStatus", tcpTestStatus.name)
+        .put("tcpLastTestAt", tcpLastTestAt)
+        .put("realLatencyMs", realLatencyMs).put("realLatencyJitterMs", realLatencyJitterMs)
+        .put("realSuccessRatio", realSuccessRatio).put("realTestStatus", realTestStatus.name)
+        .put("realLastTestAt", realLastTestAt)
+        .put("lastSessionMs", lastSessionMs)
         .put("cumulativeSessionMs", cumulativeSessionMs).put("exitIp", exitIp)
         .put("exitCountry", exitCountry).put("exitCountryCode", exitCountryCode)
         .put("exitFlag", exitFlag).put("exitIsp", exitIsp).put("lastExitCheckAt", lastExitCheckAt)
 
     companion object {
-        fun fromJson(json: JSONObject) = ConfigProfile(
-            id = json.optString("id", UUID.randomUUID().toString()), name = json.optString("name", "Unnamed"),
-            protocol = json.optString("protocol", "unknown"), server = json.optString("server"), port = json.optInt("port"),
-            raw = json.optString("raw"), outboundJson = json.getString("outboundJson"),
-            originalDnsJson = json.optString("originalDnsJson").ifBlank { null },
-            probeServer = json.optString("probeServer"), probePort = json.optInt("probePort"),
-            enabled = json.optBoolean("enabled", true),
-            favorite = json.optBoolean("favorite"), group = json.optString("group", "Default"),
-            subscriptionId = json.optString("subscriptionId").ifBlank { null },
-            latencyMs = if (json.isNull("latencyMs")) null else json.optLong("latencyMs"),
-            latencyJitterMs = if (json.isNull("latencyJitterMs")) null else json.optLong("latencyJitterMs"),
-            latencySuccessRatio = json.optDouble("latencySuccessRatio", 0.0).coerceIn(0.0, 1.0),
-            latencyMethod = json.optString("latencyMethod"),
-            testStatus = runCatching { TestStatus.valueOf(json.optString("testStatus")) }.getOrDefault(TestStatus.UNTESTED).let { if (it == TestStatus.TESTING) TestStatus.UNTESTED else it },
-            lastTestAt = json.optLong("lastTestAt"), lastSessionMs = json.optLong("lastSessionMs"),
-            cumulativeSessionMs = json.optLong("cumulativeSessionMs"), exitIp = json.optString("exitIp"),
-            exitCountry = json.optString("exitCountry"), exitCountryCode = json.optString("exitCountryCode"),
-            exitFlag = json.optString("exitFlag"), exitIsp = json.optString("exitIsp"), lastExitCheckAt = json.optLong("lastExitCheckAt")
-        )
+        fun fromJson(json: JSONObject): ConfigProfile {
+            fun optionalLong(key: String): Long? =
+                if (!json.has(key) || json.isNull(key)) null else json.optLong(key)
+
+            fun storedStatus(key: String, fallback: TestStatus): TestStatus =
+                runCatching { TestStatus.valueOf(json.optString(key)) }
+                    .getOrDefault(fallback)
+                    .let { if (it == TestStatus.TESTING) TestStatus.UNTESTED else it }
+
+            val legacyLatency = optionalLong("latencyMs")
+            val legacyJitter = optionalLong("latencyJitterMs")
+            val legacyRatio = json.optDouble("latencySuccessRatio", 0.0).coerceIn(0.0, 1.0)
+            val legacyMethod = PingMethod.fromStored(
+                json.optString("latencyMethod"),
+                PingMethod.TCP_CONNECT
+            )
+            val legacyStatus = storedStatus("testStatus", TestStatus.UNTESTED)
+            val legacyAt = json.optLong("lastTestAt")
+
+            return ConfigProfile(
+                id = json.optString("id", UUID.randomUUID().toString()), name = json.optString("name", "Unnamed"),
+                protocol = json.optString("protocol", "unknown"), server = json.optString("server"), port = json.optInt("port"),
+                raw = json.optString("raw"), outboundJson = json.getString("outboundJson"),
+                originalDnsJson = json.optString("originalDnsJson").ifBlank { null },
+                probeServer = json.optString("probeServer"), probePort = json.optInt("probePort"),
+                enabled = json.optBoolean("enabled", true),
+                favorite = json.optBoolean("favorite"), group = json.optString("group", "Default"),
+                subscriptionId = json.optString("subscriptionId").ifBlank { null },
+                latencyMs = legacyLatency,
+                latencyJitterMs = legacyJitter,
+                latencySuccessRatio = legacyRatio,
+                latencyMethod = json.optString("latencyMethod"),
+                testStatus = legacyStatus,
+                lastTestAt = legacyAt,
+                tcpLatencyMs = optionalLong("tcpLatencyMs")
+                    ?: legacyLatency.takeIf { legacyMethod == PingMethod.TCP_CONNECT },
+                tcpLatencyJitterMs = optionalLong("tcpLatencyJitterMs")
+                    ?: legacyJitter.takeIf { legacyMethod == PingMethod.TCP_CONNECT },
+                tcpSuccessRatio = if (json.has("tcpSuccessRatio")) {
+                    json.optDouble("tcpSuccessRatio", 0.0).coerceIn(0.0, 1.0)
+                } else if (legacyMethod == PingMethod.TCP_CONNECT) legacyRatio else 0.0,
+                tcpTestStatus = storedStatus(
+                    "tcpTestStatus",
+                    if (legacyMethod == PingMethod.TCP_CONNECT) legacyStatus else TestStatus.UNTESTED
+                ),
+                tcpLastTestAt = json.optLong(
+                    "tcpLastTestAt",
+                    if (legacyMethod == PingMethod.TCP_CONNECT) legacyAt else 0L
+                ),
+                realLatencyMs = optionalLong("realLatencyMs")
+                    ?: legacyLatency.takeIf { legacyMethod == PingMethod.XRAY_HTTP },
+                realLatencyJitterMs = optionalLong("realLatencyJitterMs")
+                    ?: legacyJitter.takeIf { legacyMethod == PingMethod.XRAY_HTTP },
+                realSuccessRatio = if (json.has("realSuccessRatio")) {
+                    json.optDouble("realSuccessRatio", 0.0).coerceIn(0.0, 1.0)
+                } else if (legacyMethod == PingMethod.XRAY_HTTP) legacyRatio else 0.0,
+                realTestStatus = storedStatus(
+                    "realTestStatus",
+                    if (legacyMethod == PingMethod.XRAY_HTTP) legacyStatus else TestStatus.UNTESTED
+                ),
+                realLastTestAt = json.optLong(
+                    "realLastTestAt",
+                    if (legacyMethod == PingMethod.XRAY_HTTP) legacyAt else 0L
+                ),
+                lastSessionMs = json.optLong("lastSessionMs"),
+                cumulativeSessionMs = json.optLong("cumulativeSessionMs"), exitIp = json.optString("exitIp"),
+                exitCountry = json.optString("exitCountry"), exitCountryCode = json.optString("exitCountryCode"),
+                exitFlag = json.optString("exitFlag"), exitIsp = json.optString("exitIsp"), lastExitCheckAt = json.optLong("lastExitCheckAt")
+            )
+        }
     }
 }
 

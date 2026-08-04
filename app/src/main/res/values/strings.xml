@@ -342,4 +342,18 @@
     <string name="nordvpn_subscription_short">NORD</string>
     <string name="subscription_warning_format">Partial update: %1$s</string>
     <string name="connection_start_failed">Connection could not be started. Check diagnostics and try again.</string>
+<string name="tcp_result_value">TCP %1$d ms</string>
+<string name="real_result_value">Real %1$d ms</string>
+<string name="tcp_result_failed">TCP failed</string>
+<string name="real_result_failed">Real failed</string>
+<string name="tcp_result_empty">TCP —</string>
+<string name="real_result_empty">Real —</string>
+<string name="subscription_open_settings">Subscription settings</string>
+<string name="subscription_delete_all_profiles">Delete all configurations</string>
+<string name="subscription_delete_without_tcp">Delete configurations without TCP result</string>
+<string name="subscription_delete_without_real">Delete configurations without Real Delay</string>
+<string name="subscription_delete_without_both">Delete configurations without either result</string>
+<string name="subscription_cleanup_confirm">Delete %1$d matching configurations from %2$s?</string>
+<string name="subscription_cleanup_done">%1$d configurations deleted.</string>
+<string name="subscription_cleanup_none">No matching configurations were found.</string>
 </resources>
