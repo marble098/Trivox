@@ -34,6 +34,12 @@ object CoreConfigTranslator {
     private fun streamSecurity(stream: JSONObject): String =
         stream.optString("security", "").lowercase()
 
+    private fun streamNetwork(stream: JSONObject): String =
+        stream.optString("network", "tcp").lowercase()
+
+    private fun firstNonBlank(vararg values: String?): String =
+        values.firstOrNull { !it.isNullOrBlank() }.orEmpty()
+
     private fun tlsLikeEnabled(stream: JSONObject): Boolean {
         val security = streamSecurity(stream)
         return security == "tls" ||
@@ -42,22 +48,19 @@ object CoreConfigTranslator {
             stream.has("realitySettings")
     }
 
-    private fun pickTlsSource(stream: JSONObject): JSONObject {
-        return stream.optJSONObject("tlsSettings")
+    private fun tlsSource(stream: JSONObject): JSONObject =
+        stream.optJSONObject("tlsSettings")
             ?: stream.optJSONObject("realitySettings")
             ?: JSONObject()
-    }
 
-    private fun firstNonBlank(vararg values: String?): String =
-        values.firstOrNull { !it.isNullOrBlank() } ?: ""
+    private fun realitySource(stream: JSONObject): JSONObject? =
+        stream.optJSONObject("realitySettings")
+            ?: if (streamSecurity(stream) == "reality") tlsSource(stream) else null
 
     private fun singBoxTls(stream: JSONObject, server: String): JSONObject? {
         if (!tlsLikeEnabled(stream)) return null
 
-        val security = streamSecurity(stream)
-        val tlsSource = pickTlsSource(stream)
-        val reality = stream.optJSONObject("realitySettings")
-
+        val tlsSource = tlsSource(stream)
         val serverName = firstNonBlank(
             tlsSource.optString("serverName", ""),
             tlsSource.optString("server_name", ""),
@@ -76,30 +79,30 @@ object CoreConfigTranslator {
             tls.put("insecure", tlsSource.optBoolean("insecure", false))
         }
 
-        val fingerprint = firstNonBlank(
+        val fp = firstNonBlank(
             tlsSource.optString("fingerprint", ""),
             tlsSource.optString("clientFingerprint", "")
         )
-        if (fingerprint.isNotBlank()) {
+        if (fp.isNotBlank()) {
             tls.put(
                 "utls",
                 JSONObject()
                     .put("enabled", true)
-                    .put("fingerprint", fingerprint)
+                    .put("fingerprint", fp)
             )
         }
 
-        if (security == "reality" || reality != null) {
-            val src = reality ?: tlsSource
+        val reality = realitySource(stream)
+        if (reality != null) {
             val publicKey = firstNonBlank(
-                src.optString("publicKey", ""),
-                src.optString("public_key", "")
+                reality.optString("publicKey", ""),
+                reality.optString("public_key", "")
             )
             val shortId = firstNonBlank(
-                src.optString("shortId", ""),
-                src.optString("short_id", ""),
-                src.optJSONArray("shortIds")?.optString(0),
-                src.optJSONArray("short_ids")?.optString(0)
+                reality.optString("shortId", ""),
+                reality.optString("short_id", ""),
+                reality.optJSONArray("shortIds")?.optString(0),
+                reality.optJSONArray("short_ids")?.optString(0)
             )
 
             val realityOptions = JSONObject().put("enabled", true)
@@ -111,34 +114,61 @@ object CoreConfigTranslator {
         return tls
     }
 
-    private fun singBoxTransport(stream: JSONObject): JSONObject? {
-        val network = stream.optString("network", "tcp").lowercase()
-        if (network.isBlank() || network == "tcp") return null
+    private fun singBoxTransport(stream: JSONObject, protocol: String): JSONObject? {
+        val network = streamNetwork(stream)
+        if (network.isBlank() || network == "tcp" || network == "raw") return null
 
-        val transport = JSONObject().put("type", network)
+        if (network == "xhttp") {
+            throw IllegalArgumentException(
+                "sing-box translator cannot safely map Xray xhttp transport yet; use mihomo or Xray for this VLESS xhttp config"
+            )
+        }
+
+        val transport = JSONObject()
 
         when (network) {
-            "ws" -> {
+            "ws", "websocket" -> {
                 val ws = stream.optJSONObject("wsSettings") ?: JSONObject()
+                transport.put("type", "ws")
                 val path = ws.optString("path", "")
                 if (path.isNotBlank()) transport.put("path", path)
                 val headers = ws.optJSONObject("headers")
-                val host = headers?.optString("Host", "") ?: ""
-                if (host.isNotBlank()) {
-                    transport.put("headers", JSONObject().put("Host", host))
+                if (headers != null && headers.length() > 0) {
+                    transport.put("headers", headers)
                 }
             }
             "grpc" -> {
                 val grpc = stream.optJSONObject("grpcSettings") ?: JSONObject()
-                val serviceName = grpc.optString("serviceName", "")
-                if (serviceName.isNotBlank()) transport.put("service_name", serviceName)
+                transport.put("type", "grpc")
+                val service = grpc.optString("serviceName", "")
+                if (service.isNotBlank()) transport.put("service_name", service)
             }
             "httpupgrade" -> {
                 val http = stream.optJSONObject("httpupgradeSettings") ?: JSONObject()
+                transport.put("type", "httpupgrade")
                 val path = http.optString("path", "")
                 if (path.isNotBlank()) transport.put("path", path)
                 val host = http.optString("host", "")
-                if (host.isNotBlank()) transport.put("host", host)
+                if (host.isNotBlank()) {
+                    transport.put("headers", JSONObject().put("Host", host))
+                }
+            }
+            "http", "h2" -> {
+                transport.put("type", "http")
+                val http = stream.optJSONObject("httpSettings") ?: JSONObject()
+                val path = http.optJSONArray("path")?.optString(0)
+                    ?: http.optString("path", "")
+                if (path.isNotBlank()) transport.put("path", path)
+                val host = http.optJSONArray("host")?.optString(0)
+                    ?: http.optString("host", "")
+                if (host.isNotBlank()) {
+                    transport.put("headers", JSONObject().put("Host", host))
+                }
+            }
+            else -> {
+                throw IllegalArgumentException(
+                    "Unsupported $protocol transport for sing-box: $network"
+                )
             }
         }
 
@@ -166,24 +196,33 @@ object CoreConfigTranslator {
                 if (type == "vmess") {
                     out.put("security", user?.optString("security", "auto") ?: "auto")
                     out.put("alter_id", user?.optInt("alterId", 0) ?: 0)
+                } else {
+                    out.put("packet_encoding", "xudp")
                 }
+
                 val flow = user?.optString("flow", "") ?: ""
                 if (flow.isNotBlank()) out.put("flow", flow)
+
                 singBoxTls(stream, server)?.let { out.put("tls", it) }
             }
             "trojan" -> {
                 val user = firstServer(settings)
                 out.put("password", user?.optString("password", "") ?: "")
-                out.put("tls", singBoxTls(stream, server) ?: JSONObject().put("enabled", true).put("server_name", server))
+                out.put(
+                    "tls",
+                    singBoxTls(stream, server)
+                        ?: JSONObject().put("enabled", true).put("server_name", server)
+                )
             }
             "shadowsocks" -> {
                 val s = firstServer(settings)
                 out.put("method", s?.optString("method", "") ?: "")
                 out.put("password", s?.optString("password", "") ?: "")
             }
+            else -> throw IllegalArgumentException("Unsupported protocol for sing-box: $type")
         }
 
-        singBoxTransport(stream)?.let { out.put("transport", it) }
+        singBoxTransport(stream, type)?.let { out.put("transport", it) }
 
         return JSONObject()
             .put("log", JSONObject().put("level", "warn"))
@@ -207,6 +246,125 @@ object CoreConfigTranslator {
             .toString()
     }
 
+    private fun mihomoTlsFields(proxy: JSONObject, stream: JSONObject) {
+        proxy.put("tls", tlsLikeEnabled(stream))
+
+        val source = tlsSource(stream)
+        val serverName = firstNonBlank(
+            source.optString("serverName", ""),
+            source.optString("server_name", ""),
+            source.optString("sni", "")
+        )
+        if (serverName.isNotBlank()) proxy.put("servername", serverName)
+
+        val fp = firstNonBlank(
+            source.optString("fingerprint", ""),
+            source.optString("clientFingerprint", "")
+        )
+        if (fp.isNotBlank()) {
+            proxy.put("client-fingerprint", fp)
+            proxy.put("fingerprint", fp)
+        }
+
+        if (source.has("allowInsecure")) {
+            proxy.put("skip-cert-verify", source.optBoolean("allowInsecure", false))
+        }
+
+        val reality = realitySource(stream)
+        if (reality != null) {
+            val opts = JSONObject()
+            val publicKey = firstNonBlank(
+                reality.optString("publicKey", ""),
+                reality.optString("public_key", "")
+            )
+            val shortId = firstNonBlank(
+                reality.optString("shortId", ""),
+                reality.optString("short_id", ""),
+                reality.optJSONArray("shortIds")?.optString(0),
+                reality.optJSONArray("short_ids")?.optString(0)
+            )
+            if (publicKey.isNotBlank()) opts.put("public-key", publicKey)
+            if (shortId.isNotBlank()) opts.put("short-id", shortId)
+            proxy.put("reality-opts", opts)
+        }
+    }
+
+    private fun mihomoTransport(proxy: JSONObject, stream: JSONObject, protocol: String) {
+        val network = streamNetwork(stream)
+        if (network.isBlank() || network == "tcp" || network == "raw") {
+            proxy.put("network", "tcp")
+            return
+        }
+
+        when (network) {
+            "ws", "websocket" -> {
+                proxy.put("network", "ws")
+                val ws = stream.optJSONObject("wsSettings") ?: JSONObject()
+                val opts = JSONObject()
+                val path = ws.optString("path", "")
+                if (path.isNotBlank()) opts.put("path", path)
+                val headers = ws.optJSONObject("headers")
+                if (headers != null && headers.length() > 0) opts.put("headers", headers)
+                if (opts.length() > 0) proxy.put("ws-opts", opts)
+            }
+            "grpc" -> {
+                proxy.put("network", "grpc")
+                val grpc = stream.optJSONObject("grpcSettings") ?: JSONObject()
+                val opts = JSONObject()
+                val service = grpc.optString("serviceName", "")
+                if (service.isNotBlank()) opts.put("grpc-service-name", service)
+                if (opts.length() > 0) proxy.put("grpc-opts", opts)
+            }
+            "http", "h2" -> {
+                proxy.put("network", if (network == "h2") "h2" else "http")
+                val http = stream.optJSONObject("httpSettings") ?: JSONObject()
+                val opts = JSONObject()
+                val path = http.optJSONArray("path")?.optString(0)
+                    ?: http.optString("path", "")
+                if (path.isNotBlank()) opts.put("path", path)
+                val host = http.optJSONArray("host")?.optString(0)
+                    ?: http.optString("host", "")
+                if (host.isNotBlank()) opts.put("host", JSONArray().put(host))
+                proxy.put(if (network == "h2") "h2-opts" else "http-opts", opts)
+            }
+            "httpupgrade" -> {
+                proxy.put("network", "ws")
+                val http = stream.optJSONObject("httpupgradeSettings") ?: JSONObject()
+                val opts = JSONObject().put("v2ray-http-upgrade", true)
+                val path = http.optString("path", "")
+                if (path.isNotBlank()) opts.put("path", path)
+                val host = http.optString("host", "")
+                if (host.isNotBlank()) {
+                    opts.put("headers", JSONObject().put("Host", host))
+                }
+                proxy.put("ws-opts", opts)
+            }
+            "xhttp" -> {
+                if (protocol != "vless") {
+                    throw IllegalArgumentException("mihomo xhttp transport is only valid for VLESS")
+                }
+                proxy.put("network", "xhttp")
+                val xhttp = stream.optJSONObject("xhttpSettings")
+                    ?: stream.optJSONObject("splithttpSettings")
+                    ?: JSONObject()
+                val opts = JSONObject()
+                val path = xhttp.optString("path", "")
+                if (path.isNotBlank()) opts.put("path", path)
+                val host = firstNonBlank(
+                    xhttp.optString("host", ""),
+                    xhttp.optJSONObject("headers")?.optString("Host", "")
+                )
+                if (host.isNotBlank()) opts.put("host", host)
+                val mode = xhttp.optString("mode", "")
+                if (mode.isNotBlank()) opts.put("mode", mode)
+                val headers = xhttp.optJSONObject("headers")
+                if (headers != null && headers.length() > 0) opts.put("headers", headers)
+                if (opts.length() > 0) proxy.put("xhttp-opts", opts)
+            }
+            else -> throw IllegalArgumentException("Unsupported transport for mihomo: $network")
+        }
+    }
+
     private fun buildMihomo(profile: ConfigProfile, mixedPort: Int): String {
         val ob = outbound(profile)
         val type = ob.optString("protocol", profile.protocol).lowercase()
@@ -226,44 +384,31 @@ object CoreConfigTranslator {
             "vless", "vmess" -> {
                 val user = firstUser(settings)
                 proxy.put("uuid", user?.optString("id", "") ?: "")
-                proxy.put("tls", tlsLikeEnabled(stream))
-                proxy.put("network", stream.optString("network", "tcp"))
+                if (type == "vless") {
+                    proxy.put("encryption", "")
+                    proxy.put("packet-encoding", "xudp")
+                } else {
+                    proxy.put("alterId", user?.optInt("alterId", 0) ?: 0)
+                    proxy.put("cipher", user?.optString("security", "auto") ?: "auto")
+                }
 
                 val flow = user?.optString("flow", "") ?: ""
                 if (flow.isNotBlank()) proxy.put("flow", flow)
 
-                val tlsSource = pickTlsSource(stream)
-                val serverName = firstNonBlank(
-                    tlsSource.optString("serverName", ""),
-                    tlsSource.optString("server_name", ""),
-                    tlsSource.optString("sni", "")
-                )
-                if (serverName.isNotBlank()) proxy.put("servername", serverName)
-
-                val fingerprint = firstNonBlank(
-                    tlsSource.optString("fingerprint", ""),
-                    tlsSource.optString("clientFingerprint", "")
-                )
-                if (fingerprint.isNotBlank()) proxy.put("client-fingerprint", fingerprint)
-
-                val reality = stream.optJSONObject("realitySettings")
-                if (streamSecurity(stream) == "reality" || reality != null) {
-                    val src = reality ?: tlsSource
-                    proxy.put("reality-opts", JSONObject()
-                        .put("public-key", firstNonBlank(src.optString("publicKey", ""), src.optString("public_key", "")))
-                        .put("short-id", firstNonBlank(src.optString("shortId", ""), src.optString("short_id", ""), src.optJSONArray("shortIds")?.optString(0)))
-                    )
-                }
+                mihomoTlsFields(proxy, stream)
+                mihomoTransport(proxy, stream, type)
             }
             "trojan" -> {
                 proxy.put("password", firstServer(settings)?.optString("password", "") ?: "")
-                proxy.put("tls", true)
+                mihomoTlsFields(proxy, stream)
+                mihomoTransport(proxy, stream, type)
             }
             "shadowsocks" -> {
                 val s = firstServer(settings)
                 proxy.put("cipher", s?.optString("method", "") ?: "")
                 proxy.put("password", s?.optString("password", "") ?: "")
             }
+            else -> throw IllegalArgumentException("Unsupported protocol for mihomo: $type")
         }
 
         return JSONObject()

@@ -116,8 +116,12 @@ class CoreManager(context: Context) {
 
     fun prepare(request: CoreStartRequest): Pair<String?, CoreResult> =
         runCatching {
-            val json = buildJson(request)
-            val validation = selectedAdapter().validate(json)
+            val settings = SettingsRepository(appContext).load()
+            if (settings.smartCoreSelection) smartSelect(request)
+            val coreId = selectedCoreId()
+            val adapter = adapters[coreId] ?: adapters.getValue(CoreId.XRAY)
+            val json = CoreConfigTranslator.build(request, coreId)
+            val validation = adapter.validate(json)
             if (!validation.success) null to validation
             else json to CoreResult(true)
         }.getOrElse {
@@ -143,7 +147,11 @@ class CoreManager(context: Context) {
         protect: ((Int) -> Boolean)? = null,
         isCancelled: () -> Boolean = { false }
     ): CoreResult {
-        val json = runCatching { buildJson(request) }.getOrElse {
+        val json = runCatching {
+            val settings = SettingsRepository(appContext).load()
+            if (settings.smartCoreSelection) smartSelect(request)
+            buildJson(request)
+        }.getOrElse {
             Diagnostics.recordThrowable("Validated core start", it)
             return CoreResult(
                 false,
@@ -163,6 +171,7 @@ class CoreManager(context: Context) {
 
         val xrayLog = File(Diagnostics.xrayErrorLogPath())
         val logMark = XrayProbeLogInspector.mark(xrayLog)
+        stopAllAdapters()
         val started = selectedAdapter().start(json, protect)
         if (!started.success) return started
 
@@ -255,7 +264,7 @@ class CoreManager(context: Context) {
         )
 
     private fun stopAfterRejectedStart() {
-        runCatching { selectedAdapter().stop() }
+        runCatching { stopAllAdapters() }
             .onFailure {
                 Diagnostics.warning(
                     "Core cleanup after rejected startup failed: " + it.message
@@ -271,7 +280,22 @@ class CoreManager(context: Context) {
         ?.optJSONObject("data")
         ?.optBoolean("running") == true
 
-    fun stop(): CoreResult = selectedAdapter().stop()
+    fun stop(): CoreResult = stopAllAdapters()
+
+    private fun stopAllAdapters(): CoreResult {
+        var ok = true
+        var error = ""
+        adapters.values.forEach { adapter ->
+            val result = runCatching { adapter.stop() }.getOrElse {
+                CoreResult(false, it.message ?: "unknown")
+            }
+            if (!result.success) {
+                ok = false
+                if (error.isBlank()) error = result.error
+            }
+        }
+        return CoreResult(ok, error)
+    }
 
     private fun buildJson(request: CoreStartRequest): String =
         CoreConfigTranslator.build(request, selectedCoreId())
@@ -286,13 +310,56 @@ class CoreManager(context: Context) {
     fun smartSelect(request: CoreStartRequest): CoreId {
         val settings = SettingsRepository(appContext).load()
         if (!settings.smartCoreSelection) return settings.coreId
-        val candidates = adapters.filterValues { it.isAvailable() }.keys.ifEmpty { setOf(CoreId.XRAY) }
-        val selected = candidates.firstOrNull { it == CoreId.SING_BOX && request.mode == com.trivox.client.data.ConnectionMode.PROXY }
-            ?: candidates.firstOrNull { it == CoreId.MIHOMO && request.mode == com.trivox.client.data.ConnectionMode.PROXY }
-            ?: candidates.first()
-        settings.lastSmartCoreId = selected
+
+        val order = if (request.mode == com.trivox.client.data.ConnectionMode.VPN) {
+            listOf(CoreId.XRAY)
+        } else {
+            listOf(CoreId.MIHOMO, CoreId.SING_BOX, CoreId.XRAY)
+        }
+
+        val available = order.filter { adapters[it]?.isAvailable() == true }
+            .ifEmpty { listOf(CoreId.XRAY) }
+
+        val diagnostics = StringBuilder()
+
+        available.forEach { coreId ->
+            val adapter = adapters[coreId] ?: return@forEach
+            val json = runCatching {
+                CoreConfigTranslator.build(request, coreId)
+            }.getOrElse {
+                diagnostics.append(coreId.name)
+                    .append(": build failed: ")
+                    .append(it.message ?: "unknown")
+                    .append("\n")
+                return@forEach
+            }
+
+            val validation = runCatching {
+                adapter.validate(json)
+            }.getOrElse {
+                CoreResult(false, it.message ?: "validation crashed")
+            }
+
+            if (validation.success) {
+                settings.lastSmartCoreId = coreId
+                SettingsRepository(appContext).save(settings)
+                Diagnostics.info("Smart core selected: " + coreId.name)
+                return coreId
+            }
+
+            diagnostics.append(coreId.name)
+                .append(": ")
+                .append(validation.error)
+                .append("\n")
+        }
+
+        settings.lastSmartCoreId = CoreId.XRAY
         SettingsRepository(appContext).save(settings)
-        return selected
+        Diagnostics.warning(
+            "Smart core fallback to XRAY. Candidates failed: " +
+                diagnostics.toString().trim()
+        )
+        return CoreId.XRAY
     }
 
     companion object {

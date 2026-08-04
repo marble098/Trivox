@@ -254,8 +254,8 @@ class ConnectionService : Service() {
 
         if (!core.adapter.isAvailable()) {
             fail(
-                "Xray Android core is " +
-                    "missing or corrupted"
+                "Selected core " + core.adapter.id +
+                    " is missing or corrupted"
             )
             return
         }
@@ -264,6 +264,17 @@ class ConnectionService : Service() {
             SettingsRepository(this)
                 .load()
 
+        runCatching { core.stop() }
+            .onFailure {
+                Diagnostics.warning("Pre-start core cleanup failed: " + it.message)
+            }
+
+        try {
+            Thread.sleep(180L)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
+
         if (
             !portAvailable(
                 settings.socksPort
@@ -271,7 +282,7 @@ class ConnectionService : Service() {
         ) {
             Diagnostics.warning(
                 "Mixed proxy port was busy; " +
-                    "stopping a stale Xray instance"
+                    "stopping stale core processes"
             )
             core.stop()
 
@@ -472,7 +483,7 @@ class ConnectionService : Service() {
                             !core.isRunning()
                         ) {
                             fail(
-                                "Xray stopped " +
+                                "Selected core stopped " +
                                     "unexpectedly"
                             )
                         }
@@ -769,6 +780,7 @@ class ConnectionService : Service() {
         }
 
         if (
+            !restartExpected &&
             ownsCore.compareAndSet(
                 true,
                 false
@@ -783,6 +795,10 @@ class ConnectionService : Service() {
                         stopped.error
                 )
             }
+        } else if (restartExpected) {
+            Diagnostics.info(
+                "Proxy service destroy skipped core stop because Android restart is expected"
+            )
         }
 
         // Proxy destroy OpenSSH cleanup
