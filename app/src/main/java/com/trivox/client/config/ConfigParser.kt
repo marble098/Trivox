@@ -22,7 +22,7 @@ object ConfigParser {
         "vless", "vmess", "trojan", "ss", "shadowsocks",
         "socks", "socks5", "http", "https",
         "hy2", "hysteria2", "hysteria",
-        "wg", "wireguard"
+        "wg", "wireguard", "ssh", "openssh", "nordwhisper"
     )
 
     fun parseText(input: String): List<ConfigProfile> {
@@ -110,6 +110,8 @@ object ConfigParser {
             "http", "https" -> parseHttp(raw)
             "hy2", "hysteria2", "hysteria" -> parseHysteria2(raw)
             "wg", "wireguard" -> parseWireGuardUri(raw)
+            "ssh", "openssh" -> OpenSshProfileCodec.parse(raw)
+            "nordwhisper" -> NordWhisperCompatibility.reject(raw)
             else -> throw ConfigParseException("Unsupported config scheme")
         }
     }

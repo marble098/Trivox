@@ -25,6 +25,7 @@ import com.trivox.client.data.AppSettings
 import com.trivox.client.data.DnsMode
 import com.trivox.client.data.PingMethod
 import com.trivox.client.data.ProfileSortMode
+import com.trivox.client.data.RealDelayProfile
 import com.trivox.client.data.SettingsRepository
 import com.trivox.client.data.SubscriptionRepository
 import com.trivox.client.data.ThemeMode
@@ -54,6 +55,13 @@ class SettingsActivity : ThemedActivity() {
         val livePingInterval = edit(R.id.livePingIntervalInput)
         val pingAttempts = spinner(R.id.pingAttemptsSpinner)
         val testUrl = edit(R.id.testUrlInput)
+        val realDelayProfile = spinner(R.id.realDelayProfileSpinner)
+        val realDelayGroupSize = edit(R.id.realDelayGroupSizeInput)
+        val realDelayWorkers = edit(R.id.realDelayWorkersInput)
+        val realDelayTimeout = edit(R.id.realDelayTimeoutInput)
+        val realDelayStartGrace = edit(R.id.realDelayStartGraceInput)
+        val realDelayTargetCount = edit(R.id.realDelayTargetCountInput)
+        val realDelayRequiredProofs = edit(R.id.realDelayRequiredProofsInput)
         val networkTuning = switch(R.id.networkTuningEnabledSwitch)
         val adaptiveHandshake = switch(R.id.adaptiveHandshakeSwitch)
         val tcpFastOpen = switch(R.id.tcpFastOpenSwitch)
@@ -157,6 +165,19 @@ class SettingsActivity : ThemedActivity() {
         pingAttempts.adapter = compactAdapter(attempts)
         pingAttempts.setSelection(settings.testAttempts.coerceIn(2, 5) - 2)
 
+        val realDelayProfiles = RealDelayProfile.entries
+        realDelayProfile.adapter = compactAdapter(
+            arrayOf(
+                getString(R.string.real_delay_profile_turbo),
+                getString(R.string.real_delay_profile_balanced),
+                getString(R.string.real_delay_profile_accurate),
+                getString(R.string.real_delay_profile_custom)
+            )
+        )
+        realDelayProfile.setSelection(
+            realDelayProfiles.indexOf(settings.realDelayProfile).coerceAtLeast(0)
+        )
+
         val workerValues = (1..8).map(Int::toString).toTypedArray()
         wireGuardWorkers.adapter = compactAdapter(workerValues)
         wireGuardWorkers.setSelection(settings.wireGuardWorkers.coerceIn(1, 8) - 1)
@@ -185,6 +206,12 @@ class SettingsActivity : ThemedActivity() {
         livePingEnabled.isChecked = settings.livePingEnabled
         livePingInterval.setText(settings.livePingIntervalSeconds.toString())
         testUrl.setText(settings.testUrl)
+        realDelayGroupSize.setText(settings.realDelayGroupSize.toString())
+        realDelayWorkers.setText(settings.realDelayWorkers.toString())
+        realDelayTimeout.setText(settings.realDelayProbeTimeoutMs.toString())
+        realDelayStartGrace.setText(settings.realDelayStartGraceMs.toString())
+        realDelayTargetCount.setText(settings.realDelayTargetCount.toString())
+        realDelayRequiredProofs.setText(settings.realDelayRequiredProofs.toString())
         networkTuning.isChecked = settings.networkTuningEnabled
         adaptiveHandshake.isChecked = settings.adaptiveHandshake
         tcpFastOpen.isChecked = settings.tcpFastOpen
@@ -252,6 +279,12 @@ class SettingsActivity : ThemedActivity() {
             val wgKeepAliveValue = wireGuardKeepAlive.intValue()
             val wgHandshakeValue = wireGuardHandshakeTimeout.intValue()
             val testUrlValue = testUrl.text.toString().trim()
+            val realGroupValue = realDelayGroupSize.intValue()
+            val realWorkersValue = realDelayWorkers.intValue()
+            val realTimeoutValue = realDelayTimeout.intValue()
+            val realGraceValue = realDelayStartGrace.intValue()
+            val realTargetsValue = realDelayTargetCount.intValue()
+            val realProofsValue = realDelayRequiredProofs.intValue()
             val dnsValues = customDns.text.lineSequence()
                 .map(String::trim)
                 .filter(String::isNotEmpty)
@@ -265,6 +298,18 @@ class SettingsActivity : ThemedActivity() {
                     validTestUrl(testUrlValue)
             if (!basicValid) {
                 toast(R.string.invalid_port)
+                return@setOnClickListener
+            }
+
+            val realDelayValid =
+                realGroupValue != null && realGroupValue in 2..16 &&
+                    realWorkersValue != null && realWorkersValue in 1..6 &&
+                    realTimeoutValue != null && realTimeoutValue in 1_500..10_000 &&
+                    realGraceValue != null && realGraceValue in 0..1_000 &&
+                    realTargetsValue != null && realTargetsValue in 1..4 &&
+                    realProofsValue != null && realProofsValue in 1..realTargetsValue
+            if (!realDelayValid) {
+                toast(R.string.real_delay_settings_invalid)
                 return@setOnClickListener
             }
 
@@ -313,6 +358,15 @@ class SettingsActivity : ThemedActivity() {
             settings.livePingIntervalSeconds = liveIntervalValue!!
             settings.testAttempts = attempts[pingAttempts.selectedItemPosition].toInt()
             settings.testUrl = testUrlValue
+            settings.realDelayProfile = realDelayProfiles[
+                realDelayProfile.selectedItemPosition
+            ]
+            settings.realDelayGroupSize = realGroupValue!!
+            settings.realDelayWorkers = realWorkersValue!!
+            settings.realDelayProbeTimeoutMs = realTimeoutValue!!
+            settings.realDelayStartGraceMs = realGraceValue!!
+            settings.realDelayTargetCount = realTargetsValue!!
+            settings.realDelayRequiredProofs = realProofsValue!!
             settings.networkTuningEnabled = networkTuning.isChecked
             settings.adaptiveHandshake = adaptiveHandshake.isChecked
             settings.tcpFastOpen = tcpFastOpen.isChecked

@@ -13,6 +13,8 @@ import com.trivox.client.data.ConfigRepository
 import com.trivox.client.data.ConnectionMode
 import com.trivox.client.data.ConnectionState
 import com.trivox.client.data.SettingsRepository
+import com.trivox.client.config.OpenSshProfileCodec
+import com.trivox.client.ssh.OpenSshTunnelBridge
 import com.trivox.client.util.Diagnostics
 import java.net.InetSocketAddress
 import java.net.ServerSocket
@@ -35,6 +37,7 @@ class ConnectionService : Service() {
         AtomicBoolean(false)
     private val ownsCore =
         AtomicBoolean(false)
+    private var sshHandle: OpenSshTunnelBridge.Handle? = null
 
     private lateinit var core:
         CoreManager
@@ -308,9 +311,23 @@ class ConnectionService : Service() {
             )
         )
 
+        val effectiveProfile =
+            if (OpenSshProfileCodec.isOpenSsh(profile)) {
+                runCatching {
+                    OpenSshTunnelBridge(this).start(profile)
+                }.getOrElse {
+                    fail("OpenSSH start failed: " + (it.message ?: "unknown"))
+                    return
+                }.also {
+                    sshHandle = it
+                }.proxyProfile
+            } else {
+                profile
+            }
+
         val request =
             CoreStartRequest(
-                profile,
+                effectiveProfile,
                 settings,
                 ConnectionMode.PROXY
             )
@@ -447,7 +464,10 @@ class ConnectionService : Service() {
                     }
 
                     executeSafely {
-                        if (
+                        val ssh = sshHandle
+                        if (!stopRequested.get() && ssh != null && !ssh.isAlive()) {
+                            fail("OpenSSH tunnel stopped unexpectedly: " + ssh.failureText())
+                        } else if (
                             !stopRequested.get() &&
                             !core.isRunning()
                         ) {
@@ -553,6 +573,8 @@ class ConnectionService : Service() {
                 )
 
             ownsCore.set(false)
+            sshHandle?.close()
+            sshHandle = null
             runCatching { core.stop() }
                 .onFailure {
                     Diagnostics.warning(
@@ -763,6 +785,9 @@ class ConnectionService : Service() {
             }
         }
 
+        // Proxy destroy OpenSSH cleanup
+        sshHandle?.close()
+        sshHandle = null
         cleanupExecutor.shutdownNow()
         executor.shutdownNow()
         super.onDestroy()

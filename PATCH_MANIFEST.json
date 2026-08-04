@@ -1,25 +1,29 @@
 {
-  "name": "Trivox v11 dual real-delay, OpenSSH asset pipeline and subscription export patch",
-  "repository": "marble098/Trivox",
-  "branch": "main",
-  "baseCommit": "ca58af07f4a45408dde350534d2baf909cdf8289",
-  "installation": "Extract at repository root, run python3 tools/apply_trivox_v11.py . --check, then run without --check.",
-  "changes": [
-    "Grouped verified Real Delay with bounded two-probe concurrency and per-profile fallback",
-    "Dual TCP/Real weighted sorting and fastest selection",
-    "Long-press subscription link export",
-    "Visible Configuration text shortened without renaming identifiers",
-    "ABI-aware OpenSSH client build, manifest, extraction and command infrastructure"
+  "name": "Trivox v12 network cores patch",
+  "targetRepository": "marble098/Trivox",
+  "targetCommit": "e7e0d26edce5eb4e03f8d16aec36152de3592a3b",
+  "directFiles": [
+    ".github/workflows/openssh-binaries.yml",
+    "app/src/main/java/com/trivox/client/network/RealDelayPolicy.kt",
+    "app/src/main/java/com/trivox/client/network/BatchRealDelayRunner.kt",
+    "app/src/main/java/com/trivox/client/network/TunnelHealthVerifier.kt",
+    "app/src/main/java/com/trivox/client/config/OpenSshProfileCodec.kt",
+    "app/src/main/java/com/trivox/client/config/NordWhisperCompatibility.kt",
+    "app/src/main/java/com/trivox/client/ssh/OpenSshBinaryManager.kt",
+    "app/src/main/java/com/trivox/client/ssh/OpenSshCommand.kt",
+    "app/src/main/java/com/trivox/client/ssh/OpenSshTunnelBridge.kt",
+    "app/src/main/res/values/strings_v12.xml",
+    "app/src/main/res/values-fa/strings_v12.xml",
+    "app/src/test/java/com/trivox/client/network/RealDelayPolicyV12Test.kt"
   ],
-  "openSshBinaryStatus": "BUILD_REQUIRED_VIA_INCLUDED_GITHUB_ACTIONS",
-  "validation": {
-    "pythonSyntax": true,
-    "shellSyntax": true,
-    "focusedKotlinCompilation": true,
-    "patchAnchors": true,
-    "patchIdempotency": true,
-    "resourceIdentifierSafety": true,
-    "fullGradleBuild": false,
-    "openSshCrossBuild": false
-  }
+  "patchedFiles": [
+    "app/src/main/java/com/trivox/client/data/Models.kt",
+    "app/src/main/java/com/trivox/client/config/ConfigParser.kt",
+    "app/src/main/java/com/trivox/client/config/XrayConfigBuilder.kt",
+    "app/src/main/java/com/trivox/client/ui/SettingsActivity.kt",
+    "app/src/main/java/com/trivox/client/ui/MainActivity.kt",
+    "app/src/main/java/com/trivox/client/service/ConnectionService.kt",
+    "app/src/main/java/com/trivox/client/service/TrivoxVpnService.kt",
+    "app/src/main/res/layout/activity_settings.xml"
+  ]
 }

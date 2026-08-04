@@ -150,6 +150,21 @@
                     android:layout_marginTop="3dp"
                     android:inputType="textUri"
                     android:textDirection="ltr" />
+
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:layout_marginTop="8dp" android:text="@string/real_delay_profile" />
+                <Spinner android:id="@+id/realDelayProfileSpinner" android:layout_width="match_parent" android:layout_height="42dp" android:layout_marginTop="3dp" android:background="@drawable/input_background" android:paddingStart="10dp" android:paddingEnd="8dp" />
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:layout_marginTop="7dp" android:text="@string/real_delay_group_size" />
+                <EditText android:id="@+id/realDelayGroupSizeInput" style="@style/Widget.Trivox.Input" android:layout_marginTop="3dp" android:inputType="number" android:textDirection="ltr" />
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:layout_marginTop="7dp" android:text="@string/real_delay_workers" />
+                <EditText android:id="@+id/realDelayWorkersInput" style="@style/Widget.Trivox.Input" android:layout_marginTop="3dp" android:inputType="number" android:textDirection="ltr" />
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:layout_marginTop="7dp" android:text="@string/real_delay_timeout" />
+                <EditText android:id="@+id/realDelayTimeoutInput" style="@style/Widget.Trivox.Input" android:layout_marginTop="3dp" android:inputType="number" android:textDirection="ltr" />
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:layout_marginTop="7dp" android:text="@string/real_delay_start_grace" />
+                <EditText android:id="@+id/realDelayStartGraceInput" style="@style/Widget.Trivox.Input" android:layout_marginTop="3dp" android:inputType="number" android:textDirection="ltr" />
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:layout_marginTop="7dp" android:text="@string/real_delay_target_count" />
+                <EditText android:id="@+id/realDelayTargetCountInput" style="@style/Widget.Trivox.Input" android:layout_marginTop="3dp" android:inputType="number" android:textDirection="ltr" />
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:layout_marginTop="7dp" android:text="@string/real_delay_required_proofs" />
+                <EditText android:id="@+id/realDelayRequiredProofsInput" style="@style/Widget.Trivox.Input" android:layout_marginTop="3dp" android:inputType="number" android:textDirection="ltr" />
             </LinearLayout>
 
             <TextView style="@style/Widget.Trivox.SectionTitle" android:text="@string/network_tuning_section" />

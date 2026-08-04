@@ -10,6 +10,15 @@ enum class TestStatus { UNTESTED, TESTING, ALIVE, DEAD, ERROR }
 enum class DnsMode { IMPORTED, TRIVOX_DEFAULT, CUSTOM, SYSTEM, DIRECT, THROUGH_PROXY }
 enum class AppRoutingMode { ALL, ALLOW_SELECTED, BYPASS_SELECTED }
 
+enum class RealDelayProfile {
+    TURBO, BALANCED, ACCURATE, CUSTOM;
+
+    companion object {
+        fun fromStored(value: String?): RealDelayProfile =
+            entries.firstOrNull { it.name.equals(value, true) } ?: BALANCED
+    }
+}
+
 enum class SubscriptionKind {
     URL,
     NORDVPN;
@@ -296,6 +305,13 @@ data class AppSettings(
     var autoUpdateCheck: Boolean = true,
     var testUrl: String = DEFAULT_TEST_URL,
     var testAttempts: Int = 3,
+    var realDelayProfile: RealDelayProfile = RealDelayProfile.BALANCED,
+    var realDelayGroupSize: Int = 8,
+    var realDelayWorkers: Int = 3,
+    var realDelayProbeTimeoutMs: Int = 3_600,
+    var realDelayStartGraceMs: Int = 80,
+    var realDelayTargetCount: Int = 2,
+    var realDelayRequiredProofs: Int = 2,
     var adaptiveHandshake: Boolean = true,
     var networkTuningEnabled: Boolean = true,
     var tcpFastOpen: Boolean = false,
@@ -316,6 +332,12 @@ data class AppSettings(
         httpPort = socksPort
         mtu = mtu.coerceIn(576, 9000)
         testAttempts = testAttempts.coerceIn(2, 5)
+        realDelayGroupSize = realDelayGroupSize.coerceIn(2, 16)
+        realDelayWorkers = realDelayWorkers.coerceIn(1, 6)
+        realDelayProbeTimeoutMs = realDelayProbeTimeoutMs.coerceIn(1_500, 10_000)
+        realDelayStartGraceMs = realDelayStartGraceMs.coerceIn(0, 1_000)
+        realDelayTargetCount = realDelayTargetCount.coerceIn(1, 4)
+        realDelayRequiredProofs = realDelayRequiredProofs.coerceIn(1, realDelayTargetCount)
         livePingIntervalSeconds = livePingIntervalSeconds.coerceIn(3, 300)
         tcpKeepAliveIdleSeconds = tcpKeepAliveIdleSeconds.coerceIn(0, 3600)
         tcpKeepAliveIntervalSeconds = tcpKeepAliveIntervalSeconds.coerceIn(0, 600)
@@ -366,6 +388,13 @@ data class AppSettings(
         .put("autoUpdateCheck", autoUpdateCheck)
         .put("testUrl", testUrl)
         .put("testAttempts", testAttempts)
+        .put("realDelayProfile", realDelayProfile.name)
+        .put("realDelayGroupSize", realDelayGroupSize)
+        .put("realDelayWorkers", realDelayWorkers)
+        .put("realDelayProbeTimeoutMs", realDelayProbeTimeoutMs)
+        .put("realDelayStartGraceMs", realDelayStartGraceMs)
+        .put("realDelayTargetCount", realDelayTargetCount)
+        .put("realDelayRequiredProofs", realDelayRequiredProofs)
         .put("adaptiveHandshake", adaptiveHandshake)
         .put("networkTuningEnabled", networkTuningEnabled)
         .put("tcpFastOpen", tcpFastOpen)
@@ -442,6 +471,15 @@ data class AppSettings(
                 autoUpdateCheck = json.optBoolean("autoUpdateCheck", true),
                 testUrl = json.optString("testUrl", DEFAULT_TEST_URL),
                 testAttempts = json.optInt("testAttempts", 3),
+                realDelayProfile = RealDelayProfile.fromStored(
+                    json.optString("realDelayProfile")
+                ),
+                realDelayGroupSize = json.optInt("realDelayGroupSize", 8),
+                realDelayWorkers = json.optInt("realDelayWorkers", 3),
+                realDelayProbeTimeoutMs = json.optInt("realDelayProbeTimeoutMs", 3_600),
+                realDelayStartGraceMs = json.optInt("realDelayStartGraceMs", 80),
+                realDelayTargetCount = json.optInt("realDelayTargetCount", 2),
+                realDelayRequiredProofs = json.optInt("realDelayRequiredProofs", 2),
                 adaptiveHandshake = json.optBoolean("adaptiveHandshake", true),
                 networkTuningEnabled = json.optBoolean("networkTuningEnabled", true),
                 tcpFastOpen = json.optBoolean("tcpFastOpen", false),

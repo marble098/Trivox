@@ -81,7 +81,7 @@ object XrayConfigBuilder {
         root.put("inbounds", buildInbounds(profile, settings, mode))
         root.put("outbounds", buildOutbounds(profile, settings))
         root.put("dns", dns(profile, settings))
-        root.put("routing", routing())
+        root.put("routing", routing(settings, mode))
         return root.toString(2)
     }
 
@@ -523,7 +523,7 @@ object XrayConfigBuilder {
                     "destOverride",
                     JSONArray().put("http").put("tls").put("quic")
                 )
-                .put("routeOnly", false)
+                .put("routeOnly", true)
         )
 
     private fun tunInbound(settings: AppSettings) = JSONObject()
@@ -700,7 +700,18 @@ object XrayConfigBuilder {
             (':' in clean && clean.matches(Regex("[0-9a-fA-F:]+")))
     }
 
-    private fun routing(): JSONObject {
+    private fun routing(
+        settings: AppSettings,
+        mode: ConnectionMode
+    ): JSONObject {
+        val dnsRouteTag = when {
+            settings.dnsMode == DnsMode.SYSTEM ||
+                settings.dnsMode == DnsMode.DIRECT -> "direct"
+            mode == ConnectionMode.PROXY &&
+                settings.dnsMode != DnsMode.THROUGH_PROXY &&
+                settings.dnsMode != DnsMode.IMPORTED -> "direct"
+            else -> "proxy"
+        }
         val rules = JSONArray()
             .put(
                 JSONObject()
@@ -720,7 +731,7 @@ object XrayConfigBuilder {
                 JSONObject()
                     .put("type", "field")
                     .put("inboundTag", JSONArray().put(DNS_ROUTING_TAG))
-                    .put("outboundTag", "proxy")
+                    .put("outboundTag", dnsRouteTag)
             )
             .put(
                 JSONObject()

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="real_delay_profile">Real Delay profile</string>
+    <string name="real_delay_profile_turbo">Turbo — fastest, one strong proof</string>
+    <string name="real_delay_profile_balanced">Balanced — recommended</string>
+    <string name="real_delay_profile_accurate">Accurate — deeper verification</string>
+    <string name="real_delay_profile_custom">Custom</string>
+    <string name="real_delay_group_size">Custom group size (2–16)</string>
+    <string name="real_delay_workers">Custom parallel workers (1–6)</string>
+    <string name="real_delay_timeout">Custom probe timeout, ms (1500–10000)</string>
+    <string name="real_delay_start_grace">Custom core start grace, ms (0–1000)</string>
+    <string name="real_delay_target_count">Custom proof targets (1–4)</string>
+    <string name="real_delay_required_proofs">Custom required proofs (1–targets)</string>
+    <string name="real_delay_settings_invalid">Real Delay custom settings are invalid.</string>
+    <string name="openssh_runtime_stopped">OpenSSH tunnel stopped unexpectedly.</string>
+</resources>

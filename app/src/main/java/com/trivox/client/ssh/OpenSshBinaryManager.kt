@@ -8,9 +8,9 @@ import java.io.File
 import java.security.MessageDigest
 
 /**
- * Installs an ABI-matched OpenSSH client tree into Trivox's own Termux-style
- * prefix: /data/data/com.trivox.client/files/usr. Binaries and shared libraries
- * are checksum-verified before atomically replacing an existing file.
+ * Installs an ABI-matched OpenSSH client tree into Trivox's private files/usr
+ * prefix. Release and the official `.debug` application-id suffix are accepted;
+ * every installed file is checksum-verified before atomic replacement.
  */
 class OpenSshBinaryManager(context: Context) {
     private val appContext = context.applicationContext
@@ -39,7 +39,10 @@ class OpenSshBinaryManager(context: Context) {
             .use { JSONObject(it.readText()) }
         val version = manifest.getString("version")
         val packageName = manifest.optString("packageName", appContext.packageName)
-        check(packageName == appContext.packageName) {
+        check(
+            appContext.packageName == packageName ||
+                appContext.packageName == "$packageName.debug"
+        ) {
             "OpenSSH assets target $packageName, not ${appContext.packageName}"
         }
         check(version != "BUILD_REQUIRED") {

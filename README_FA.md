@@ -1,136 +1,82 @@
-# بسته اصلاحی Trivox v11
+# بسته اصلاحی Trivox v12 — Real Delay، NordLynx، OpenSSH و Local Proxy
 
-مبنای بررسی و اصلاح: ریپوی `marble098/Trivox`، شاخه `main`، commit:
+این بسته برای وضعیت ریپو در commit زیر آماده شده است:
 
-```text
-ca58af07f4a45408dde350534d2baf909cdf8289
-```
+`e7e0d26edce5eb4e03f8d16aec36152de3592a3b`
 
-این بسته قابلیت‌های موجود را حذف نمی‌کند. فایل‌های جدید در مسیر واقعی پروژه قرار گرفته‌اند و اصلاح فایل‌های بزرگ موجود با patcher محافظت‌شده انجام می‌شود تا فایل ناقص یا نسخه‌ای ناسازگار روی ریپو جایگزین نشود.
+## روش اعمال
 
-## تغییرات
-
-### 1. سریع‌تر شدن Real Delay All
-
-فایل جدید:
-
-```text
-app/src/main/java/com/trivox/client/network/BatchRealDelayRunner.kt
-```
-
-- تا ۶ پروفایل را در یک اجرای موقت Xray قرار می‌دهد؛ برای هر پروفایل inbound SOCKS و outbound مستقل می‌سازد.
-- فقط دو probe هم‌زمان اجرا می‌شود تا CPU، RAM، باتری و تعداد socketها کنترل شود.
-- هر پروفایل همچنان دو اثبات HTTPS مستقل دریافت می‌کند: Cloudflare Trace معتبر و پاسخ دقیق 204.
-- فقط زمانی نتیجه موفق ثبت می‌شود که هر دو probe موفق باشند؛ بنابراین سرعت با حذف اعتبارسنجی به دست نیامده است.
-- پروفایل‌های chain یا گروه‌هایی که validation/start آن‌ها شکست بخورد، خودکار به روش قبلی و تک‌پروفایلی برمی‌گردند.
-- DNSهای تولیدشده برای اعضای گروه ادغام می‌شوند تا bootstrapهای دامنه‌ای حذف نشوند.
-
-### 2. زیرساخت کامل باینری OpenSSH برای Android
-
-فایل‌ها:
-
-```text
-app/src/main/java/com/trivox/client/ssh/OpenSshBinaryManager.kt
-app/src/main/java/com/trivox/client/ssh/OpenSshCommand.kt
-app/src/main/assets/openssh/manifest.json
-.github/workflows/openssh-binaries.yml
-tools/openssh/build-openssh-android.sh
-tools/openssh/prepare-termux-properties.py
-tools/openssh/write-manifest.py
-```
-
-- suite کلاینت شامل `ssh`، `scp`، `sftp`، `ssh-add`، `ssh-agent`، `ssh-keygen` و `ssh-keyscan` است.
-- سه ABI هدف: `arm64-v8a`، `armeabi-v7a` و `x86_64`.
-- OpenSSH و dependencyهای runtime با prefix خود Trivox ساخته می‌شوند:
-
-```text
-/data/data/com.trivox.client/files/usr
-```
-
-- فایل‌های اجرایی، libraryها، helperها و configهای runtime با SHA-256 در manifest ثبت می‌شوند.
-- نصب runtime اتمیک است، checksum بررسی می‌شود، path traversal رد می‌شود و permission مناسب اعمال می‌شود.
-- wrapper آماده برای Dynamic SOCKS Forward با key authentication، known_hosts، keepalive و ExitOnForwardFailure وجود دارد.
-
-**نکته مهم:** باینری‌های نهایی داخل این ZIP قرار نگرفته‌اند، چون باید برای package/prefix واقعی برنامه در محیط Android/Termux build بازسازی شوند. کپی‌کردن باینری آماده Termux با prefix `com.termux` قابل اعتماد نیست. پس از قرار دادن این بسته در ریپو، Workflow با نام `Build OpenSSH Android assets` را اجرا کنید، artifact را دانلود کنید و پوشه خروجی `openssh` را جایگزین این مسیر کنید:
-
-```text
-app/src/main/assets/openssh
-```
-
-تا قبل از این مرحله، manifest عمداً مقدار `BUILD_REQUIRED` دارد و manager به‌جای اجرای فایل ناسازگار، خطای واضح می‌دهد.
-
-### 3. مرتب‌سازی ترکیبی TCP + Real
-
-- پروفایل دارای هر دو نتیجه سالم در اولویت اول است.
-- امتیاز ترکیبی: ۴۰٪ TCP و ۶۰٪ Real Delay.
-- پروفایل دارای فقط یکی از دو نتیجه، با penalty پنج‌ثانیه‌ای پایین‌تر قرار می‌گیرد.
-- حالت‌های `SMART`، `LOWEST_LATENCY` و گزینه انتخاب سریع‌ترین همگی از همین منطق استفاده می‌کنند.
-- Favorite همچنان در SMART اولویت قبلی خود را حفظ می‌کند.
-
-### 4. کوتاه شدن Configuration
-
-متن‌های قابل‌نمایش انگلیسی و فارسی به شکل زیر کوتاه می‌شوند:
-
-```text
-Configuration  -> Config
-Configurations -> Configs
-پیکربندی       -> کانفیگ
-```
-
-نام resourceها، preference keyها و identifierهای داخلی تغییر نمی‌کنند تا سازگاری نسخه‌های قبلی از بین نرود.
-
-### 5. خروجی لینک‌های یک ساب با نگه‌داشتن انگشت
-
-در منوی long-press نام ساب در صفحه اصلی، گزینه زیر اضافه می‌شود:
-
-```text
-Export config links / خروجی لینک‌های کانفیگ
-```
-
-فقط URIهای قابل اشتراک و غیرخالی، بدون تکرار، با `ACTION_SEND` صادر می‌شوند. JSON داخلی یا داده‌ای که share-link معتبر نیست وارد خروجی نمی‌شود.
-
-## نصب دستی
-
-1. محتویات ZIP را در ریشه ریپو Extract کنید؛ مسیرها باید مستقیماً با `app/`، `.github/` و `tools/` شروع شوند.
-2. ابتدا فقط سازگاری نسخه را بررسی کنید:
+1. از ریپو نسخه پشتیبان بگیرید.
+2. محتویات ZIP را در **ریشه ریپو** استخراج کنید و اجازه جایگزینی فایل‌ها را بدهید.
+3. از ریشه ریپو اجرا کنید:
 
 ```bash
-python3 tools/apply_trivox_v11.py . --check
+python3 tools/apply_trivox_v12.py
 ```
 
-3. سپس اصلاحات را اعمال کنید:
+4. بررسی ساختاری:
 
 ```bash
-python3 tools/apply_trivox_v11.py .
+python3 tools/verify_trivox_v12.py
 ```
 
-4. تست و lint پروژه:
+5. تست و بیلد:
 
 ```bash
-./gradlew --no-daemon --stacktrace test lint
+./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
 ```
 
-5. برای تولید OpenSSH، فایل‌ها را commit/push کنید و Workflow زیر را دستی اجرا کنید:
+## فعال‌کردن باینری واقعی OpenSSH
+
+ریپو فعلی فقط اسکلت OpenSSH دارد و `manifest.json` آن روی `BUILD_REQUIRED` است. فایل workflow در این بسته طوری اصلاح شده که خروجی آماده با مسیرهای صحیح بسازد:
+
+1. در GitHub به **Actions → Build OpenSSH Android assets** بروید.
+2. `Run workflow` را اجرا کنید.
+3. artifact با نام `trivox-openssh-overlay` را دانلود کنید.
+4. آن artifact را در ریشه ریپو استخراج کنید.
+5. دوباره دستورهای verify و Gradle را اجرا کنید.
+
+بدون این مرحله، برنامه عمداً خطای واضح «OpenSSH assets have not been built» می‌دهد؛ هیچ باینری جعلی یا ناسازگار داخل APK قرار نمی‌گیرد.
+
+## فرمت افزودن OpenSSH
+
+از گزینه Import/Add existing configuration استفاده کنید:
 
 ```text
-Build OpenSSH Android assets
+ssh://USERNAME:PASSWORD@HOST:22?timeout=10#NAME
 ```
 
-6. artifact تولیدی را در `app/src/main/assets/openssh` جایگزین و سپس APK را build کنید.
+یا:
 
-## رفتار ایمن patcher
+```text
+openssh://USERNAME:PASSWORD@HOST:22?timeout=10#NAME
+```
 
-- اگر anchorهای commit مبنا پیدا نشوند، عملیات متوقف می‌شود و فایل‌ها نصفه اصلاح نمی‌شوند.
-- اجرای دوباره idempotent است.
-- ابتدا `--check` را اجرا کنید؛ اگر ریپو بعد از commit مبنا تغییر کرده باشد، قبل از Replace شدن فایل‌ها متوجه می‌شوید.
+نام کاربری، رمز و نام باید URL-encode شوند. رمز هنگام import مستقیماً به `AndroidKeyStore` منتقل و پیش از ذخیره پروفایل از metadata حذف می‌شود. لینک خام ذخیره‌شده شامل رمز نیست.
 
-## اعتبارسنجی انجام‌شده روی بسته
+## پروفایل‌های Real Delay
 
-- Python syntax: موفق
-- Shell syntax (`bash -n`): موفق
-- Kotlin syntax/type contract فایل‌های جدید با API stub: موفق
-- patch anchor validation: موفق
-- idempotency اجرای دوباره patcher: موفق
-- حفظ resource identifier و preference-like keyها هنگام کوتاه‌سازی متن: موفق
-- Gradle/Android full build: در این محیط قابل اجرا نبود، چون checkout کامل ریپو، Android SDK و libXray AAR در محیط ساخت بسته در دسترس نبود.
-- OpenSSH cross-build واقعی: باید در GitHub Actions اجرا شود؛ خروجی باینری در این محیط تولید نشده است.
+- **Turbo:** گروه ۱۲، چهار worker، یک Cloudflare Trace معتبر؛ سریع‌ترین حالت.
+- **Balanced:** گروه ۸، سه worker، دو اثبات HTTPS؛ پیش‌فرض پیشنهادی.
+- **Accurate:** گروه ۶، دو worker، دو اثبات از سه مقصد؛ فشار کمتر و بررسی عمیق‌تر.
+- **Custom:** گروه، worker، timeout، مکث شروع، تعداد مقصد و تعداد اثبات قابل تنظیم است.
+
+هر حالت محدودیت هم‌زمانی دارد و برای لیست‌های بسیار بزرگ، گروه‌بندی انجام می‌شود تا گوشی با صدها process یا thread هم‌زمان تحت فشار قرار نگیرد.
+
+## اصلاح Local Proxy
+
+- listener محلی پیش از تست HTTPS بررسی می‌شود.
+- تست DNS-free از مسیر SOCKS قبل از HTTP CONNECT انجام می‌شود.
+- در حالت Proxy و DNS پیش‌فرض، bootstrap DNS از مسیر direct انجام می‌شود تا حلقه DNS-via-proxy ایجاد نشود.
+- انتخاب صریح **DNS through proxy** همچنان حفظ شده است.
+- `sniffing.routeOnly=true` مانع بازنویسی ناخواسته مقصد در mixed inbound می‌شود.
+
+## NordLynx و NordWhisper
+
+NordLynx subscription از قبل در ریپو وجود داشت و پروفایل‌های واقعی WireGuard می‌ساخت. این بسته مسیر DNS و local proxy را اصلاح می‌کند تا همان پروفایل‌ها در Proxy mode قابل استفاده باشند؛ هسته تکراری اضافه نشده است.
+
+NordWhisper یک پروتکل اختصاصی NordVPN است و runtime قابل‌باندل برای کلاینت ثالث منتشر نشده است. بسته، scheme آن را تشخیص می‌دهد و خطای دقیق می‌دهد؛ آن را به WireGuard تبدیل نمی‌کند و اتصال جعلی گزارش نمی‌کند.
+
+## فایل‌های مستقیم و فایل‌های patch‌شونده
+
+فایل‌های کوچک/جدید و جایگزین کامل داخل مسیر واقعی ریپو قرار دارند. برای فایل‌های بزرگ موجود (`Models.kt`، `ConfigParser.kt`، `SettingsActivity.kt`، سرویس‌ها و builder)، اسکریپت patcher با anchorهای دقیق و idempotent تغییر را اعمال می‌کند تا امکانات موجود حذف نشوند.

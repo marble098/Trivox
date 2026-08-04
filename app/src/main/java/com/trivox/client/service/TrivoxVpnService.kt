@@ -20,6 +20,8 @@ import com.trivox.client.data.ConnectionMode
 import com.trivox.client.data.ConnectionState
 import com.trivox.client.data.DnsMode
 import com.trivox.client.data.SettingsRepository
+import com.trivox.client.config.OpenSshProfileCodec
+import com.trivox.client.ssh.OpenSshTunnelBridge
 import com.trivox.client.util.Diagnostics
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
@@ -42,6 +44,8 @@ class TrivoxVpnService : VpnService() {
         AtomicBoolean(false)
     private val reconnectQueued =
         AtomicBoolean(false)
+    private var sshHandle: OpenSshTunnelBridge.Handle? = null
+    private var sshSourceProfile: com.trivox.client.data.ConfigProfile? = null
 
     private lateinit var core: CoreManager
     private var tun:
@@ -350,6 +354,21 @@ class TrivoxVpnService : VpnService() {
             settings.routedPackages
         )
 
+        if (OpenSshProfileCodec.isOpenSsh(profile)) {
+            if (settings.appRoutingMode == AppRoutingMode.ALLOW_SELECTED) {
+                if (packageName in settings.routedPackages) {
+                    fail("OpenSSH cannot tunnel the Trivox app itself; remove Trivox from selected VPN apps")
+                    return
+                }
+            } else {
+                runCatching { builder.addDisallowedApplication(packageName) }
+                    .onFailure {
+                        fail("Unable to exclude OpenSSH transport from its own VPN: " + it.message)
+                        return
+                    }
+            }
+        }
+
         if (
             Build.VERSION.SDK_INT >= 29
         ) {
@@ -373,9 +392,24 @@ class TrivoxVpnService : VpnService() {
             return
         }
 
+        val effectiveProfile =
+            if (OpenSshProfileCodec.isOpenSsh(profile)) {
+                runCatching {
+                    OpenSshTunnelBridge(this).start(profile)
+                }.getOrElse {
+                    fail("OpenSSH start failed: " + (it.message ?: "unknown"))
+                    return
+                }.also {
+                    sshSourceProfile = profile
+                    sshHandle = it
+                }.proxyProfile
+            } else {
+                profile
+            }
+
         val request =
             CoreStartRequest(
-                profile,
+                effectiveProfile,
                 settings,
                 ConnectionMode.VPN,
                 tun!!.fd
@@ -725,9 +759,22 @@ class TrivoxVpnService : VpnService() {
             return
         }
 
+        var reconnectRequest = request
+        sshSourceProfile?.let { source ->
+            sshHandle?.close()
+            val restarted = runCatching {
+                OpenSshTunnelBridge(this).start(source)
+            }.getOrElse {
+                fail("OpenSSH reconnect failed: " + (it.message ?: "unknown"))
+                return
+            }
+            sshHandle = restarted
+            reconnectRequest = request.copy(profile = restarted.proxyProfile)
+        }
+
         val result =
             core.startValidated(
-                request = request,
+                request = reconnectRequest,
                 protect = { fd -> protect(fd) },
                 isCancelled = stopRequested::get
             )
@@ -777,7 +824,10 @@ class TrivoxVpnService : VpnService() {
                             .CONNECTED
                     ) {
                         executeSafely {
-                            if (
+                            val ssh = sshHandle
+                            if (!stopRequested.get() && ssh != null && !ssh.isAlive()) {
+                                fail("OpenSSH tunnel stopped unexpectedly: " + ssh.failureText())
+                            } else if (
                                 !stopRequested
                                     .get() &&
                                 !core.isRunning()
@@ -1112,6 +1162,10 @@ class TrivoxVpnService : VpnService() {
             )
         }
         tun = null
+        // VPN destroy OpenSSH cleanup
+        sshHandle?.close()
+        sshHandle = null
+        sshSourceProfile = null
         cleanupExecutor.shutdownNow()
         executor.shutdown()
         super.onDestroy()

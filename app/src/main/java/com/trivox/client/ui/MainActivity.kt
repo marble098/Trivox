@@ -38,6 +38,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.trivox.client.R
 import com.trivox.client.config.ConfigParser
+import com.trivox.client.config.OpenSshProfileCodec
 import com.trivox.client.config.XrayConfigBuilder
 import com.trivox.client.core.ConnectionRuntime
 import com.trivox.client.core.CoreManager
@@ -1691,8 +1692,8 @@ class MainActivity : ThemedActivity() {
                         url = single
                     )
                     val result = SubscriptionManager().fetch(single)
-                    val profiles = result.profiles.map {
-                        it.copy(
+                    val profiles = result.profiles.map { profile ->
+                        OpenSshProfileCodec.secureForStorage(this, profile).copy(
                             subscriptionId = source.id,
                             group = source.name
                         )
@@ -1720,7 +1721,9 @@ class MainActivity : ThemedActivity() {
                                 )
                             )
                     }
-                    val profiles = ConfigParser.parseText(text)
+                    val profiles = ConfigParser.parseText(text).map { profile ->
+                        OpenSshProfileCodec.secureForStorage(this, profile)
+                    }
                     ConfigRepository(this).importProfiles(
                         profiles = profiles,
                         subscriptionId = source?.id,

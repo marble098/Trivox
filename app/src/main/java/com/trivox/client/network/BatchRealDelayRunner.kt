@@ -19,10 +19,11 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
 /**
- * Measures several profiles in one temporary Xray process. Every profile gets
- * an isolated localhost SOCKS inbound and an inboundTag -> outboundTag routing
- * rule. This removes repeated native start/stop overhead while preserving a
- * verified HTTPS probe for every profile.
+ * Starts one bounded Xray process for a group of profiles. Each profile receives
+ * an isolated localhost SOCKS inbound and an inboundTag -> outboundTag route.
+ * Policy presets tune parallelism and proof depth without changing what a valid
+ * Real Delay means: at least one verified HTTPS response must cross that exact
+ * profile outbound.
  */
 internal class BatchRealDelayRunner(
     private val core: CoreAdapter
@@ -34,11 +35,13 @@ internal class BatchRealDelayRunner(
         callback: (ConfigProfile, PingResult) -> Unit,
         fallback: (ConfigProfile) -> PingResult
     ) {
-        profiles.chunked(GROUP_SIZE).forEach { group ->
+        val policy = RealDelayPolicy.from(settings)
+        profiles.chunked(policy.groupSize).forEach { group ->
             if (Thread.currentThread().isInterrupted) return
 
             val compatible = group.filterNot {
-                it.protocol.equals("chain", ignoreCase = true)
+                it.protocol.equals("chain", ignoreCase = true) ||
+                    it.protocol.equals("openssh", ignoreCase = true)
             }
             val incompatible = group - compatible.toSet()
 
@@ -49,10 +52,10 @@ internal class BatchRealDelayRunner(
             }
 
             if (compatible.isEmpty()) return@forEach
-
             runGroup(
                 profiles = compatible,
                 settings = settings,
+                policy = policy,
                 workDir = workDir,
                 callback = callback,
                 fallback = fallback
@@ -63,56 +66,55 @@ internal class BatchRealDelayRunner(
     private fun runGroup(
         profiles: List<ConfigProfile>,
         settings: AppSettings,
+        policy: RealDelayPolicy,
         workDir: File,
         callback: (ConfigProfile, PingResult) -> Unit,
         fallback: (ConfigProfile) -> PingResult
     ) {
-        val ports = runCatching {
-            reservePorts(profiles.size)
-        }.getOrElse {
+        val ports = runCatching { reservePorts(profiles.size) }.getOrElse {
             profiles.forEach { callback(it, fallback(it)) }
             return
         }
-
-        val logFile = File(
-            workDir,
-            "trivox-batch-real-${System.nanoTime()}.log"
-        )
+        val logFile = File(workDir, "trivox-batch-real-${System.nanoTime()}.log")
         var started = false
+        val delivered = HashSet<String>()
+
+        fun deliver(profile: ConfigProfile, result: PingResult) {
+            synchronized(delivered) {
+                if (!delivered.add(profile.id)) return
+            }
+            callback(profile, result)
+        }
 
         try {
-            val config = buildConfig(
-                profiles = profiles,
-                ports = ports,
-                settings = settings,
-                logFile = logFile
-            )
+            val config = buildConfig(profiles, ports, settings, logFile)
             val validation = core.validate(config)
             if (!validation.success) {
-                profiles.forEach { callback(it, fallback(it)) }
+                profiles.forEach { deliver(it, fallback(it)) }
                 return
             }
 
             val start = core.start(config, null)
             if (!start.success) {
-                profiles.forEach { callback(it, fallback(it)) }
+                profiles.forEach { deliver(it, fallback(it)) }
                 return
             }
             started = true
 
-            if (!waitCancellable(START_GRACE_MS)) return
+            if (!waitCancellable(policy.startGraceMs)) return
 
             val executor = Executors.newFixedThreadPool(
-                minOf(MAX_PROBE_WORKERS, profiles.size)
+                minOf(policy.workers, profiles.size)
             )
             try {
                 val futures = profiles.indices.map { index ->
                     executor.submit(Callable {
                         val result = measurePort(
                             settings = settings,
-                            port = ports[index]
+                            port = ports[index],
+                            policy = policy
                         )
-                        callback(profiles[index], result)
+                        deliver(profiles[index], result)
                     })
                 }
                 waitFor(futures)
@@ -121,17 +123,14 @@ internal class BatchRealDelayRunner(
                 executor.awaitTermination(1, TimeUnit.SECONDS)
             }
         } catch (throwable: Throwable) {
-            Diagnostics.recordThrowable(
-                "Batch verified Real Delay",
-                throwable
-            )
+            Diagnostics.recordThrowable("Batch verified Real Delay", throwable)
             if (started) {
                 runCatching { core.stop() }
                 started = false
             }
             profiles.forEach { profile ->
                 if (!Thread.currentThread().isInterrupted) {
-                    callback(profile, fallback(profile))
+                    deliver(profile, fallback(profile))
                 }
             }
         } finally {
@@ -155,7 +154,12 @@ internal class BatchRealDelayRunner(
     ): String {
         val inbounds = JSONArray()
         val outbounds = JSONArray()
-        val rules = JSONArray()
+        val rules = JSONArray().put(
+            JSONObject()
+                .put("type", "field")
+                .put("inboundTag", JSONArray().put("dns-in"))
+                .put("outboundTag", "batch-direct")
+        )
         var sharedDns: JSONObject? = null
 
         profiles.forEachIndexed { index, profile ->
@@ -185,12 +189,9 @@ internal class BatchRealDelayRunner(
                     .put("protocol", "socks")
                     .put(
                         "settings",
-                        JSONObject()
-                            .put("auth", "noauth")
-                            .put("udp", false)
+                        JSONObject().put("auth", "noauth").put("udp", false)
                     )
             )
-
             rules.put(
                 JSONObject()
                     .put("type", "field")
@@ -198,6 +199,12 @@ internal class BatchRealDelayRunner(
                     .put("outboundTag", outboundTag)
             )
         }
+
+        outbounds.put(
+            JSONObject()
+                .put("protocol", "freedom")
+                .put("tag", "batch-direct")
+        )
 
         val root = JSONObject()
             .put(
@@ -210,19 +217,13 @@ internal class BatchRealDelayRunner(
             .put("outbounds", outbounds)
             .put(
                 "routing",
-                JSONObject()
-                    .put("domainStrategy", "AsIs")
-                    .put("rules", rules)
+                JSONObject().put("domainStrategy", "AsIs").put("rules", rules)
             )
-
         sharedDns?.let { root.put("dns", it) }
         return root.toString()
     }
 
-    private fun mergeDns(
-        current: JSONObject?,
-        incoming: JSONObject
-    ): JSONObject {
+    private fun mergeDns(current: JSONObject?, incoming: JSONObject): JSONObject {
         if (current == null) return JSONObject(incoming.toString())
         val merged = JSONObject(current.toString())
         val servers = JSONArray()
@@ -233,9 +234,7 @@ internal class BatchRealDelayRunner(
             for (index in 0 until values.length()) {
                 val value = values.opt(index)
                 val key = value?.toString().orEmpty()
-                if (key.isNotBlank() && seenServers.add(key)) {
-                    servers.put(value)
-                }
+                if (key.isNotBlank() && seenServers.add(key)) servers.put(value)
             }
         }
         appendServers(current)
@@ -271,21 +270,15 @@ internal class BatchRealDelayRunner(
 
     private fun measurePort(
         settings: AppSettings,
-        port: Int
+        port: Int,
+        policy: RealDelayPolicy
     ): PingResult {
         val timestamp = System.currentTimeMillis()
-        val localSettings = settings.copy(
-            socksPort = port,
-            httpPort = port
-        )
-        val targets = listOf(
-            VerifiedHttpProbe.strongTraceTarget,
-            VerifiedHttpProbe.fallback204Targets.first()
-        )
+        val localSettings = settings.copy(socksPort = port, httpPort = port)
         val samples = mutableListOf<Long>()
         var lastError = "verified_https_failed"
 
-        targets.forEachIndexed { index, target ->
+        policy.targets.forEachIndexed { index, target ->
             if (Thread.currentThread().isInterrupted) {
                 return failure(timestamp, "cancelled")
             }
@@ -293,27 +286,33 @@ internal class BatchRealDelayRunner(
                 settings = localSettings,
                 route = VerifiedHttpProbe.Route.SOCKS_PROXY,
                 target = target,
-                timeoutMs = PROBE_TIMEOUT_MS,
+                timeoutMs = policy.probeTimeoutMs,
                 nonce = timestamp + index
             )
             if (probe.success && probe.latencyMs != null) {
                 samples += probe.latencyMs
+                if (samples.size >= policy.requiredProofs) {
+                    return success(timestamp, samples)
+                }
             } else {
                 lastError = probe.errorCategory ?: lastError
             }
+            val remaining = policy.targets.size - index - 1
+            if (samples.size + remaining < policy.requiredProofs) {
+                return failure(timestamp, lastError)
+            }
         }
-
-        if (samples.size != targets.size) {
-            return failure(timestamp, lastError)
+        return if (samples.size >= policy.requiredProofs) {
+            success(timestamp, samples)
+        } else {
+            failure(timestamp, lastError)
         }
+    }
 
+    private fun success(timestamp: Long, samples: List<Long>): PingResult {
         val sorted = samples.sorted()
         val latency = sorted[sorted.size / 2]
-        val jitter = if (samples.size < 2) {
-            0L
-        } else {
-            abs(samples[0] - samples[1])
-        }
+        val jitter = if (samples.size < 2) 0L else abs(samples.first() - samples.last())
         return PingResult(
             method = PingMethod.XRAY_HTTP.name,
             success = true,
@@ -326,10 +325,7 @@ internal class BatchRealDelayRunner(
         )
     }
 
-    private fun failure(
-        timestamp: Long,
-        category: String
-    ) = PingResult(
+    private fun failure(timestamp: Long, category: String) = PingResult(
         method = PingMethod.XRAY_HTTP.name,
         success = false,
         latencyMs = null,
@@ -343,9 +339,7 @@ internal class BatchRealDelayRunner(
     private fun reservePorts(count: Int): List<Int> {
         val sockets = ArrayList<ServerSocket>(count)
         return try {
-            repeat(count) {
-                sockets += ServerSocket(0, 1)
-            }
+            repeat(count) { sockets += ServerSocket(0, 1) }
             sockets.map { it.localPort }
         } finally {
             sockets.forEach { runCatching { it.close() } }
@@ -378,12 +372,5 @@ internal class BatchRealDelayRunner(
             remaining -= slice
         }
         return true
-    }
-
-    companion object {
-        private const val GROUP_SIZE = 6
-        private const val MAX_PROBE_WORKERS = 2
-        private const val START_GRACE_MS = 120
-        private const val PROBE_TIMEOUT_MS = 4_500
     }
 }

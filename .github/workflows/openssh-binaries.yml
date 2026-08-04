@@ -33,10 +33,19 @@ jobs:
             test -f "app/src/main/assets/openssh/$abi/bin/ssh"
             test -f "app/src/main/assets/openssh/$abi/bin/scp"
             test -f "app/src/main/assets/openssh/$abi/bin/sftp"
+            test -f "app/src/main/assets/openssh/$abi/bin/ssh-keygen"
           done
+          test "$(python3 -c 'import json; print(json.load(open("app/src/main/assets/openssh/manifest.json"))["version"])')" != "BUILD_REQUIRED"
+      - name: Build repository-path overlay
+        run: |
+          rm -rf openssh-overlay
+          mkdir -p openssh-overlay/app/src/main/assets
+          cp -a app/src/main/assets/openssh openssh-overlay/app/src/main/assets/
+          find openssh-overlay -type f -print0 | sort -z | xargs -0 sha256sum > openssh-overlay/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: trivox-openssh-assets
-          path: app/src/main/assets/openssh
+          name: trivox-openssh-overlay
+          path: openssh-overlay
           if-no-files-found: error
           compression-level: 9
+          retention-days: 30
