@@ -168,15 +168,34 @@ def patch_settings_layout(s):
     return s
 
 def patch_main_activity(s):
-    if 'CoreId' not in s:
-        s = s.replace('import com.trivox.client.data.ConnectionState\n', 'import com.trivox.client.data.ConnectionState\nimport com.trivox.client.data.CoreId\n')
-    if 'quickCoreButton' not in s:
-        s = s.replace('private lateinit var modeSpinner: Spinner\n', 'private lateinit var modeSpinner: Spinner\n    private lateinit var quickCoreButton: Button\n')
-        s = s.replace('modeSpinner = findViewById(R.id.modeSpinner)\n', 'modeSpinner = findViewById(R.id.modeSpinner)\n        quickCoreButton = findViewById(R.id.quickCoreButton)\n')
-        s = s.replace('findViewById<EditText>(R.id.searchInput)\n', 'quickCoreButton.setOnClickListener { showCorePicker() }\n        renderCoreButton()\n\n        findViewById<EditText>(R.id.searchInput)\n')
-        s = s.replace('\n\n    private fun showAddOptions() {', '''
+    if 'import com.trivox.client.data.CoreId\n' not in s:
+        s = s.replace(
+            'import com.trivox.client.data.ConnectionState\n',
+            'import com.trivox.client.data.ConnectionState\nimport com.trivox.client.data.CoreId\n'
+        )
 
-    private fun renderCoreButton() {
+    if 'private lateinit var quickCoreButton: Button' not in s:
+        s = s.replace(
+            '    private lateinit var modeSpinner: Spinner\n',
+            '    private lateinit var modeSpinner: Spinner\n    private lateinit var quickCoreButton: Button\n'
+        )
+
+    if 'quickCoreButton = findViewById(R.id.quickCoreButton)' not in s:
+        s = s.replace(
+            '        modeSpinner = findViewById(R.id.modeSpinner)\n',
+            '        modeSpinner = findViewById(R.id.modeSpinner)\n        quickCoreButton = findViewById(R.id.quickCoreButton)\n'
+        )
+
+    if 'quickCoreButton.setOnClickListener { showCorePicker() }' not in s:
+        s = s.replace(
+            '        findViewById<EditText>(R.id.searchInput)\n',
+            '        quickCoreButton.setOnClickListener { showCorePicker() }\n        renderCoreButton()\n\n        findViewById<EditText>(R.id.searchInput)\n'
+        )
+
+    if 'private fun renderCoreButton()' not in s:
+        s = s.replace(
+            '\n\n    private fun showAddOptions() {',
+            '''\n\n    private fun renderCoreButton() {
         val settings = settingsRepository.load()
         quickCoreButton.text = if (settings.smartCoreSelection) {
             getString(R.string.core_smart_badge, settings.lastSmartCoreId.label)
@@ -207,7 +226,9 @@ def patch_main_activity(s):
             .show()
     }
 
-    private fun showAddOptions() {''')
+    private fun showAddOptions() {'''
+        )
+
     return s
 
 def patch_main_layout(s):
