@@ -26,8 +26,24 @@ def pick_release(repo):
     return (pre or rels)[0]
 
 def download(url, dst):
-    req=urllib.request.Request(url, headers=HDR)
-    with urllib.request.urlopen(req, timeout=180) as r, open(dst,'wb') as f: shutil.copyfileobj(r,f)
+    import time
+    last_error = None
+    for attempt in range(1, 6):
+        try:
+            if dst.exists():
+                dst.unlink()
+            req = urllib.request.Request(url, headers=HDR)
+            with urllib.request.urlopen(req, timeout=240) as r, open(dst, "wb") as f:
+                shutil.copyfileobj(r, f, length=1024 * 1024)
+            if dst.stat().st_size <= 0:
+                raise RuntimeError("downloaded empty file")
+            return
+        except Exception as e:
+            last_error = e
+            print(f"download failed attempt {attempt}/5: {e}", file=sys.stderr)
+            time.sleep(min(20, attempt * 4))
+    raise RuntimeError(f"download failed after retries: {last_error}")
+
 
 def is_elf(path):
     try:
