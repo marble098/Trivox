@@ -5,7 +5,9 @@ import com.trivox.client.config.XrayConfigBuilder
 import com.trivox.client.data.ConnectionMode
 import com.trivox.client.data.ConnectionState
 import com.trivox.client.network.TunnelHealthVerifier
+import com.trivox.client.network.XrayProbeLogInspector
 import com.trivox.client.util.Diagnostics
+import java.io.File
 import java.lang.ref.WeakReference
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicLong
@@ -144,11 +146,10 @@ class CoreManager(context: Context) {
     ): CoreResult {
         if (isCancelled()) return cancelledStart()
 
+        val xrayLog = File(Diagnostics.xrayErrorLogPath())
+        val logMark = XrayProbeLogInspector.mark(xrayLog)
         val started = adapter.start(json, protect)
-        if (!started.success) {
-            Diagnostics.error(started.error)
-            return started
-        }
+        if (!started.success) return started
 
         if (isCancelled()) {
             stopAfterRejectedStart()
@@ -196,7 +197,11 @@ class CoreManager(context: Context) {
                 adaptive -> PROXY_ADAPTIVE_GRACE_MS
                 else -> PROXY_CONSERVATIVE_GRACE_MS
             },
-            isCancelled = isCancelled
+            isCancelled = isCancelled,
+            hardFailure = {
+                XrayProbeLogInspector.classifySince(logMark)
+                    ?.takeIf(::isImmediateTransportFailure)
+            }
         )
 
         if (isCancelled() || health.errorCategory == "cancelled") {
@@ -221,9 +226,18 @@ class CoreManager(context: Context) {
             "$protocol core started, but no verified HTTPS traffic crossed the " +
                 "$route$category. TCP/Real Delay results are ranking tests and " +
                 "cannot guarantee that the live route is usable."
-        Diagnostics.error(error)
         return CoreResult(false, error)
     }
+
+    private fun isImmediateTransportFailure(category: String): Boolean =
+        category in setOf(
+            "reality_mismatch",
+            "websocket_handshake",
+            "authentication_failed",
+            "tls_certificate",
+            "invalid_xray_config",
+            "connection_refused"
+        )
 
     private fun stopAfterRejectedStart() {
         runCatching { adapter.stop() }
@@ -254,15 +268,15 @@ class CoreManager(context: Context) {
         )
 
     companion object {
-        private const val GENERAL_ADAPTIVE_VERIFY_BUDGET_MS = 11_000
-        private const val GENERAL_CONSERVATIVE_VERIFY_BUDGET_MS = 15_000
-        private const val GENERAL_ADAPTIVE_PROBE_TIMEOUT_MS = 3_500
-        private const val GENERAL_CONSERVATIVE_PROBE_TIMEOUT_MS = 5_000
-        private const val PROXY_ADAPTIVE_GRACE_MS = 80
-        private const val PROXY_CONSERVATIVE_GRACE_MS = 220
-        private const val VPN_ADAPTIVE_GRACE_MS = 220
-        private const val VPN_CONSERVATIVE_GRACE_MS = 550
-        private const val WIREGUARD_ADAPTIVE_GRACE_MS = 500
-        private const val WIREGUARD_CONSERVATIVE_GRACE_MS = 1_200
+        private const val GENERAL_ADAPTIVE_VERIFY_BUDGET_MS = 7_000
+        private const val GENERAL_CONSERVATIVE_VERIFY_BUDGET_MS = 11_000
+        private const val GENERAL_ADAPTIVE_PROBE_TIMEOUT_MS = 2_800
+        private const val GENERAL_CONSERVATIVE_PROBE_TIMEOUT_MS = 4_500
+        private const val PROXY_ADAPTIVE_GRACE_MS = 40
+        private const val PROXY_CONSERVATIVE_GRACE_MS = 120
+        private const val VPN_ADAPTIVE_GRACE_MS = 90
+        private const val VPN_CONSERVATIVE_GRACE_MS = 260
+        private const val WIREGUARD_ADAPTIVE_GRACE_MS = 350
+        private const val WIREGUARD_CONSERVATIVE_GRACE_MS = 850
     }
 }

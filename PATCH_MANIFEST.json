@@ -1,58 +1,16 @@
 {
-  "name": "Trivox v9 network, handshake and Xray WireGuard optimization patch",
-  "base_repository": "marble098/Trivox",
-  "base_branch": "main",
-  "base_commit": "05a32f27d58276adb33b06ddba07a3402a912e5f",
-  "target_core": "Xray/libXray v26.7.28",
-  "generated_at": "2026-08-04T13:40:00+03:30",
-  "installation": "Extract this archive at the repository root and replace files with matching paths.",
-  "scope": [
-    "Live-route connection verification and adaptive startup timing",
-    "Documented Xray TCP sockopt and Happy Eyeballs tuning without overriding provider values",
-    "Bounded app-side network buffer pooling and memory-pressure cleanup",
-    "Non-destructive full-JSON compatibility aliases for Xray protocols and transports",
-    "Xray userspace WireGuard normalization and configurable runtime defaults",
-    "Complete bilingual Settings UI for the added network and WireGuard controls",
-    "Regression and source-contract tests"
+  "name": "Trivox v10 verified real-delay and connect patch",
+  "baseCommit": "c0aa496e835278626c3de8af96a9852af9994e5c",
+  "core": "Xray v26.7.28",
+  "changes": [
+    "Replace native-delay trust with live-core verified HTTPS probing",
+    "Clear false/stale Real Delay values on every failed profile",
+    "Use DNS-free strong route proof to shorten successful connect startup",
+    "Classify REALITY, WebSocket, TLS, DNS and config errors from bounded Xray logs",
+    "Expand URI/JSON compatibility for supported Xray 26.7.28 protocols and transports",
+    "Reject removed legacy HTTP/H2/H3 and QUIC transports instead of creating broken profiles",
+    "Preserve modern TLS pinning, ECH and REALITY ML-DSA fields while rejecting unsafe removed switches"
   ],
-  "files": [
-    "TRIVOX_V9_NETWORK_CORE_FA.md",
-    "app/src/main/java/com/trivox/client/TrivoxApp.kt",
-    "app/src/main/java/com/trivox/client/config/ManualConfigFactory.kt",
-    "app/src/main/java/com/trivox/client/config/XrayCompatibility.kt",
-    "app/src/main/java/com/trivox/client/config/XrayConfigBuilder.kt",
-    "app/src/main/java/com/trivox/client/core/CoreManager.kt",
-    "app/src/main/java/com/trivox/client/data/Models.kt",
-    "app/src/main/java/com/trivox/client/network/ConnectionInfoManager.kt",
-    "app/src/main/java/com/trivox/client/network/NetworkBufferPool.kt",
-    "app/src/main/java/com/trivox/client/network/TunnelHealthVerifier.kt",
-    "app/src/main/java/com/trivox/client/ui/SettingsActivity.kt",
-    "app/src/main/res/layout/activity_settings.xml",
-    "app/src/main/res/values-fa/strings_v9.xml",
-    "app/src/main/res/values/strings_v9.xml",
-    "app/src/test/java/com/trivox/client/config/ManualConfigFactoryWireGuardV9Test.kt",
-    "app/src/test/java/com/trivox/client/config/XrayConfigBuilderNetworkTuningV9Test.kt",
-    "app/src/test/java/com/trivox/client/data/AppSettingsNetworkTuningV9Test.kt",
-    "app/src/test/java/com/trivox/client/network/NetworkBufferPoolV9Test.kt"
-  ],
-  "validation": {
-    "utf8_and_trailing_whitespace": true,
-    "xml_parse": true,
-    "settings_id_contract": true,
-    "english_persian_string_parity": true,
-    "secret_pattern_scan": true,
-    "kotlin_core_source_compilation_with_api_stubs": true,
-    "kotlin_settings_source_compilation_with_android_api_stubs": true,
-    "new_test_source_compilation": true,
-    "v8_test_source_compatibility_compilation": true,
-    "full_gradle_test_and_lint": false,
-    "device_and_libxray_runtime_test": false
-  },
-  "limitations": [
-    "The container could not resolve GitHub hosts and did not contain the complete Android/libXray build environment, so the repository's GitHub Actions test+lint workflow remains the final integration gate.",
-    "The app-side buffer setting does not claim to change Go/libXray native TCP or UDP buffer internals.",
-    "WireGuard is implemented through Xray's built-in userspace WireGuard outbound; a separate WireGuard-Go backend is not bundled.",
-    "Unsupported or removed transports are not silently converted into a different transport because that can break server compatibility.",
-    "Full Xray JSON remains the compatibility path for core-supported protocols that do not have an established share-URI parser in Trivox."
-  ]
+  "filesAreComplete": true,
+  "pathsRelativeToRepositoryRoot": true
 }

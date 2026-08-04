@@ -57,6 +57,14 @@ object XrayCompatibility {
         }
 
         if (stream != null) {
+            if (stream.optString("security").equals("xtls", ignoreCase = true)) {
+                val flow = firstOutboundFlow(settings)
+                if (!flow.contains("vision", ignoreCase = true)) {
+                    throw IllegalArgumentException(
+                        "Legacy XTLS without Vision flow was removed from Xray 26.7.28"
+                    )
+                }
+            }
             normalizeStream(stream)
         } else if (protocol == "hysteria") {
             outbound.put(
@@ -108,6 +116,12 @@ object XrayCompatibility {
         return outbound
     }
 
+    private fun firstOutboundFlow(settings: JSONObject?): String {
+        val vnext = settings?.optJSONArray("vnext") ?: return ""
+        val users = vnext.optJSONObject(0)?.optJSONArray("users") ?: return ""
+        return users.optJSONObject(0)?.optString("flow").orEmpty()
+    }
+
     private fun copyAlias(
         target: JSONObject,
         canonical: String,
@@ -152,10 +166,21 @@ object XrayCompatibility {
     private fun normalizeStream(stream: JSONObject) {
         val method = stream.optString("method").trim()
         val network = stream.optString("network").trim()
-        val canonical = canonicalTransport(
-            network.ifBlank { method }
-        )
+        val requested = network.ifBlank { method }
+        val canonical = canonicalTransport(requested)
+        if (canonical == "quic") {
+            throw IllegalArgumentException(
+                "Legacy QUIC transport was removed from Xray 26.7.28; " +
+                    "use XHTTP HTTP/3 or Hysteria2"
+            )
+        }
         if (canonical.isNotBlank()) stream.put("network", canonical)
+        if (requested.lowercase(Locale.ROOT) in setOf("h2", "h3", "http")) {
+            throw IllegalArgumentException(
+                "Legacy HTTP/H2/H3 transport was removed from Xray 26.7.28 " +
+                    "and cannot be converted without server changes"
+            )
+        }
         stream.remove("method")
 
         if (!stream.has("rawSettings") && stream.has("tcpSettings")) {
@@ -165,9 +190,14 @@ object XrayCompatibility {
             stream.put("xhttpSettings", stream.opt("splithttpSettings"))
         }
 
-        val security = stream.optString("security").trim().lowercase(Locale.ROOT)
+        var security = stream.optString("security").trim().lowercase(Locale.ROOT)
+        if (security == "xtls") {
+            security = "tls"
+        }
         if (security == "none" || security == "tls" || security == "reality") {
             stream.put("security", security)
+        } else if (security.isNotBlank()) {
+            throw IllegalArgumentException("Unsupported Xray transport security '$security'")
         }
     }
 
@@ -189,6 +219,8 @@ object XrayCompatibility {
             "grpc" -> "grpc"
             "httpupgrade", "http-upgrade" -> "httpupgrade"
             "hysteria", "hysteria2", "hy2" -> "hysteria"
+            "h2", "h3", "http" -> "http-removed"
+            "quic" -> "quic"
             else -> value.trim().lowercase(Locale.ROOT)
         }
 
