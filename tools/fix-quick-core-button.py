@@ -88,3 +88,29 @@ if left:
     for i, line in left:
         print(f"{i}: {line}", file=sys.stderr)
     sys.exit(1)
+
+def ensure_quick_core_layout():
+    from pathlib import Path
+    layout = Path("app/src/main/res/layout/activity_main.xml")
+    s = layout.read_text(encoding="utf-8")
+    button = (
+        '        <Button\\n'
+        '            android:id="@+id/quickCoreButton"\\n'
+        '            style="@style/Widget.Trivox.Button.Secondary"\\n'
+        '            android:layout_width="wrap_content"\\n'
+        '            android:layout_height="42dp"\\n'
+        '            android:layout_marginStart="7dp"\\n'
+        '            android:minWidth="92dp"\\n'
+        '            android:paddingStart="10dp"\\n'
+        '            android:paddingEnd="10dp"\\n'
+        '            android:text="@string/core_manual_badge"\\n'
+        '            android:textSize="11sp" />\\n\\n'
+    )
+    marker = '        <EditText\\n            android:id="@+id/searchInput"'
+    if '@+id/quickCoreButton' not in s:
+        if marker not in s:
+            raise SystemExit("searchInput marker not found in activity_main.xml")
+        s = s.replace(marker, button + marker, 1)
+        layout.write_text(s, encoding="utf-8")
+
+ensure_quick_core_layout()
