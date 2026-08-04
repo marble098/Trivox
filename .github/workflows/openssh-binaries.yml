@@ -30,7 +30,8 @@ jobs:
         env:
           TERMUX_PKG_MAKE_PROCESSES: "2"
           TRIVOX_PACKAGE_NAME: com.trivox.client
-        run: tools/openssh/build-openssh-android.sh
+        shell: bash
+        run: bash tools/openssh/build-openssh-android.sh
       - name: Verify manifest and client suite
         run: |
           VERSION="$(cat app/src/main/assets/openssh/version.txt)"
