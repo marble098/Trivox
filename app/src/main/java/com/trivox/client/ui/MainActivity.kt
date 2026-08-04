@@ -44,6 +44,7 @@ import com.trivox.client.core.CoreManager
 import com.trivox.client.data.AppSettings
 import com.trivox.client.data.ConfigProfile
 import com.trivox.client.data.ConfigRepository
+import com.trivox.client.data.ProfileImportResult
 import com.trivox.client.data.ConnectionMode
 import com.trivox.client.data.ConnectionState
 import com.trivox.client.data.PingMethod
@@ -148,6 +149,7 @@ class MainActivity : ThemedActivity() {
         ConnectionMode? = null
     private var filter = ""
     private var importDialogInput: EditText? = null
+    private var pendingFileImportTargetId: String? = null
     private var pendingVpnProfile: String? = null
     private var lastInfoProfileId: String? = null
     private var activeSubscriptionId: String? = null
@@ -158,6 +160,11 @@ class MainActivity : ThemedActivity() {
         registerForActivityResult(
             ActivityResultContracts.OpenDocument()
         ) { uri ->
+            val targetId =
+                pendingFileImportTargetId
+                    .also {
+                        pendingFileImportTargetId = null
+                    }
             uri ?: return@registerForActivityResult
 
             worker.execute {
@@ -171,9 +178,12 @@ class MainActivity : ThemedActivity() {
                         ?: error(
                             "Unable to open the selected file"
                         )
-                }.onSuccess(
-                    ::importText
-                ).onFailure {
+                }.onSuccess { content ->
+                    importText(
+                        content,
+                        targetId
+                    )
+                }.onFailure {
                         throwable ->
                     runOnUiThread {
                         toast(
@@ -1395,10 +1405,27 @@ class MainActivity : ThemedActivity() {
             profile != null
     }
 
+    /** TRIVOX_V7_IMPORT_WIREGUARD */
     private fun showImportDialog() {
+        val targetId = activeSubscriptionId
+        val target = SubscriptionRepository(this).find(targetId)
+        val targetName = target?.name
+            ?: getString(R.string.import_target_local)
         val view = layoutInflater.inflate(R.layout.dialog_import, null)
         val input = view.findViewById<EditText>(R.id.importInput)
         importDialogInput = input
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(
+                getString(
+                    R.string.import_title_target,
+                    targetName
+                )
+            )
+            .setView(view)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.save, null)
+            .create()
 
         view.findViewById<Button>(R.id.clipboardButton)
             .setOnClickListener {
@@ -1413,21 +1440,17 @@ class MainActivity : ThemedActivity() {
 
         view.findViewById<Button>(R.id.fileButton)
             .setOnClickListener {
+                pendingFileImportTargetId = targetId
+                dialog.dismiss()
                 filePicker.launch(
                     arrayOf(
                         "text/plain",
                         "application/json",
-                        "application/octet-stream"
+                        "application/octet-stream",
+                        "application/x-wireguard-profile"
                     )
                 )
             }
-
-        val dialog = AlertDialog.Builder(this)
-            .setTitle(R.string.import_title)
-            .setView(view)
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.save, null)
-            .create()
 
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE)
@@ -1435,7 +1458,7 @@ class MainActivity : ThemedActivity() {
                     val text = input.text.toString()
                     if (text.isNotBlank()) {
                         dialog.dismiss()
-                        importText(text)
+                        importText(text, targetId)
                     }
                 }
         }
@@ -1478,21 +1501,24 @@ class MainActivity : ThemedActivity() {
         return output.toString()
     }
 
-    private fun importText(text: String) {
+    private fun importText(
+        text: String,
+        requestedTargetId: String?
+    ) {
         val single = text.trim()
-        val subscription = runCatching { URI(single) }
-            .getOrNull()
-            ?.let { uri ->
-                uri.scheme == "https" &&
-                    uri.userInfo == null &&
-                    !single.contains('\n')
-            } == true
+        val uri = runCatching { URI(single) }.getOrNull()
+        val subscription =
+            uri?.scheme.equals("https", ignoreCase = true) &&
+                uri?.userInfo == null &&
+                uri?.fragment == null &&
+                uri?.port == -1 &&
+                !single.contains('\n')
 
         worker.execute {
             runCatching {
                 if (subscription) {
                     val source = SubscriptionSource(
-                        name = URI(single).host ?: "Subscription",
+                        name = uri?.host ?: "Subscription",
                         url = single
                     )
                     val result = SubscriptionManager().fetch(single)
@@ -1509,18 +1535,42 @@ class MainActivity : ThemedActivity() {
                     source.lastSuccessAt = System.currentTimeMillis()
                     source.url = result.finalUrl
                     SubscriptionRepository(this).save(source)
-                    profiles.size
-                } else {
-                    val profiles = ConfigParser.parseText(text)
-                    ConfigRepository(this).saveAll(profiles)
-                    profiles.size
-                }
-            }.onSuccess { count ->
-                runOnUiThread {
-                    toast(getString(R.string.import_success, count))
-                    renderSubscriptionTabs(
-                        force = true
+                    ProfileImportResult(
+                        received = profiles.size,
+                        added = profiles.size,
+                        updated = 0,
+                        moved = 0,
+                        skipped = 0
                     )
+                } else {
+                    val source = requestedTargetId?.let {
+                        SubscriptionRepository(this).find(it)
+                            ?: error(
+                                getString(
+                                    R.string.import_target_missing
+                                )
+                            )
+                    }
+                    val profiles = ConfigParser.parseText(text)
+                    ConfigRepository(this).importProfiles(
+                        profiles = profiles,
+                        subscriptionId = source?.id,
+                        groupName = source?.name
+                    )
+                }
+            }.onSuccess { result ->
+                runOnUiThread {
+                    toast(
+                        getString(
+                            R.string.import_success_detailed,
+                            result.added,
+                            result.updated,
+                            result.moved,
+                            result.skipped
+                        )
+                    )
+                    subscriptionTabsSignature = ""
+                    renderSubscriptionTabs(force = true)
                     refresh()
                 }
             }.onFailure { error ->
@@ -3223,7 +3273,7 @@ class MainActivity : ThemedActivity() {
                 return
             }
 
-            importText(shared)
+            importText(shared, activeSubscriptionId)
         }
     }
 

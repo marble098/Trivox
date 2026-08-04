@@ -4,6 +4,21 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
+/** TRIVOX_V7_IMPORT_WIREGUARD
+ * Atomic result for destination-aware imports. "All" is a view, never a
+ * physical subscription bucket.
+ */
+data class ProfileImportResult(
+    val received: Int,
+    val added: Int,
+    val updated: Int,
+    val moved: Int,
+    val skipped: Int
+) {
+    val changed: Int
+        get() = added + updated + moved
+}
+
 class ConfigRepository(context: Context) {
     private val prefs =
         context.applicationContext.getSharedPreferences(
@@ -140,6 +155,98 @@ class ConfigRepository(context: Context) {
             write(items)
         }
     }
+
+    /**
+     * Imports profiles into a stable destination snapshot. A null destination
+     * means local/unmanaged storage; the All tab remains only an aggregate view.
+     * Exact duplicates already owned by a managed subscription are not stolen by
+     * a local import, while importing into another explicit subscription moves
+     * the existing profile atomically and preserves user/runtime metadata.
+     */
+    fun importProfiles(
+        profiles: Collection<ConfigProfile>,
+        subscriptionId: String?,
+        groupName: String? = null
+    ): ProfileImportResult = synchronized(GLOBAL_LOCK) {
+        if (profiles.isEmpty()) {
+            return@synchronized ProfileImportResult(0, 0, 0, 0, 0)
+        }
+
+        val unique = LinkedHashMap<String, ConfigProfile>()
+        profiles.forEach { profile ->
+            unique.putIfAbsent(profileIdentity(profile), profile)
+        }
+
+        val items = read()
+        var added = 0
+        var updated = 0
+        var moved = 0
+        var skipped = profiles.size - unique.size
+
+        unique.values.forEach { profile ->
+            val incoming = profile.copy(
+                subscriptionId = subscriptionId,
+                group = if (subscriptionId == null) {
+                    profile.group.ifBlank { "Default" }
+                } else {
+                    groupName?.takeIf(String::isNotBlank)
+                        ?: profile.group.ifBlank { "Default" }
+                }
+            )
+            val identity = profileIdentity(incoming)
+            val index = items.indexOfFirst {
+                it.id == incoming.id || profileIdentity(it) == identity
+            }
+
+            if (index < 0) {
+                items += incoming
+                added += 1
+                return@forEach
+            }
+
+            val old = items[index]
+            if (subscriptionId == null && old.subscriptionId != null) {
+                skipped += 1
+                return@forEach
+            }
+
+            val merged = mergePreserved(
+                incoming = incoming.copy(id = old.id),
+                old = old
+            )
+
+            when {
+                old.subscriptionId != subscriptionId -> {
+                    items[index] = merged
+                    moved += 1
+                }
+
+                old != merged -> {
+                    items[index] = merged
+                    updated += 1
+                }
+
+                else -> skipped += 1
+            }
+        }
+
+        if (added + updated + moved > 0) {
+            write(items)
+        }
+
+        ProfileImportResult(
+            received = profiles.size,
+            added = added,
+            updated = updated,
+            moved = moved,
+            skipped = skipped
+        )
+    }
+
+    private fun profileIdentity(profile: ConfigProfile): String =
+        profile.raw.trim().ifBlank {
+            profile.outboundJson.trim()
+        }
 
     fun replaceSubscription(
         subscriptionId: String,

@@ -35,6 +35,10 @@ object ConfigParser {
             return emptyList()
         }
 
+        if (looksLikeWireGuardQuickConfig(text)) {
+            return listOf(parseWireGuardQuickConfig(text))
+        }
+
         if (text.startsWith("{")) {
             return listOf(parseJson(text))
         }
@@ -232,6 +236,200 @@ object ConfigParser {
                 .optJSONObject("dns")
                 ?.toString()
         )
+    }
+
+    /** TRIVOX_V7_IMPORT_WIREGUARD
+     * Parses standard wg-quick files without executing platform-specific shell
+     * directives. AmneziaWG-only fields fail explicitly because silently passing
+     * them to standard Xray WireGuard would create a misleading broken profile.
+     */
+    private fun looksLikeWireGuardQuickConfig(value: String): Boolean =
+        Regex("(?im)^\\s*\\[interface]\\s*$")
+            .containsMatchIn(value)
+
+    private fun parseWireGuardQuickConfig(raw: String): ConfigProfile {
+        val interfaceValues = linkedMapOf<String, MutableList<String>>()
+        val peers = mutableListOf<LinkedHashMap<String, MutableList<String>>>()
+        var current: MutableMap<String, MutableList<String>>? = null
+
+        raw.lineSequence().forEachIndexed { index, original ->
+            val line = original.substringBefore('#').trim()
+            if (line.isBlank() || line.startsWith(';')) return@forEachIndexed
+
+            if (line.startsWith('[') && line.endsWith(']')) {
+                current = when (line.removeSurrounding("[", "]").trim().lowercase()) {
+                    "interface" -> interfaceValues
+                    "peer" -> linkedMapOf<String, MutableList<String>>().also(peers::add)
+                    else -> throw ConfigParseException(
+                        "Unsupported WireGuard section at line ${index + 1}"
+                    )
+                }
+                return@forEachIndexed
+            }
+
+            val section = current ?: throw ConfigParseException(
+                "WireGuard key appears before [Interface] at line ${index + 1}"
+            )
+            val separator = line.indexOf('=')
+            if (separator <= 0) throw ConfigParseException(
+                "Malformed WireGuard line ${index + 1}"
+            )
+            val key = line.substring(0, separator).trim().lowercase()
+            val value = line.substring(separator + 1).trim()
+            section.getOrPut(key) { mutableListOf() } += value
+        }
+
+        val amneziaKeys = setOf(
+            "jc", "jmin", "jmax", "s1", "s2",
+            "h1", "h2", "h3", "h4"
+        )
+        val presentAmnezia = (interfaceValues.keys + peers.flatMap { it.keys })
+            .filter { it in amneziaKeys }
+            .distinct()
+        if (presentAmnezia.isNotEmpty()) {
+            throw ConfigParseException(
+                "AmneziaWG fields ${presentAmnezia.joinToString()} require an " +
+                    "AmneziaWG-compatible core; the Xray WireGuard outbound " +
+                    "cannot emulate that obfuscation safely"
+            )
+        }
+
+        fun values(
+            map: Map<String, List<String>>,
+            key: String
+        ): List<String> = map[key.lowercase()].orEmpty()
+
+        fun one(
+            map: Map<String, List<String>>,
+            key: String
+        ): String = values(map, key).lastOrNull().orEmpty().trim()
+
+        fun csv(
+            map: Map<String, List<String>>,
+            key: String
+        ): List<String> = values(map, key)
+            .flatMap { it.split(',') }
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .distinct()
+
+        val secretKey = one(interfaceValues, "privatekey")
+        validateWireGuardKey(secretKey, "WireGuard PrivateKey")
+        val addresses = csv(interfaceValues, "address")
+        if (addresses.isEmpty()) {
+            throw ConfigParseException("WireGuard Address is missing")
+        }
+        if (peers.isEmpty()) {
+            throw ConfigParseException("WireGuard [Peer] section is missing")
+        }
+
+        val xrayPeers = JSONArray()
+        var firstEndpoint = ""
+        peers.forEachIndexed { index, peer ->
+            val publicKey = one(peer, "publickey")
+            validateWireGuardKey(publicKey, "WireGuard peer PublicKey")
+            val endpoint = one(peer, "endpoint")
+                .removePrefix("udp://")
+                .removePrefix("UDP://")
+            if (endpoint.isBlank()) {
+                throw ConfigParseException(
+                    "WireGuard peer ${index + 1} Endpoint is missing"
+                )
+            }
+            if (firstEndpoint.isBlank()) firstEndpoint = endpoint
+
+            val xrayPeer = JSONObject()
+                .put("publicKey", publicKey)
+                .put("endpoint", endpoint)
+
+            one(peer, "presharedkey")
+                .takeIf(String::isNotBlank)
+                ?.also { validateWireGuardKey(it, "WireGuard PresharedKey") }
+                ?.let { xrayPeer.put("preSharedKey", it) }
+
+            csv(peer, "allowedips")
+                .takeIf(List<String>::isNotEmpty)
+                ?.let { xrayPeer.put("allowedIPs", JSONArray(it)) }
+
+            one(peer, "persistentkeepalive")
+                .takeIf(String::isNotBlank)
+                ?.toIntOrNull()
+                ?.takeIf { it in 0..65535 }
+                ?.let { xrayPeer.put("keepAlive", it) }
+
+            xrayPeers.put(xrayPeer)
+        }
+
+        val settings = JSONObject()
+            .put("secretKey", secretKey)
+            .put("address", JSONArray(addresses))
+            .put("peers", xrayPeers)
+            .put("noKernelTun", true)
+
+        one(interfaceValues, "mtu")
+            .takeIf(String::isNotBlank)
+            ?.toIntOrNull()
+            ?.takeIf { it in 576..9000 }
+            ?.let { settings.put("mtu", it) }
+
+        one(interfaceValues, "reserved")
+            .takeIf(String::isNotBlank)
+            ?.let { settings.put("reserved", parseWireGuardReserved(it)) }
+
+        val outbound = JSONObject()
+            .put("tag", "proxy")
+            .put("protocol", "wireguard")
+            .put("settings", settings)
+        val endpoint = parseHostPort(
+            firstEndpoint,
+            "WireGuard"
+        )
+        val dnsServers = csv(interfaceValues, "dns")
+        val originalDns = dnsServers
+            .takeIf(List<String>::isNotEmpty)
+            ?.let { JSONObject().put("servers", JSONArray(it)).toString() }
+
+        return ConfigProfile(
+            name = "WireGuard ${endpoint.first}",
+            protocol = "wireguard",
+            server = endpoint.first,
+            port = endpoint.second,
+            raw = raw,
+            outboundJson = outbound.toString(),
+            originalDnsJson = originalDns,
+            probeServer = endpoint.first,
+            probePort = 443
+        )
+    }
+
+    private fun validateWireGuardKey(value: String, label: String) {
+        if (value.isBlank()) throw ConfigParseException("$label is missing")
+        val decoded = runCatching {
+            Base64.getDecoder().decode(value)
+        }.getOrNull()
+        if (decoded?.size != 32) {
+            throw ConfigParseException("$label must be a 32-byte Base64 key")
+        }
+    }
+
+    private fun parseWireGuardReserved(value: String): JSONArray {
+        val bytes = value
+            .split(',', ' ', ';')
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .map { item ->
+                item.toIntOrNull()
+                    ?.takeIf { it in 0..255 }
+                    ?: throw ConfigParseException(
+                        "WireGuard Reserved must contain three bytes from 0 to 255"
+                    )
+            }
+        if (bytes.size != 3) {
+            throw ConfigParseException(
+                "WireGuard Reserved must contain exactly three bytes"
+            )
+        }
+        return JSONArray(bytes)
     }
 
     private fun parseVmess(raw: String): ConfigProfile {

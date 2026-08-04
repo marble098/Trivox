@@ -202,14 +202,13 @@ class SettingsActivity :
             latest.darkMode = checked
             repository.save(latest)
 
-            AppCompatDelegate.setDefaultNightMode(
+            applyNightModeWithMotion(
                 if (checked) {
                     AppCompatDelegate.MODE_NIGHT_YES
                 } else {
                     AppCompatDelegate.MODE_NIGHT_NO
                 }
             )
-            recreateWithMotion()
         }
 
         val sortModes =

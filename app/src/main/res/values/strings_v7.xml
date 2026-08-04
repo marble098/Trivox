@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="import_title_target">Import into %1$s</string>
+    <string name="import_target_local">Local profiles (shown in All)</string>
+    <string name="import_target_missing">The selected subscription no longer exists. Choose a destination and try again.</string>
+    <string name="import_success_detailed">Import complete • added %1$d • updated %2$d • moved %3$d • skipped %4$d</string>
+</resources>

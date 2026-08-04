@@ -106,6 +106,22 @@ validator, upgrades failed-Lint artifact upload to the Node.js 24 action, and
 removes the remaining memory-trim compiler deprecation. No Lint baseline or
 suppression is used.
 
+
+## Destination-aware imports and WireGuard compatibility v7
+
+The v7 import pipeline treats **All** as an aggregate view rather than a storage
+bucket. Clipboard, file, Android share and pasted imports use a stable snapshot of
+the selected subscription, preserve user/runtime metadata, and report added,
+updated, moved and skipped profiles separately.
+
+Standard wg-quick `[Interface]`/`[Peer]` files can now be imported directly. The
+WireGuard normalizer never raises a provider-supplied low MTU, removes unsupported
+`streamSettings`, accepts key aliases and reserved bytes, and gives first-flight
+HTTP verification enough time for mobile or filtered networks without weakening
+cooperative cancellation. AmneziaWG-only obfuscation fields are rejected with a
+clear backend-compatibility error instead of producing a profile that can never
+work in standard Xray WireGuard.
+
 ## License
 
 Trivox source is Apache-2.0. Xray-core is MPL-2.0 and libXray is MIT. The core binary is downloaded separately from its official release and remains under its upstream license. See [LICENSES.md](LICENSES.md).

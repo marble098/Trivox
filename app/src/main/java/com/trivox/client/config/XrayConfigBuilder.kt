@@ -124,13 +124,19 @@ object XrayConfigBuilder {
             .put(JSONObject().put("protocol", "blackhole").put("tag", "block"))
     }
 
+    /** TRIVOX_V7_IMPORT_WIREGUARD */
     private fun normalizeOutbound(
         outbound: JSONObject,
         settings: AppSettings
     ): JSONObject {
         when (outbound.optString("protocol").lowercase()) {
             "shadowsocks" -> normalizeShadowsocks(outbound)
-            "wireguard" -> normalizeWireGuard(outbound, settings)
+            "wireguard" -> {
+                normalizeWireGuard(outbound, settings)
+                // Xray explicitly does not support streamSettings on WireGuard.
+                outbound.remove("streamSettings")
+                return outbound
+            }
         }
 
         val stream = outbound.optJSONObject("streamSettings") ?: return outbound
@@ -163,24 +169,48 @@ object XrayConfigBuilder {
         val wireGuard = outbound.optJSONObject("settings") ?: JSONObject().also {
             outbound.put("settings", it)
         }
-        val currentMtu = wireGuard.optInt("mtu", 1420).takeIf { it > 0 } ?: 1420
-        val minimum = minOf(settings.mtu, if (settings.ipv6) 1280 else 1200)
-        val reliableMtu = minOf(currentMtu, settings.mtu, WIREGUARD_RELIABLE_MTU)
-            .coerceAtLeast(minimum)
 
-        wireGuard.put("mtu", reliableMtu)
+        if (wireGuard.optString("secretKey").isBlank()) {
+            wireGuard.optString("privateKey")
+                .takeIf(String::isNotBlank)
+                ?.let { wireGuard.put("secretKey", it) }
+        }
+        wireGuard.remove("privateKey")
+
+        val currentMtu = wireGuard.optInt("mtu", 1420)
+            .takeIf { it in 576..9000 }
+            ?: 1420
+        // Never raise an imported/provider MTU. Low values are often deliberate
+        // on mobile, nested VPN and filtered paths where extra encapsulation exists.
+        wireGuard.put(
+            "mtu",
+            minOf(currentMtu, settings.mtu, WIREGUARD_RELIABLE_MTU)
+                .coerceAtLeast(576)
+        )
         wireGuard.put("noKernelTun", true)
         if (wireGuard.optInt("workers", 0) <= 0) {
             wireGuard.put("workers", 2)
         }
 
+        val addressValues = mutableListOf<String>()
+        when (val rawAddress = wireGuard.opt("address")) {
+            is JSONArray -> for (index in 0 until rawAddress.length()) {
+                rawAddress.optString(index)
+                    .split(',')
+                    .map(String::trim)
+                    .filterTo(addressValues, String::isNotBlank)
+            }
+            is String -> rawAddress.split(',')
+                .map(String::trim)
+                .filterTo(addressValues, String::isNotBlank)
+        }
+
         val normalizedAddresses = JSONArray()
-        val addresses = wireGuard.optJSONArray("address") ?: JSONArray()
+        var hasIpv4Address = false
         var hasIpv6Address = false
-        for (index in 0 until addresses.length()) {
-            val raw = addresses.optString(index).trim()
-            if (raw.isBlank()) continue
+        addressValues.distinct().forEach { raw ->
             hasIpv6Address = hasIpv6Address || ':' in raw
+            hasIpv4Address = hasIpv4Address || ':' !in raw
             normalizedAddresses.put(
                 when {
                     '/' in raw -> raw
@@ -200,9 +230,15 @@ object XrayConfigBuilder {
         if (existingStrategy !in validStrategies) {
             wireGuard.put(
                 "domainStrategy",
-                if (settings.ipv6 && hasIpv6Address) "ForceIP" else "ForceIPv4"
+                when {
+                    hasIpv4Address && hasIpv6Address && settings.ipv6 -> "ForceIPv4v6"
+                    hasIpv6Address && settings.ipv6 -> "ForceIPv6"
+                    else -> "ForceIPv4"
+                }
             )
         }
+
+        normalizeWireGuardReserved(wireGuard)
 
         val peers = wireGuard.optJSONArray("peers") ?: JSONArray()
         for (index in 0 until peers.length()) {
@@ -211,10 +247,34 @@ object XrayConfigBuilder {
                 .removePrefix("udp://")
                 .removePrefix("UDP://")
             if (endpoint.isNotBlank()) peer.put("endpoint", endpoint)
+
+            if (peer.optString("preSharedKey").isBlank()) {
+                peer.optString("presharedKey")
+                    .takeIf(String::isNotBlank)
+                    ?.let { peer.put("preSharedKey", it) }
+            }
+            peer.remove("presharedKey")
+
             if (peer.optInt("keepAlive", 0) <= 0) {
                 peer.put("keepAlive", WIREGUARD_KEEPALIVE_SECONDS)
             }
         }
+    }
+
+    private fun normalizeWireGuardReserved(wireGuard: JSONObject) {
+        val raw = wireGuard.opt("reserved") ?: return
+        val bytes = when (raw) {
+            is JSONArray -> (0 until raw.length()).map { raw.optInt(it, -1) }
+            is String -> raw.split(',', ' ', ';')
+                .map(String::trim)
+                .filter(String::isNotBlank)
+                .map { it.toIntOrNull() ?: -1 }
+            else -> emptyList()
+        }
+        require(bytes.size == 3 && bytes.all { it in 0..255 }) {
+            "WireGuard reserved must contain exactly three bytes from 0 to 255"
+        }
+        wireGuard.put("reserved", JSONArray(bytes))
     }
 
     private fun mixedInbound(settings: AppSettings) = JSONObject()

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="import_title_target">ایمپورت در %1$s</string>
+    <string name="import_target_local">کانفیگ‌های محلی (نمایش در همه)</string>
+    <string name="import_target_missing">ساب انتخاب‌شده دیگر وجود ندارد. مقصد را دوباره انتخاب کنید.</string>
+    <string name="import_success_detailed">ایمپورت کامل شد • جدید %1$d • بروزشده %2$d • منتقل‌شده %3$d • ردشده %4$d</string>
+</resources>

@@ -180,7 +180,11 @@ class CoreManager(context: Context) {
         )
 
     companion object {
-        private const val WIREGUARD_START_VERIFY_BUDGET_MS = 7_000
-        private const val WIREGUARD_PROBE_TIMEOUT_MS = 900
+        // A 900 ms first-flight probe produced false negatives on mobile and
+        // filtered paths even when the WireGuard handshake completed successfully.
+        // Cancellation remains cooperative, so the longer ceiling affects only a
+        // genuinely slow or failing startup and never blocks Disconnect.
+        private const val WIREGUARD_START_VERIFY_BUDGET_MS = 11_000
+        private const val WIREGUARD_PROBE_TIMEOUT_MS = 1_800
     }
 }

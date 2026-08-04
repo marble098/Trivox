@@ -11,33 +11,53 @@ import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 
+/** TRIVOX_V7_IMPORT_WIREGUARD
+ * Shared lightweight motion. Theme changes use AppCompat's single recreation;
+ * an explicit second recreate would cause flicker and unnecessary work.
+ */
 open class ThemedActivity : AppCompatActivity() {
+    private var themeTransitionRunning = false
+
     override fun onPostCreate(savedInstanceState: Bundle?) {
         super.onPostCreate(savedInstanceState)
         if (!motionEnabled()) return
-        val root = window.decorView
+        val root = findViewById<View>(android.R.id.content) ?: window.decorView
         installPressMotion(root)
-        root.alpha = 0.97f
+        root.alpha = 0.94f
         root.animate()
+            .withLayer()
             .alpha(1f)
-            .setDuration(120L)
+            .setDuration(145L)
+            .setListener(null)
             .start()
     }
 
-    protected fun recreateWithMotion() {
+    protected fun applyNightModeWithMotion(mode: Int) {
+        if (themeTransitionRunning) return
         if (!motionEnabled()) {
-            recreate()
+            AppCompatDelegate.setDefaultNightMode(mode)
             return
         }
-        val root = window.decorView
+
+        themeTransitionRunning = true
+        val root = findViewById<View>(android.R.id.content) ?: window.decorView
         root.animate()
-            .alpha(0.92f)
+            .cancel()
+        root.animate()
+            .withLayer()
+            .alpha(0.94f)
             .setDuration(90L)
             .setListener(object : AnimatorListenerAdapter() {
                 override fun onAnimationEnd(animation: Animator) {
                     root.animate().setListener(null)
-                    recreate()
+                    AppCompatDelegate.setDefaultNightMode(mode)
+                }
+
+                override fun onAnimationCancel(animation: Animator) {
+                    root.alpha = 1f
+                    themeTransitionRunning = false
                 }
             })
             .start()
