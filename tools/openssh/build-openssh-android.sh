@@ -20,7 +20,7 @@ done
 rm -rf "$TERMUX_DIR"
 git clone --depth 1 https://github.com/termux/termux-packages.git "$TERMUX_DIR"
 python3 "$ROOT/tools/openssh/prepare-termux-properties.py" \
-  "$TERMUX_DIR/properties.sh" "$PACKAGE_NAME"
+  "$TERMUX_DIR" "$PACKAGE_NAME"
 
 rm -rf "$OUTPUT"
 mkdir -p "$OUTPUT"
