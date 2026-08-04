@@ -135,7 +135,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="5dp"
-                    android:text="@string/connected_profile_pinned_summary"
+                    android:text="@string/sort_position_summary_v5"
                     android:textColor="@color/muted"
                     android:textSize="10sp" />
             </LinearLayout>
@@ -313,6 +313,15 @@
                     android:background="@drawable/input_background"
                     android:paddingStart="10dp"
                     android:paddingEnd="8dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:lineSpacingExtra="1dp"
+                    android:text="@string/dns_smart_summary_v5"
+                    android:textColor="@color/muted"
+                    android:textSize="10sp" />
 
                 <EditText
                     android:id="@+id/customDns"

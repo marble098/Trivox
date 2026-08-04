@@ -29,6 +29,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.appcompat.content.res.AppCompatResources
+import androidx.appcompat.widget.AppCompatImageButton
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
 import androidx.core.os.LocaleListCompat
@@ -56,6 +57,7 @@ import com.trivox.client.network.ConnectionInfoManager
 import com.trivox.client.network.PingManager
 import com.trivox.client.network.SubscriptionManager
 import com.trivox.client.network.SubscriptionRefreshCoordinator
+import com.trivox.client.network.TunnelHealthVerifier
 import com.trivox.client.update.UpdateChecker
 import com.trivox.client.service.ConnectionPauseController
 import com.trivox.client.service.ConnectionService
@@ -95,7 +97,7 @@ class MainActivity : ThemedActivity() {
     private lateinit var tcpPingButton: Button
     private lateinit var realDelayAllButton: Button
     private lateinit var quickToolsPanel: View
-    private lateinit var quickToolsToggle: Button
+    private lateinit var quickToolsToggle: AppCompatImageButton
     private lateinit var modeSpinner: Spinner
     private lateinit var refreshExitButton: Button
     private lateinit var copySummaryButton: Button
@@ -583,12 +585,13 @@ class MainActivity : ThemedActivity() {
             } else {
                 View.GONE
             }
-        quickToolsToggle.text =
-            if (quickToolsExpanded) {
-                "⌃"
-            } else {
-                "⌄"
-            }
+        quickToolsToggle.setImageResource(
+            R.drawable.ic_expand_more_rounded
+        )
+        quickToolsToggle.rotation =
+            if (quickToolsExpanded) 180f else 0f
+        quickToolsToggle.contentDescription =
+            getString(R.string.toggle_connection_tools)
     }
 
     private fun refreshSubscriptionsFromMain() {
@@ -937,18 +940,11 @@ class MainActivity : ThemedActivity() {
                     .load()
             val result =
                 runCatching {
-                    pingManager
-                        .httpViaLocalProxy(
-                            settings =
-                                settings,
-                            url =
-                                settings.testUrl,
-                            attempts =
-                                settings
-                                    .testAttempts,
-                            timeoutMs =
-                                10_000
-                        )
+                    TunnelHealthVerifier.measure(
+                        settings = settings,
+                        attempts = settings.testAttempts.coerceAtMost(2),
+                        budgetMs = REAL_DELAY_BUDGET_MS
+                    )
                 }.getOrElse {
                     Diagnostics
                         .recordThrowable(
@@ -1238,7 +1234,8 @@ class MainActivity : ThemedActivity() {
             values,
             selectedId,
             current.profileId,
-            settings.hideIpOnMain
+            settings.hideIpOnMain,
+            settings.gridMode
         )
         emptyText.visibility =
             if (values.isEmpty()) {
@@ -2948,16 +2945,13 @@ class MainActivity : ThemedActivity() {
 
                                 PingMethod
                                     .XRAY_HTTP ->
-                                    pingManager
-                                        .httpViaLocalProxy(
-                                            settings =
-                                                settings,
-                                            url =
-                                                settings
-                                                    .testUrl,
-                                            attempts = settings.testAttempts,
-                                            timeoutMs =
-                                                7_000
+                                    TunnelHealthVerifier
+                                        .measure(
+                                            settings = settings,
+                                            attempts = settings.testAttempts
+                                                .coerceAtMost(2),
+                                            budgetMs =
+                                                LIVE_PING_BUDGET_MS
                                         )
                             }
                         }.getOrElse {
@@ -3247,29 +3241,11 @@ class MainActivity : ThemedActivity() {
                         }
             }
 
-        return Comparator {
-                left,
-                right ->
-            when {
-                left.id ==
-                    connectedId &&
-                    right.id !=
-                    connectedId ->
-                    -1
-
-                right.id ==
-                    connectedId &&
-                    left.id !=
-                    connectedId ->
-                    1
-
-                else ->
-                    base.compare(
-                        left,
-                        right
-                    )
-            }
-        }
+        // connectedId is intentionally not used as a ranking key.
+        // The row keeps its normal SMART/name/latency/group position.
+        @Suppress("UNUSED_VARIABLE")
+        val connectedProfileId = connectedId
+        return base
     }
 
     private fun pingMethodLabel(
@@ -3377,6 +3353,10 @@ class MainActivity : ThemedActivity() {
         private const val MENU_DIAGNOSTICS = 107
         private const val LIVE_PING_INTERVAL_MS =
             8_000L
+        private const val LIVE_PING_BUDGET_MS =
+            10_000
+        private const val REAL_DELAY_BUDGET_MS =
+            16_000
         private const val LIVE_PING_PERSIST_INTERVAL_MS =
             60_000L
         private const val LIVE_PING_SIGNIFICANT_CHANGE_MS =

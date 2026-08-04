@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sort_position_summary_v5">Connected configurations keep their normal sorted position; connection state is shown inside the card.</string>
+    <string name="dns_smart_summary_v5">Smart DNS intercepts VPN port 53 inside Xray, uses encrypted IP-based DoH with fallback and cache, and avoids the system resolver. Direct and System modes are explicit bypass choices; custom non-local endpoints follow the tunnel.</string>
+</resources>

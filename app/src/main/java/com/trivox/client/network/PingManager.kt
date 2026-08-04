@@ -69,8 +69,20 @@ class PingManager(
         profile: ConfigProfile,
         settings: AppSettings,
         workDir: File
-    ): PingResult =
-        when (settings.pingMethod) {
+    ): PingResult {
+        // TCP reachability of a nearby hostname does not prove a WireGuard
+        // handshake or usable tunnel. WireGuard profiles always use the full
+        // Xray route so an "Alive" result is end-to-end.
+        if (profile.protocol.equals("wireguard", ignoreCase = true)) {
+            return realXray(
+                profile = profile,
+                settings = settings,
+                workDir = workDir,
+                attempts = settings.testAttempts
+            )
+        }
+
+        return when (settings.pingMethod) {
             PingMethod.TCP_CONNECT ->
                 tcp(
                     profile = profile,
@@ -86,6 +98,7 @@ class PingManager(
                     attempts = settings.testAttempts
                 )
         }
+    }
 
     fun tcp(
         profile: ConfigProfile,

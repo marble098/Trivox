@@ -109,3 +109,21 @@ suppression is used.
 ## License
 
 Trivox source is Apache-2.0. Xray-core is MPL-2.0 and libXray is MIT. The core binary is downloaded separately from its official release and remains under its upstream license. See [LICENSES.md](LICENSES.md).
+
+
+## WireGuard, DNS and grid reliability v5
+
+The v5 reliability pass no longer pins the active profile to the first row. It
+adds a dedicated compact grid card, a vector expand control, and bounded live
+health probes so the UI cannot remain in a misleading measuring state.
+
+WireGuard native-process startup is no longer reported as a successful
+connection by itself. Trivox keeps a localhost-only mixed listener for
+end-to-end verification, applies a conservative MTU and persistent keepalive,
+and stops the core when real HTTP traffic cannot cross the tunnel. TCP endpoint
+reachability is never used as an Alive result for WireGuard profiles.
+
+DNS traffic arriving from Android's VPN interface is hijacked into Xray's DNS
+outbound. Smart/default DNS uses encrypted IP-based DoH through the selected
+route with cache, parallel fallback, and no dependency on Android's system
+resolver. Direct and System remain explicit opt-in bypass modes.
