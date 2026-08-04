@@ -56,9 +56,6 @@ abstract class ExecutableCoreAdapter(
         configJson: String,
         protectSocket: ((Int) -> Boolean)?
     ): CoreResult {
-        if (protectSocket != null) {
-            return CoreResult(false, "$displayName standalone binary mode supports local proxy mode only in this patch. Use Xray for Android VPN TUN mode.")
-        }
         val binary = executableBinaryOrNull() ?: return missing()
         stop()
         val config = writeConfig(configJson, "run")
