@@ -34,6 +34,7 @@ object XrayConfigBuilder {
     private const val WIREGUARD_RELIABLE_MTU = 1360
     private const val WIREGUARD_KEEPALIVE_SECONDS = 25
     private const val MAX_CUSTOM_DNS_SERVERS = 8
+    private const val DNS_ROUTING_TAG = "dns-in"
 
     private val privateNetworks = listOf(
         "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8",
@@ -51,14 +52,20 @@ object XrayConfigBuilder {
         errorLogPath: String? = null
     ): String {
         settings.normalize()
-        require(Validators.validPort(settings.socksPort)) { "Invalid mixed proxy port" }
-        require(settings.mtu in 576..9000) { "MTU must be between 576 and 9000" }
+        require(Validators.validPort(settings.socksPort)) {
+            "Invalid mixed proxy port"
+        }
+        require(settings.mtu in 576..9000) {
+            "MTU must be between 576 and 9000"
+        }
         if (settings.dnsMode == DnsMode.CUSTOM) {
             require(
                 settings.customDns.isNotEmpty() &&
                     settings.customDns.size <= MAX_CUSTOM_DNS_SERVERS &&
                     settings.customDns.all(Validators::validateDns)
-            ) { "Invalid custom DNS endpoint" }
+            ) {
+                "Invalid custom DNS endpoint"
+            }
         }
 
         val log = JSONObject().put("loglevel", "warning")
@@ -83,8 +90,11 @@ object XrayConfigBuilder {
         val result = JSONArray()
         if (mode == ConnectionMode.VPN) result.put(tunInbound(settings))
 
-        // WireGuard is not considered connected until this localhost-only mixed
-        // listener passes an end-to-end HTTP health probe.
+        /*
+         * WireGuard keeps a localhost-only mixed listener even in VPN mode for
+         * diagnostics and proxy-mode tests. Runtime VPN health is still verified
+         * only through Android's active VPN route.
+         */
         if (
             mode == ConnectionMode.PROXY ||
             settings.localProxyInVpn ||
@@ -107,13 +117,20 @@ object XrayConfigBuilder {
                     .put("tag", "proxy")
             )
         } else {
-            val bridge = normalizeOutbound(JSONObject(chain.bridge.toString()), settings)
-                .put("tag", "chain-bridge")
-            val exit = normalizeOutbound(JSONObject(chain.exit.toString()), settings)
+            val bridge = normalizeOutbound(
+                JSONObject(chain.bridge.toString()),
+                settings
+            ).put("tag", "chain-bridge")
+            val exit = normalizeOutbound(
+                JSONObject(chain.exit.toString()),
+                settings
+            )
                 .put("tag", "proxy")
                 .put(
                     "proxySettings",
-                    JSONObject().put("tag", "chain-bridge").put("transportLayer", true)
+                    JSONObject()
+                        .put("tag", "chain-bridge")
+                        .put("transportLayer", true)
                 )
             result.put(exit).put(bridge)
         }
@@ -124,7 +141,6 @@ object XrayConfigBuilder {
             .put(JSONObject().put("protocol", "blackhole").put("tag", "block"))
     }
 
-    /** TRIVOX_V7_IMPORT_WIREGUARD */
     private fun normalizeOutbound(
         outbound: JSONObject,
         settings: AppSettings
@@ -133,7 +149,11 @@ object XrayConfigBuilder {
             "shadowsocks" -> normalizeShadowsocks(outbound)
             "wireguard" -> {
                 normalizeWireGuard(outbound, settings)
-                // Xray explicitly does not support streamSettings on WireGuard.
+                /*
+                 * Xray WireGuard does not support streamSettings. Removing an
+                 * inherited/null stream object avoids validation failures without
+                 * altering the provider's WireGuard settings.
+                 */
                 outbound.remove("streamSettings")
                 return outbound
             }
@@ -170,18 +190,24 @@ object XrayConfigBuilder {
             outbound.put("settings", it)
         }
 
-        if (wireGuard.optString("secretKey").isBlank()) {
-            wireGuard.optString("privateKey")
-                .takeIf(String::isNotBlank)
-                ?.let { wireGuard.put("secretKey", it) }
-        }
+        rejectAmneziaOnlyFields(wireGuard)
+
+        copyAlias(
+            target = wireGuard,
+            canonical = "secretKey",
+            aliases = arrayOf("privateKey", "private_key", "secret_key")
+        )
         wireGuard.remove("privateKey")
+        wireGuard.remove("private_key")
+        wireGuard.remove("secret_key")
 
         val currentMtu = wireGuard.optInt("mtu", 1420)
             .takeIf { it in 576..9000 }
             ?: 1420
-        // Never raise an imported/provider MTU. Low values are often deliberate
-        // on mobile, nested VPN and filtered paths where extra encapsulation exists.
+        /*
+         * Never raise a provider-supplied MTU. Lower values are commonly
+         * deliberate on mobile, nested VPN, PPPoE and filtered paths.
+         */
         wireGuard.put(
             "mtu",
             minOf(currentMtu, settings.mtu, WIREGUARD_RELIABLE_MTU)
@@ -194,12 +220,15 @@ object XrayConfigBuilder {
 
         val addressValues = mutableListOf<String>()
         when (val rawAddress = wireGuard.opt("address")) {
-            is JSONArray -> for (index in 0 until rawAddress.length()) {
-                rawAddress.optString(index)
-                    .split(',')
-                    .map(String::trim)
-                    .filterTo(addressValues, String::isNotBlank)
+            is JSONArray -> {
+                for (index in 0 until rawAddress.length()) {
+                    rawAddress.optString(index)
+                        .split(',')
+                        .map(String::trim)
+                        .filterTo(addressValues, String::isNotBlank)
+                }
             }
+
             is String -> rawAddress.split(',')
                 .map(String::trim)
                 .filterTo(addressValues, String::isNotBlank)
@@ -224,51 +253,163 @@ object XrayConfigBuilder {
         }
 
         val validStrategies = setOf(
-            "AsIs", "ForceIP", "ForceIPv4", "ForceIPv6", "ForceIPv4v6", "ForceIPv6v4"
+            "ForceIP",
+            "ForceIPv4",
+            "ForceIPv6",
+            "ForceIPv4v6",
+            "ForceIPv6v4"
         )
         val existingStrategy = wireGuard.optString("domainStrategy")
         if (existingStrategy !in validStrategies) {
             wireGuard.put(
                 "domainStrategy",
                 when {
-                    hasIpv4Address && hasIpv6Address && settings.ipv6 -> "ForceIPv4v6"
+                    hasIpv4Address && hasIpv6Address && settings.ipv6 ->
+                        "ForceIPv4v6"
+
                     hasIpv6Address && settings.ipv6 -> "ForceIPv6"
                     else -> "ForceIPv4"
                 }
             )
         }
 
-        normalizeWireGuardReserved(wireGuard)
-
         val peers = wireGuard.optJSONArray("peers") ?: JSONArray()
+        var promotedReserved: Any? = wireGuard.opt("reserved")
         for (index in 0 until peers.length()) {
             val peer = peers.optJSONObject(index) ?: continue
+            rejectAmneziaOnlyFields(peer)
+
+            copyAlias(
+                target = peer,
+                canonical = "publicKey",
+                aliases = arrayOf("public_key")
+            )
+            peer.remove("public_key")
+
+            copyAlias(
+                target = peer,
+                canonical = "preSharedKey",
+                aliases = arrayOf(
+                    "presharedKey",
+                    "preshared_key",
+                    "pre_shared_key"
+                )
+            )
+            peer.remove("presharedKey")
+            peer.remove("preshared_key")
+            peer.remove("pre_shared_key")
+
             val endpoint = peer.optString("endpoint").trim()
                 .removePrefix("udp://")
                 .removePrefix("UDP://")
             if (endpoint.isNotBlank()) peer.put("endpoint", endpoint)
 
-            if (peer.optString("preSharedKey").isBlank()) {
-                peer.optString("presharedKey")
-                    .takeIf(String::isNotBlank)
-                    ?.let { peer.put("preSharedKey", it) }
-            }
-            peer.remove("presharedKey")
+            val keepAlive = when {
+                peer.optInt("keepAlive", -1) >= 0 ->
+                    peer.optInt("keepAlive")
 
-            if (peer.optInt("keepAlive", 0) <= 0) {
-                peer.put("keepAlive", WIREGUARD_KEEPALIVE_SECONDS)
+                peer.optInt("persistentKeepalive", -1) >= 0 ->
+                    peer.optInt("persistentKeepalive")
+
+                peer.optInt("persistent_keepalive", -1) >= 0 ->
+                    peer.optInt("persistent_keepalive")
+
+                else -> 0
             }
+            peer.remove("persistentKeepalive")
+            peer.remove("persistent_keepalive")
+            peer.put(
+                "keepAlive",
+                keepAlive.takeIf { it > 0 }
+                    ?: WIREGUARD_KEEPALIVE_SECONDS
+            )
+
+            normalizeAllowedIps(peer)
+
+            if (promotedReserved == null || promotedReserved == JSONObject.NULL) {
+                promotedReserved = peer.opt("reserved")
+            }
+            peer.remove("reserved")
+        }
+
+        if (
+            (wireGuard.opt("reserved") == null ||
+                wireGuard.opt("reserved") == JSONObject.NULL) &&
+            promotedReserved != null &&
+            promotedReserved != JSONObject.NULL
+        ) {
+            wireGuard.put("reserved", promotedReserved)
+        }
+        normalizeWireGuardReserved(wireGuard)
+    }
+
+    private fun copyAlias(
+        target: JSONObject,
+        canonical: String,
+        aliases: Array<String>
+    ) {
+        if (target.optString(canonical).isNotBlank()) return
+        aliases.asSequence()
+            .map(target::optString)
+            .firstOrNull(String::isNotBlank)
+            ?.let { target.put(canonical, it) }
+    }
+
+    private fun normalizeAllowedIps(peer: JSONObject) {
+        val raw = when {
+            peer.has("allowedIPs") -> peer.opt("allowedIPs")
+            peer.has("allowedIps") -> peer.opt("allowedIps")
+            else -> peer.opt("allowed_ips")
+        }
+        peer.remove("allowedIps")
+        peer.remove("allowed_ips")
+
+        val values = mutableListOf<String>()
+        when (raw) {
+            is JSONArray -> {
+                for (index in 0 until raw.length()) {
+                    raw.optString(index)
+                        .split(',')
+                        .map(String::trim)
+                        .filterTo(values, String::isNotBlank)
+                }
+            }
+
+            is String -> raw.split(',')
+                .map(String::trim)
+                .filterTo(values, String::isNotBlank)
+        }
+        if (values.isNotEmpty()) {
+            peer.put("allowedIPs", JSONArray(values.distinct()))
+        }
+    }
+
+    private fun rejectAmneziaOnlyFields(value: JSONObject) {
+        val unsupported = listOf(
+            "jc", "jmin", "jmax", "s1", "s2",
+            "h1", "h2", "h3", "h4"
+        ).filter(value::has)
+        require(unsupported.isEmpty()) {
+            "AmneziaWG-only fields ${unsupported.joinToString()} require an " +
+                "AmneziaWG-compatible core"
         }
     }
 
     private fun normalizeWireGuardReserved(wireGuard: JSONObject) {
         val raw = wireGuard.opt("reserved") ?: return
+        if (raw == JSONObject.NULL) {
+            wireGuard.remove("reserved")
+            return
+        }
         val bytes = when (raw) {
-            is JSONArray -> (0 until raw.length()).map { raw.optInt(it, -1) }
+            is JSONArray ->
+                (0 until raw.length()).map { raw.optInt(it, -1) }
+
             is String -> raw.split(',', ' ', ';')
                 .map(String::trim)
                 .filter(String::isNotBlank)
                 .map { it.toIntOrNull() ?: -1 }
+
             else -> emptyList()
         }
         require(bytes.size == 3 && bytes.all { it in 0..255 }) {
@@ -287,7 +428,10 @@ object XrayConfigBuilder {
             "sniffing",
             JSONObject()
                 .put("enabled", true)
-                .put("destOverride", JSONArray().put("http").put("tls").put("quic"))
+                .put(
+                    "destOverride",
+                    JSONArray().put("http").put("tls").put("quic")
+                )
                 .put("routeOnly", false)
         )
 
@@ -295,7 +439,12 @@ object XrayConfigBuilder {
         .put("tag", "tun-in")
         .put("port", 0)
         .put("protocol", "tun")
-        .put("settings", JSONObject().put("name", "trivox0").put("mtu", settings.mtu))
+        .put(
+            "settings",
+            JSONObject()
+                .put("name", "trivox0")
+                .put("mtu", settings.mtu)
+        )
 
     private fun dnsOutbound() = JSONObject()
         .put("protocol", "dns")
@@ -316,19 +465,22 @@ object XrayConfigBuilder {
         profile: ConfigProfile,
         settings: AppSettings
     ): JSONObject = when (settings.dnsMode) {
-        DnsMode.IMPORTED -> profile.originalDnsJson
-            ?.let { runCatching { JSONObject(it) }.getOrNull() }
-            ?: smartDns(remoteSecureDns(profile), settings)
+        DnsMode.IMPORTED ->
+            importedDns(profile, settings)
+                ?: smartDns(remoteSecureDns(profile), settings)
 
         DnsMode.CUSTOM -> smartDns(
-            JSONArray(
-                settings.customDns
-                    .asSequence()
-                    .map(String::trim)
-                    .filter(String::isNotBlank)
-                    .distinct()
-                    .take(MAX_CUSTOM_DNS_SERVERS)
-                    .toList()
+            withBootstrap(
+                profile,
+                JSONArray(
+                    settings.customDns
+                        .asSequence()
+                        .map(String::trim)
+                        .filter(String::isNotBlank)
+                        .distinct()
+                        .take(MAX_CUSTOM_DNS_SERVERS)
+                        .toList()
+                )
             ),
             settings
         )
@@ -336,10 +488,50 @@ object XrayConfigBuilder {
         DnsMode.SYSTEM -> JSONObject()
             .put("servers", JSONArray().put("localhost"))
             .put("queryStrategy", queryStrategy(settings))
+            .put("tag", DNS_ROUTING_TAG)
 
         DnsMode.DIRECT -> smartDns(localSecureDns(), settings)
+
         DnsMode.THROUGH_PROXY,
-        DnsMode.TRIVOX_DEFAULT -> smartDns(remoteSecureDns(profile), settings)
+        DnsMode.TRIVOX_DEFAULT ->
+            smartDns(remoteSecureDns(profile), settings)
+    }
+
+    private fun importedDns(
+        profile: ConfigProfile,
+        settings: AppSettings
+    ): JSONObject? {
+        val imported = profile.originalDnsJson
+            ?.let { runCatching { JSONObject(it) }.getOrNull() }
+            ?: return null
+
+        val originalServers = when (val value = imported.opt("servers")) {
+            is JSONArray -> value
+            is String -> JSONArray().put(value)
+            else -> JSONArray()
+        }
+        val servers = withBootstrap(profile, originalServers)
+        if (servers.length() == 0) {
+            val fallback = remoteSecureDns(profile)
+            for (index in 0 until fallback.length()) {
+                servers.put(fallback.opt(index))
+            }
+        }
+
+        imported.put("servers", servers)
+        if (imported.optString("queryStrategy").isBlank()) {
+            imported.put("queryStrategy", queryStrategy(settings))
+        }
+        if (!imported.has("disableCache")) imported.put("disableCache", false)
+        if (!imported.has("disableFallback")) imported.put("disableFallback", false)
+        if (!imported.has("enableParallelQuery")) {
+            imported.put("enableParallelQuery", true)
+        }
+        if (!imported.has("useSystemHosts")) {
+            imported.put("useSystemHosts", false)
+        }
+        imported.put("tag", DNS_ROUTING_TAG)
+        return imported
     }
 
     private fun smartDns(
@@ -353,27 +545,58 @@ object XrayConfigBuilder {
         .put("disableFallbackIfMatch", false)
         .put("enableParallelQuery", true)
         .put("useSystemHosts", false)
+        .put("tag", DNS_ROUTING_TAG)
 
     private fun queryStrategy(settings: AppSettings) =
         if (settings.ipv6) "UseIP" else "UseIPv4"
 
     private fun remoteSecureDns(profile: ConfigProfile): JSONArray =
-        JSONArray().apply {
-            if (
-                profile.protocol.equals("wireguard", ignoreCase = true) &&
-                !isIpLiteral(profile.server)
-            ) {
-                put(
-                    JSONObject()
-                        .put("address", "https+local://1.1.1.1/dns-query")
-                        .put("domains", JSONArray().put("full:${profile.server}"))
-                        .put("skipFallback", true)
-                        .put("queryStrategy", "UseIPv4")
-                )
-            }
-            put("https://1.1.1.1/dns-query")
-            put("https://8.8.8.8/dns-query")
+        withBootstrap(
+            profile,
+            JSONArray()
+                .put("https://1.1.1.1/dns-query")
+                .put("https://8.8.8.8/dns-query")
+        )
+
+    private fun withBootstrap(
+        profile: ConfigProfile,
+        servers: JSONArray
+    ): JSONArray {
+        val result = JSONArray()
+        val seen = linkedSetOf<String>()
+
+        fun append(value: Any?) {
+            if (value == null || value == JSONObject.NULL) return
+            val signature = value.toString()
+            if (seen.add(signature)) result.put(value)
         }
+
+        bootstrapDns(profile)?.let(::append)
+        for (index in 0 until servers.length()) {
+            append(servers.opt(index))
+        }
+        return result
+    }
+
+    /*
+     * A domain-form proxy/WireGuard endpoint must be resolvable before that
+     * outbound can carry DNS itself. The narrowly-scoped local bootstrap avoids
+     * a DNS-via-proxy recursion while every normal DNS query still follows the
+     * selected route.
+     */
+    private fun bootstrapDns(profile: ConfigProfile): JSONObject? =
+        profile.server
+            .trim()
+            .takeIf {
+                it.isNotBlank() && !isIpLiteral(it)
+            }
+            ?.let { host ->
+                JSONObject()
+                    .put("address", "https+local://1.1.1.1/dns-query")
+                    .put("domains", JSONArray().put("full:$host"))
+                    .put("skipFallback", true)
+                    .put("queryStrategy", "UseIP")
+            }
 
     private fun localSecureDns() = JSONArray()
         .put("https+local://1.1.1.1/dns-query")
@@ -394,6 +617,18 @@ object XrayConfigBuilder {
                     .put("network", "udp,tcp")
                     .put("port", "53")
                     .put("outboundTag", "dns-out")
+            )
+            /*
+             * Built-in DNS queries need an explicit higher-priority route.
+             * Without it, imported private resolvers (10/8, 172.16/12, etc.)
+             * are caught by the private-network direct rule and bypass the
+             * selected WireGuard/proxy outbound.
+             */
+            .put(
+                JSONObject()
+                    .put("type", "field")
+                    .put("inboundTag", JSONArray().put(DNS_ROUTING_TAG))
+                    .put("outboundTag", "proxy")
             )
             .put(
                 JSONObject()

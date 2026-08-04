@@ -9,17 +9,23 @@ import java.net.InetSocketAddress
 import java.net.Proxy
 import java.net.URI
 import java.util.Locale
+import kotlin.math.min
 
 /**
- * Bounded end-to-end verification of the active Trivox route.
- * A single lucky response, redirect, captive portal, or open localhost port is
- * never enough to mark a tunnel healthy.
+ * Bounded end-to-end verification of the route that the user actually selected.
+ *
+ * Configuration-level TCP/Real Delay tests are useful ranking signals, but they
+ * do not prove that Android's active VPN route or the live localhost proxy can
+ * carry traffic after the core starts. This verifier is intentionally executed
+ * against the running route and never treats an open port as a healthy tunnel.
  */
 object TunnelHealthVerifier {
     private val fallbackTargets = listOf(
         "https://cp.cloudflare.com/generate_204",
         "https://connectivitycheck.gstatic.com/generate_204",
-        "https://www.gstatic.com/generate_204"
+        "https://www.gstatic.com/generate_204",
+        "https://www.cloudflare.com/cdn-cgi/trace",
+        "https://api.ipify.org/"
     )
 
     fun measure(
@@ -28,16 +34,22 @@ object TunnelHealthVerifier {
         attempts: Int = 3,
         budgetMs: Int = 12_000,
         perProbeTimeoutMs: Int = MAX_PROBE_TIMEOUT_MS,
+        initialDelayMs: Int = 0,
         isCancelled: () -> Boolean = { false }
     ): PingResult {
         val timestamp = System.currentTimeMillis()
         val count = attempts.coerceIn(2, 3)
-        val budget = budgetMs.coerceIn(2_500, 24_000)
+        val budget = budgetMs.coerceIn(MIN_TOTAL_BUDGET_MS, MAX_TOTAL_BUDGET_MS)
         val probeTimeout = perProbeTimeoutMs.coerceIn(
             MIN_PROBE_TIMEOUT_MS,
             MAX_PROBE_TIMEOUT_MS
         )
-        val deadline = System.nanoTime() + budget * 1_000_000L
+
+        if (!waitCancellable(initialDelayMs.coerceIn(0, MAX_INITIAL_DELAY_MS), isCancelled)) {
+            return cancelledResult(timestamp, 0, count)
+        }
+
+        val deadline = System.nanoTime() + budget * NANOS_PER_MILLISECOND
         val samplesNanos = mutableListOf<Long>()
         var lastFailure = "tunnel_timeout"
 
@@ -45,16 +57,35 @@ object TunnelHealthVerifier {
             if (cancelled(isCancelled)) {
                 return cancelledResult(timestamp, samplesNanos.size, count)
             }
-            var accepted = false
 
-            for (route in probeRoutes(settings, mode)) {
+            val globalRemainingMs = remainingMillis(deadline)
+            if (globalRemainingMs < MIN_PROBE_TIMEOUT_MS) break
+
+            /*
+             * Give every requested sample a bounded share of the global budget.
+             * A blocked first endpoint must not consume the whole startup window
+             * and prevent the second/third verification sample from running.
+             */
+            val samplesLeft = (count - sampleIndex).coerceAtLeast(1)
+            val sampleBudgetMs = (globalRemainingMs / samplesLeft)
+                .coerceAtLeast(MIN_PROBE_TIMEOUT_MS.toLong())
+            val sampleDeadline = min(
+                deadline,
+                System.nanoTime() + sampleBudgetMs * NANOS_PER_MILLISECOND
+            )
+
+            var accepted = false
+            for (route in probeRoutes(mode)) {
                 if (accepted || cancelled(isCancelled)) break
+
                 for (target in rotatedTargets(settings, sampleIndex)) {
                     if (cancelled(isCancelled)) {
                         return cancelledResult(timestamp, samplesNanos.size, count)
                     }
-                    val remainingMs = (
-                        (deadline - System.nanoTime()) / 1_000_000L
+
+                    val remainingMs = min(
+                        remainingMillis(deadline),
+                        remainingMillis(sampleDeadline)
                     ).coerceAtMost(probeTimeout.toLong()).toInt()
                     if (remainingMs < MIN_PROBE_TIMEOUT_MS) break
 
@@ -73,6 +104,13 @@ object TunnelHealthVerifier {
                     lastFailure = result.errorCategory ?: lastFailure
                 }
             }
+
+            if (
+                sampleIndex + 1 < count &&
+                !waitCancellable(INTER_SAMPLE_DELAY_MS, isCancelled)
+            ) {
+                return cancelledResult(timestamp, samplesNanos.size, count)
+            }
         }
 
         val summary = PingStatistics.summarize(samplesNanos, count)
@@ -82,24 +120,26 @@ object TunnelHealthVerifier {
             latencyMs = summary.latencyMs,
             jitterMs = summary.jitterMs,
             successRatio = summary.successRatio,
-            resolvedIp = if (mode == ConnectionMode.VPN) "vpn" else "127.0.0.1",
+            resolvedIp = when (mode) {
+                ConnectionMode.VPN -> "vpn"
+                else -> "127.0.0.1"
+            },
             timestamp = timestamp,
             errorCategory = if (summary.success) null else lastFailure
         )
     }
 
-    private fun probeRoutes(
-        settings: AppSettings,
-        mode: ConnectionMode?
-    ): List<ProbeRoute> = buildList {
-        if (mode != ConnectionMode.VPN || settings.localProxyInVpn) {
-            add(ProbeRoute.HTTP_PROXY)
-            add(ProbeRoute.SOCKS_PROXY)
-        }
+    /*
+     * VPN verification must only use Android's active VPN route. Falling back to
+     * the optional localhost proxy could otherwise mark a broken full-device VPN
+     * as healthy merely because the side listener works.
+     */
+    private fun probeRoutes(mode: ConnectionMode?): List<ProbeRoute> =
         if (mode == ConnectionMode.VPN) {
-            add(ProbeRoute.ACTIVE_VPN)
+            listOf(ProbeRoute.ACTIVE_VPN)
+        } else {
+            listOf(ProbeRoute.HTTP_PROXY, ProbeRoute.SOCKS_PROXY)
         }
-    }.distinct()
 
     private fun rotatedTargets(settings: AppSettings, offset: Int): List<String> {
         val targets = buildList {
@@ -113,6 +153,29 @@ object TunnelHealthVerifier {
 
     private fun cancelled(isCancelled: () -> Boolean): Boolean =
         Thread.currentThread().isInterrupted || isCancelled()
+
+    private fun waitCancellable(
+        delayMs: Int,
+        isCancelled: () -> Boolean
+    ): Boolean {
+        var remaining = delayMs
+        while (remaining > 0) {
+            if (cancelled(isCancelled)) return false
+            val slice = remaining.coerceAtMost(WAIT_SLICE_MS)
+            try {
+                Thread.sleep(slice.toLong())
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            }
+            remaining -= slice
+        }
+        return !cancelled(isCancelled)
+    }
+
+    private fun remainingMillis(deadlineNanos: Long): Long =
+        ((deadlineNanos - System.nanoTime()) / NANOS_PER_MILLISECOND)
+            .coerceAtLeast(0L)
 
     private fun cancelledResult(
         timestamp: Long,
@@ -140,6 +203,10 @@ object TunnelHealthVerifier {
         return try {
             val separator = if ('?' in url) '&' else '?'
             val uri = URI("$url${separator}trivox_health=$nonce")
+            require(uri.scheme.equals("https", ignoreCase = true)) {
+                "Health-check URL must use HTTPS"
+            }
+
             val rawConnection = when (route) {
                 ProbeRoute.HTTP_PROXY -> uri.toURL().openConnection(
                     Proxy(
@@ -147,14 +214,18 @@ object TunnelHealthVerifier {
                         InetSocketAddress("127.0.0.1", settings.socksPort)
                     )
                 )
+
                 ProbeRoute.SOCKS_PROXY -> uri.toURL().openConnection(
                     Proxy(
                         Proxy.Type.SOCKS,
                         InetSocketAddress("127.0.0.1", settings.socksPort)
                     )
                 )
-                ProbeRoute.ACTIVE_VPN -> uri.toURL().openConnection(Proxy.NO_PROXY)
+
+                ProbeRoute.ACTIVE_VPN ->
+                    uri.toURL().openConnection(Proxy.NO_PROXY)
             }
+
             connection = rawConnection as HttpURLConnection
             connection.connectTimeout = timeoutMs
             connection.readTimeout = timeoutMs
@@ -163,11 +234,15 @@ object TunnelHealthVerifier {
             connection.requestMethod = "GET"
             connection.setRequestProperty("Connection", "close")
             connection.setRequestProperty("Cache-Control", "no-cache, no-store")
-            connection.setRequestProperty("User-Agent", "Trivox-TunnelHealth/8")
+            connection.setRequestProperty("Accept-Encoding", "identity")
+            connection.setRequestProperty("User-Agent", "Trivox-TunnelHealth/9")
 
             val started = System.nanoTime()
             val status = connection.responseCode
-            val elapsed = ((System.nanoTime() - started) / 1_000_000L).coerceAtLeast(1L)
+            val elapsed = (
+                (System.nanoTime() - started) / NANOS_PER_MILLISECOND
+            ).coerceAtLeast(1L)
+
             if (acceptsHttpStatus(uri.toString(), status)) {
                 ProbeResult(latencyMs = elapsed)
             } else {
@@ -208,7 +283,12 @@ object TunnelHealthVerifier {
         val errorCategory: String? = null
     )
 
-    private const val MIN_PROBE_TIMEOUT_MS = 500
-    private const val MAX_PROBE_TIMEOUT_MS = 5_000
+    private const val MIN_PROBE_TIMEOUT_MS = 650
+    private const val MAX_PROBE_TIMEOUT_MS = 6_000
+    private const val MIN_TOTAL_BUDGET_MS = 3_500
+    private const val MAX_TOTAL_BUDGET_MS = 28_000
+    private const val MAX_INITIAL_DELAY_MS = 3_000
+    private const val INTER_SAMPLE_DELAY_MS = 120
+    private const val WAIT_SLICE_MS = 100
     private const val NANOS_PER_MILLISECOND = 1_000_000L
 }

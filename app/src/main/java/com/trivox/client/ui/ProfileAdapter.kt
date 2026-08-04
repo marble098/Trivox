@@ -110,6 +110,7 @@ class ProfileAdapter(
             )
             itemView.isActivated = selected
             itemView.alpha = if (profile.enabled) 1f else 0.52f
+
             name.text = profile.name
             detail.text = if (hideIp) {
                 itemView.context.getString(
@@ -158,13 +159,26 @@ class ProfileAdapter(
                 else -> View.GONE
             }
 
-            tcpLatency.text = metricText(
-                value = profile.tcpLatencyMs,
-                status = profile.tcpTestStatus,
-                valueRes = R.string.tcp_result_value,
-                failedRes = R.string.tcp_result_failed,
-                emptyRes = R.string.tcp_result_empty
+            val wireGuard = profile.protocol.equals(
+                "wireguard",
+                ignoreCase = true
             )
+            /*
+             * A raw TCP socket to a WireGuard endpoint cannot prove a UDP
+             * handshake. Never keep displaying an old TCP number as a usable WG
+             * result; tapping that metric transparently runs the real Xray test.
+             */
+            tcpLatency.text = if (wireGuard) {
+                itemView.context.getString(R.string.tcp_result_empty)
+            } else {
+                metricText(
+                    value = profile.tcpLatencyMs,
+                    status = profile.tcpTestStatus,
+                    valueRes = R.string.tcp_result_value,
+                    failedRes = R.string.tcp_result_failed,
+                    emptyRes = R.string.tcp_result_empty
+                )
+            }
             realLatency.text = metricText(
                 value = profile.realLatencyMs,
                 status = profile.realTestStatus,
@@ -172,19 +186,26 @@ class ProfileAdapter(
                 failedRes = R.string.real_result_failed,
                 emptyRes = R.string.real_result_empty
             )
+
             ping.text = if (profile.testStatus == TestStatus.TESTING) "…" else "⚡"
             action.text = "⋮"
-            action.contentDescription = itemView.context.getString(R.string.config_actions)
-            ping.contentDescription = itemView.context.getString(R.string.ping_now)
+            action.contentDescription =
+                itemView.context.getString(R.string.config_actions)
+            ping.contentDescription =
+                itemView.context.getString(R.string.ping_now)
 
             itemView.setOnClickListener { onClick(profile) }
             itemView.setOnLongClickListener {
                 onLongClick(profile)
                 true
             }
-            tcpLatency.setOnClickListener { onTcpPing(profile) }
+            tcpLatency.setOnClickListener {
+                if (wireGuard) onRealPing(profile) else onTcpPing(profile)
+            }
             realLatency.setOnClickListener { onRealPing(profile) }
-            ping.setOnClickListener { onTcpPing(profile) }
+            ping.setOnClickListener {
+                if (wireGuard) onRealPing(profile) else onTcpPing(profile)
+            }
             action.setOnClickListener { onAction(profile) }
         }
 
@@ -197,8 +218,10 @@ class ProfileAdapter(
         ): String = when {
             value != null && status == TestStatus.ALIVE ->
                 itemView.context.getString(valueRes, value)
+
             status == TestStatus.DEAD || status == TestStatus.ERROR ->
                 itemView.context.getString(failedRes)
+
             else -> itemView.context.getString(emptyRes)
         }
 

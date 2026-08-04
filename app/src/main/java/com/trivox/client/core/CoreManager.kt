@@ -120,6 +120,7 @@ class CoreManager(context: Context) {
         isCancelled: () -> Boolean
     ): CoreResult {
         if (isCancelled()) return cancelledStart()
+
         val started = adapter.start(json, protect)
         if (!started.success) {
             Diagnostics.error(started.error)
@@ -127,37 +128,76 @@ class CoreManager(context: Context) {
         }
 
         if (isCancelled()) {
-            runCatching { adapter.stop() }
+            stopAfterRejectedStart()
             return cancelledStart()
         }
 
-        if (!request.profile.protocol.equals("wireguard", ignoreCase = true)) {
-            return started
-        }
-
+        /*
+         * Native process startup is not a connection result. TCP ping only proves
+         * endpoint reachability, and libXray Real Delay validates an isolated
+         * proxy-mode path. Before the service exposes CONNECTED, verify the live
+         * route selected by the user: Android VPN for VPN mode, localhost mixed
+         * listener for proxy mode.
+         */
+        val wireGuard = request.profile.protocol.equals(
+            "wireguard",
+            ignoreCase = true
+        )
         val health = TunnelHealthVerifier.measure(
             settings = request.settings,
-            attempts = 1,
-            budgetMs = WIREGUARD_START_VERIFY_BUDGET_MS,
-            perProbeTimeoutMs = WIREGUARD_PROBE_TIMEOUT_MS,
+            mode = request.mode,
+            attempts = START_VERIFY_ATTEMPTS,
+            budgetMs = if (wireGuard) {
+                WIREGUARD_START_VERIFY_BUDGET_MS
+            } else {
+                GENERAL_START_VERIFY_BUDGET_MS
+            },
+            perProbeTimeoutMs = if (wireGuard) {
+                WIREGUARD_PROBE_TIMEOUT_MS
+            } else {
+                GENERAL_PROBE_TIMEOUT_MS
+            },
+            initialDelayMs = when {
+                wireGuard -> WIREGUARD_INITIAL_GRACE_MS
+                request.mode == ConnectionMode.VPN -> VPN_INITIAL_GRACE_MS
+                else -> PROXY_INITIAL_GRACE_MS
+            },
             isCancelled = isCancelled
         )
+
         if (isCancelled() || health.errorCategory == "cancelled") {
-            runCatching { adapter.stop() }
+            stopAfterRejectedStart()
             return cancelledStart()
         }
         if (health.success) return started
 
-        runCatching { adapter.stop() }
+        stopAfterRejectedStart()
+
         val category = health.errorCategory
             ?.takeIf(String::isNotBlank)
             ?.let { " ($it)" }
             .orEmpty()
+        val route = if (request.mode == ConnectionMode.VPN) {
+            "Android VPN route"
+        } else {
+            "local proxy route"
+        }
+        val protocol = request.profile.protocol.uppercase()
         val error =
-            "WireGuard started locally, but no verified traffic crossed the tunnel$category. " +
-                "The endpoint may be filtered, blocked, or incompatible with this network."
+            "$protocol core started, but no verified HTTPS traffic crossed the " +
+                "$route$category. TCP/Real Delay results are ranking tests and " +
+                "cannot guarantee that the live route is usable."
         Diagnostics.error(error)
         return CoreResult(false, error)
+    }
+
+    private fun stopAfterRejectedStart() {
+        runCatching { adapter.stop() }
+            .onFailure {
+                Diagnostics.warning(
+                    "Core cleanup after rejected startup failed: " + it.message
+                )
+            }
     }
 
     private fun cancelledStart(): CoreResult =
@@ -180,11 +220,13 @@ class CoreManager(context: Context) {
         )
 
     companion object {
-        // A 900 ms first-flight probe produced false negatives on mobile and
-        // filtered paths even when the WireGuard handshake completed successfully.
-        // Cancellation remains cooperative, so the longer ceiling affects only a
-        // genuinely slow or failing startup and never blocks Disconnect.
-        private const val WIREGUARD_START_VERIFY_BUDGET_MS = 11_000
-        private const val WIREGUARD_PROBE_TIMEOUT_MS = 1_800
+        private const val START_VERIFY_ATTEMPTS = 3
+        private const val GENERAL_START_VERIFY_BUDGET_MS = 14_000
+        private const val GENERAL_PROBE_TIMEOUT_MS = 4_500
+        private const val WIREGUARD_START_VERIFY_BUDGET_MS = 22_000
+        private const val WIREGUARD_PROBE_TIMEOUT_MS = 6_000
+        private const val PROXY_INITIAL_GRACE_MS = 180
+        private const val VPN_INITIAL_GRACE_MS = 450
+        private const val WIREGUARD_INITIAL_GRACE_MS = 1_200
     }
 }

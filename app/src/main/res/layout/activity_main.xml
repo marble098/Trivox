@@ -62,10 +62,12 @@
                 android:layout_marginStart="5dp"
                 android:background="@drawable/input_background"
                 android:contentDescription="@string/toggle_connection_tools"
+                android:elevation="0dp"
                 android:minWidth="38dp"
                 android:padding="7dp"
                 android:scaleType="centerInside"
                 android:src="@drawable/ic_expand_more_rounded"
+                android:stateListAnimator="@null"
                 android:tint="@color/text_primary" />
         </LinearLayout>
 
@@ -102,7 +104,9 @@
                     android:layout_marginEnd="3dp"
                     android:layout_weight="1"
                     android:contentDescription="@string/live_ping_click_hint"
+                    android:elevation="0dp"
                     android:minWidth="0dp"
+                    android:stateListAnimator="@null"
                     android:text="@string/live_ping_off"
                     android:textDirection="ltr"
                     android:textSize="11sp" />
@@ -115,7 +119,9 @@
                     android:layout_marginStart="3dp"
                     android:layout_weight="1"
                     android:contentDescription="@string/real_delay_click_hint"
+                    android:elevation="0dp"
                     android:minWidth="0dp"
+                    android:stateListAnimator="@null"
                     android:text="@string/real_delay_off"
                     android:textDirection="ltr"
                     android:textSize="11sp" />
@@ -142,25 +148,29 @@
                     android:id="@+id/refreshExitButton"
                     style="@style/Widget.Trivox.Button.Secondary"
                     android:layout_width="0dp"
-                    android:layout_height="38dp"
+                    android:layout_height="36dp"
                     android:layout_marginEnd="3dp"
                     android:layout_weight="1"
                     android:contentDescription="@string/refresh_exit_info"
+                    android:elevation="0dp"
                     android:enabled="false"
+                    android:stateListAnimator="@null"
                     android:text="↻"
-                    android:textSize="18sp" />
+                    android:textSize="17sp" />
 
                 <Button
                     android:id="@+id/copySummaryButton"
                     style="@style/Widget.Trivox.Button.Secondary"
                     android:layout_width="0dp"
-                    android:layout_height="38dp"
+                    android:layout_height="36dp"
                     android:layout_marginStart="3dp"
                     android:layout_weight="1"
                     android:contentDescription="@string/copy_summary"
+                    android:elevation="0dp"
                     android:enabled="false"
+                    android:stateListAnimator="@null"
                     android:text="⧉"
-                    android:textSize="16sp" />
+                    android:textSize="15sp" />
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
@@ -228,8 +238,10 @@
             android:layout_height="40dp"
             android:layout_marginStart="6dp"
             android:contentDescription="@string/update_subscriptions"
+            android:elevation="0dp"
             android:minWidth="42dp"
             android:padding="0dp"
+            android:stateListAnimator="@null"
             android:text="↻"
             android:textSize="19sp" />
     </LinearLayout>
@@ -261,26 +273,26 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="54dp"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/panel_background"
+        android:layout_height="48dp"
+        android:layout_marginTop="5dp"
         android:baselineAligned="false"
         android:gravity="center"
         android:orientation="horizontal"
-        android:padding="4dp"
         android:weightSum="3">
 
         <Button
             android:id="@+id/addButton"
             android:layout_width="0dp"
-            android:layout_height="46dp"
-            android:layout_marginEnd="3dp"
+            android:layout_height="44dp"
+            android:layout_marginEnd="2dp"
             android:layout_weight="1"
             android:background="@drawable/quick_action_primary"
             android:contentDescription="@string/add"
+            android:elevation="0dp"
             android:minWidth="0dp"
             android:paddingStart="4dp"
             android:paddingEnd="4dp"
+            android:stateListAnimator="@null"
             android:text="@string/add_short"
             android:textAllCaps="false"
             android:textColor="@color/blue"
@@ -290,14 +302,16 @@
         <Button
             android:id="@+id/testButton"
             android:layout_width="0dp"
-            android:layout_height="46dp"
-            android:layout_marginStart="3dp"
-            android:layout_marginEnd="3dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="2dp"
+            android:layout_marginEnd="2dp"
             android:layout_weight="1"
             android:background="@drawable/quick_action_secondary"
+            android:elevation="0dp"
             android:minWidth="0dp"
             android:paddingStart="4dp"
             android:paddingEnd="4dp"
+            android:stateListAnimator="@null"
             android:text="@string/tcp_ping_icon"
             android:textAllCaps="false"
             android:textColor="@color/text_primary"
@@ -307,13 +321,15 @@
         <Button
             android:id="@+id/realDelayAllButton"
             android:layout_width="0dp"
-            android:layout_height="46dp"
-            android:layout_marginStart="3dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="2dp"
             android:layout_weight="1"
             android:background="@drawable/quick_action_secondary"
+            android:elevation="0dp"
             android:minWidth="0dp"
             android:paddingStart="4dp"
             android:paddingEnd="4dp"
+            android:stateListAnimator="@null"
             android:text="@string/real_delay_all_icon"
             android:textAllCaps="false"
             android:textColor="@color/blue"
@@ -333,6 +349,8 @@
             android:layout_width="0dp"
             android:layout_height="48dp"
             android:layout_weight="1"
+            android:elevation="0dp"
+            android:stateListAnimator="@null"
             android:text="@string/connect"
             android:textSize="14sp" />
 
@@ -343,8 +361,10 @@
             android:layout_height="48dp"
             android:layout_marginStart="6dp"
             android:contentDescription="@string/pause_connection"
+            android:elevation="0dp"
             android:minWidth="52dp"
             android:padding="0dp"
+            android:stateListAnimator="@null"
             android:text="⏸"
             android:textSize="19sp"
             android:visibility="gone" />

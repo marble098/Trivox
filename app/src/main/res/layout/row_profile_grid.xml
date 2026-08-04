@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="154dp"
+    android:layout_height="146dp"
     android:layoutDirection="locale"
     android:layout_margin="4dp"
     android:background="@drawable/row_background"
@@ -11,7 +11,7 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="32dp"
+        android:layout_height="30dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
@@ -41,7 +41,7 @@
         android:id="@+id/detailText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="3dp"
+        android:layout_marginTop="2dp"
         android:ellipsize="middle"
         android:maxLines="2"
         android:minHeight="27dp"
@@ -56,6 +56,7 @@
         android:layout_marginTop="2dp"
         android:ellipsize="end"
         android:maxLines="1"
+        android:minHeight="13dp"
         android:textColor="@color/blue"
         android:textSize="8.5sp"
         android:visibility="gone" />
@@ -64,9 +65,10 @@
         android:id="@+id/statusText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
+        android:layout_marginTop="1dp"
         android:ellipsize="end"
         android:maxLines="1"
+        android:minHeight="13dp"
         android:textColor="@color/blue"
         android:textSize="8.5sp"
         android:textStyle="bold"
@@ -75,51 +77,51 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:layout_marginTop="5dp"
+        android:layout_marginTop="4dp"
         android:background="@color/divider" />
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="43dp"
-        android:layout_marginTop="4dp"
+        android:layout_height="34dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <LinearLayout
+        <TextView
+            android:id="@+id/tcpLatencyText"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:orientation="vertical">
+            android:gravity="start|center_vertical"
+            android:maxLines="1"
+            android:paddingStart="2dp"
+            android:paddingEnd="3dp"
+            android:textColor="@color/text_primary"
+            android:textDirection="ltr"
+            android:textSize="8sp"
+            android:textStyle="bold" />
 
-            <TextView
-                android:id="@+id/tcpLatencyText"
-                android:layout_width="match_parent"
-                android:layout_height="20dp"
-                android:background="@drawable/metric_chip_background"
-                android:gravity="center"
-                android:maxLines="1"
-                android:textColor="@color/text_primary"
-                android:textDirection="ltr"
-                android:textSize="8sp"
-                android:textStyle="bold" />
+        <View
+            android:layout_width="1dp"
+            android:layout_height="20dp"
+            android:background="@color/divider" />
 
-            <TextView
-                android:id="@+id/realLatencyText"
-                android:layout_width="match_parent"
-                android:layout_height="20dp"
-                android:layout_marginTop="3dp"
-                android:background="@drawable/metric_chip_background"
-                android:gravity="center"
-                android:maxLines="1"
-                android:textColor="@color/blue"
-                android:textDirection="ltr"
-                android:textSize="8sp"
-                android:textStyle="bold" />
-        </LinearLayout>
+        <TextView
+            android:id="@+id/realLatencyText"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="start|center_vertical"
+            android:maxLines="1"
+            android:paddingStart="5dp"
+            android:paddingEnd="2dp"
+            android:textColor="@color/blue"
+            android:textDirection="ltr"
+            android:textSize="8sp"
+            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/pingActionText"
-            android:layout_width="38dp"
+            android:layout_width="32dp"
             android:layout_height="match_parent"
             android:gravity="center"
             android:text="@string/ping_short"
