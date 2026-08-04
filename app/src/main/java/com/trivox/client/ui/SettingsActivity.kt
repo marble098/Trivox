@@ -23,6 +23,7 @@ import com.trivox.client.R
 import com.trivox.client.config.Validators
 import com.trivox.client.data.AppSettings
 import com.trivox.client.data.DnsMode
+import com.trivox.client.data.CoreId
 import com.trivox.client.data.PingMethod
 import com.trivox.client.data.ProfileSortMode
 import com.trivox.client.data.RealDelayProfile
@@ -45,6 +46,8 @@ class SettingsActivity : ThemedActivity() {
         repository = SettingsRepository(this)
         val settings = repository.load()
 
+        val coreSpinner = spinner(R.id.coreSpinner)
+        val smartCore = switch(R.id.smartCoreSwitch)
         val language = spinner(R.id.languageSpinner)
         val darkMode = switch(R.id.darkModeSwitch)
         val hideIp = check(R.id.hideIpOnMainCheck)
@@ -85,6 +88,11 @@ class SettingsActivity : ThemedActivity() {
         val reconnectBoot = check(R.id.reconnectBoot)
         val autoUpdate = check(R.id.autoUpdateCheck)
         val updateStatus = text(R.id.updateStatus)
+
+        val cores = CoreId.entries
+        coreSpinner.adapter = compactAdapter(cores.map { it.label }.toTypedArray())
+        coreSpinner.setSelection(cores.indexOf(settings.coreId).coerceAtLeast(0))
+        smartCore.isChecked = settings.smartCoreSelection
 
         language.adapter = compactAdapter(
             arrayOf(
@@ -335,6 +343,8 @@ class SettingsActivity : ThemedActivity() {
                 return@setOnClickListener
             }
 
+            settings.coreId = cores[coreSpinner.selectedItemPosition]
+            settings.smartCoreSelection = smartCore.isChecked
             settings.socksPort = port!!
             settings.httpPort = port
             settings.mtu = mtuValue!!

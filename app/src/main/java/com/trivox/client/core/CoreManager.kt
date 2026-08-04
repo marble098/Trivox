@@ -4,6 +4,8 @@ import android.content.Context
 import com.trivox.client.config.XrayConfigBuilder
 import com.trivox.client.data.ConnectionMode
 import com.trivox.client.data.ConnectionState
+import com.trivox.client.data.CoreId
+import com.trivox.client.data.SettingsRepository
 import com.trivox.client.network.TunnelHealthVerifier
 import com.trivox.client.network.XrayProbeLogInspector
 import com.trivox.client.util.Diagnostics
@@ -97,12 +99,25 @@ object ConnectionRuntime {
 
 class CoreManager(context: Context) {
     private val appContext = context.applicationContext
-    val adapter: CoreAdapter = XrayCoreAdapter(appContext)
+    private val adapters: Map<CoreId, CoreAdapter> = mapOf(
+        CoreId.XRAY to XrayCoreAdapter(appContext),
+        CoreId.SING_BOX to SingBoxCoreAdapter(appContext),
+        CoreId.MIHOMO to MihomoCoreAdapter(appContext)
+    )
+
+    val adapter: CoreAdapter
+        get() = selectedAdapter()
+
+    private fun selectedCoreId(): CoreId = SettingsRepository(appContext).load().let {
+        if (it.smartCoreSelection) it.lastSmartCoreId else it.coreId
+    }
+
+    private fun selectedAdapter(): CoreAdapter = adapters[selectedCoreId()] ?: adapters.getValue(CoreId.XRAY)
 
     fun prepare(request: CoreStartRequest): Pair<String?, CoreResult> =
         runCatching {
             val json = buildJson(request)
-            val validation = adapter.validate(json)
+            val validation = selectedAdapter().validate(json)
             if (!validation.success) null to validation
             else json to CoreResult(true)
         }.getOrElse {
@@ -148,7 +163,7 @@ class CoreManager(context: Context) {
 
         val xrayLog = File(Diagnostics.xrayErrorLogPath())
         val logMark = XrayProbeLogInspector.mark(xrayLog)
-        val started = adapter.start(json, protect)
+        val started = selectedAdapter().start(json, protect)
         if (!started.success) return started
 
         if (isCancelled()) {
@@ -240,7 +255,7 @@ class CoreManager(context: Context) {
         )
 
     private fun stopAfterRejectedStart() {
-        runCatching { adapter.stop() }
+        runCatching { selectedAdapter().stop() }
             .onFailure {
                 Diagnostics.warning(
                     "Core cleanup after rejected startup failed: " + it.message
@@ -251,21 +266,34 @@ class CoreManager(context: Context) {
     private fun cancelledStart(): CoreResult =
         CoreResult(false, "Connection start cancelled")
 
-    fun isRunning(): Boolean = adapter.state()
+    fun isRunning(): Boolean = selectedAdapter().state()
         .data
         ?.optJSONObject("data")
         ?.optBoolean("running") == true
 
-    fun stop(): CoreResult = adapter.stop()
+    fun stop(): CoreResult = selectedAdapter().stop()
 
     private fun buildJson(request: CoreStartRequest): String =
-        XrayConfigBuilder.build(
-            profile = request.profile,
-            settings = request.settings,
-            mode = request.mode,
-            tunFd = request.tunFd,
-            errorLogPath = Diagnostics.xrayErrorLogPath()
-        )
+        CoreConfigTranslator.build(request, selectedCoreId())
+
+    fun switchCore(coreId: CoreId) {
+        val settings = SettingsRepository(appContext).load()
+        settings.coreId = coreId
+        settings.smartCoreSelection = false
+        SettingsRepository(appContext).save(settings)
+    }
+
+    fun smartSelect(request: CoreStartRequest): CoreId {
+        val settings = SettingsRepository(appContext).load()
+        if (!settings.smartCoreSelection) return settings.coreId
+        val candidates = adapters.filterValues { it.isAvailable() }.keys.ifEmpty { setOf(CoreId.XRAY) }
+        val selected = candidates.firstOrNull { it == CoreId.SING_BOX && request.mode == com.trivox.client.data.ConnectionMode.PROXY }
+            ?: candidates.firstOrNull { it == CoreId.MIHOMO && request.mode == com.trivox.client.data.ConnectionMode.PROXY }
+            ?: candidates.first()
+        settings.lastSmartCoreId = selected
+        SettingsRepository(appContext).save(settings)
+        return selected
+    }
 
     companion object {
         private const val GENERAL_ADAPTIVE_VERIFY_BUDGET_MS = 7_000

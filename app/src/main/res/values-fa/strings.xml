@@ -359,4 +359,11 @@
     <string name="subscription_export_links">خروجی لینک‌های کانفیگ</string>
     <string name="subscription_export_none">در این ساب لینک کانفیگ قابل اشتراکی وجود ندارد.</string>
     <string name="subscription_export_title">لینک‌های کانفیگ %1$s</string>
+
+    <string name="core_selection_section">انتخاب هسته</string>
+    <string name="core_engine">هسته برنامه</string>
+    <string name="smart_core_selection">انتخاب هوشمند هسته</string>
+    <string name="smart_core_selection_summary">هنگام اتصال، Trivox بین هسته‌های آماده تست سبک انجام می‌دهد و بهترین گزینه را ذخیره می‌کند.</string>
+    <string name="core_manual_badge">هسته: %1$s</string>
+    <string name="core_smart_badge">هوشمند: %1$s</string>
 </resources>

@@ -359,4 +359,11 @@
     <string name="subscription_export_links">Export config links</string>
     <string name="subscription_export_none">No shareable config links exist in this subscription.</string>
     <string name="subscription_export_title">%1$s config links</string>
+
+    <string name="core_selection_section">Core selection</string>
+    <string name="core_engine">App core</string>
+    <string name="smart_core_selection">Smart core selection</string>
+    <string name="smart_core_selection_summary">When connecting, Trivox performs a light readiness check across prepared cores and stores the best choice.</string>
+    <string name="core_manual_badge">Core: %1$s</string>
+    <string name="core_smart_badge">Smart: %1$s</string>
 </resources>

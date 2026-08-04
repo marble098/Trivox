@@ -33,6 +33,45 @@
 
             <TextView
                 style="@style/Widget.Trivox.SectionTitle"
+                android:text="@string/core_selection_section" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/panel_background"
+                android:orientation="vertical"
+                android:padding="10dp">
+
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:text="@string/core_engine" />
+                <Spinner
+                    android:id="@+id/coreSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="42dp"
+                    android:layout_marginTop="3dp"
+                    android:background="@drawable/input_background"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="8dp" />
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/smartCoreSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="46dp"
+                    android:layout_marginTop="5dp"
+                    android:gravity="center_vertical"
+                    android:text="@string/smart_core_selection"
+                    android:textColor="@color/text_primary"
+                    android:textSize="12sp"
+                    app:showText="false" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/smart_core_selection_summary"
+                    android:textColor="@color/muted"
+                    android:textSize="10sp" />
+            </LinearLayout>
+
+            <TextView
+                style="@style/Widget.Trivox.SectionTitle"
                 android:text="@string/interface_section" />
 
             <LinearLayout

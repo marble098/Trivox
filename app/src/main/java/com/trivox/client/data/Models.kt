@@ -6,6 +6,24 @@ import java.util.UUID
 
 enum class ConnectionMode { PROXY, VPN }
 enum class ConnectionState { DISCONNECTED, PREPARING, CONNECTING, CONNECTED, RECONNECTING, STOPPING, ERROR }
+enum class CoreId {
+    XRAY,
+    SING_BOX,
+    MIHOMO;
+
+    val label: String
+        get() = when (this) {
+            XRAY -> "Xray"
+            SING_BOX -> "sing-box"
+            MIHOMO -> "mihomo"
+        }
+
+    companion object {
+        fun fromStored(value: String?): CoreId = entries.firstOrNull {
+            it.name.equals(value, true) || it.label.equals(value, true)
+        } ?: XRAY
+    }
+}
 enum class TestStatus { UNTESTED, TESTING, ALIVE, DEAD, ERROR }
 enum class DnsMode { IMPORTED, TRIVOX_DEFAULT, CUSTOM, SYSTEM, DIRECT, THROUGH_PROXY }
 enum class AppRoutingMode { ALL, ALLOW_SELECTED, BYPASS_SELECTED }
@@ -280,6 +298,9 @@ data class SubscriptionSource(
 
 data class AppSettings(
     var mode: ConnectionMode = ConnectionMode.VPN,
+    var coreId: CoreId = CoreId.XRAY,
+    var smartCoreSelection: Boolean = false,
+    var lastSmartCoreId: CoreId = CoreId.XRAY,
     var socksPort: Int = DEFAULT_MIXED_PORT,
     var httpPort: Int = DEFAULT_MIXED_PORT,
     var mtu: Int = 1500,
@@ -363,6 +384,9 @@ data class AppSettings(
 
     fun toJson(): JSONObject = JSONObject()
         .put("mode", mode.name)
+        .put("coreId", coreId.name)
+        .put("smartCoreSelection", smartCoreSelection)
+        .put("lastSmartCoreId", lastSmartCoreId.name)
         .put("socksPort", socksPort)
         .put("httpPort", socksPort)
         .put("mtu", mtu)
@@ -439,6 +463,9 @@ data class AppSettings(
                 mode = runCatching {
                     ConnectionMode.valueOf(json.optString("mode"))
                 }.getOrDefault(ConnectionMode.VPN),
+                coreId = CoreId.fromStored(json.optString("coreId")),
+                smartCoreSelection = json.optBoolean("smartCoreSelection", false),
+                lastSmartCoreId = CoreId.fromStored(json.optString("lastSmartCoreId")),
                 socksPort = json.optInt("socksPort", DEFAULT_MIXED_PORT),
                 httpPort = json.optInt("httpPort", DEFAULT_MIXED_PORT),
                 mtu = json.optInt("mtu", 1500),

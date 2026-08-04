@@ -1,0 +1,60 @@
+name: Trivox multicore binaries
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/prepare-multicore-binaries.py'
+      - 'tools/patch-trivox-multicore.py'
+      - 'app/src/main/java/com/trivox/client/core/ExecutableCoreAdapter.kt'
+      - 'app/src/main/java/com/trivox/client/core/CoreConfigTranslator.kt'
+      - '.github/workflows/trivox-multicore-binaries.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  prepare-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply source multicore patch
+        run: python3 tools/patch-trivox-multicore.py
+      - name: Download latest prerelease sing-box and mihomo assets
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 tools/prepare-multicore-binaries.py
+      - name: Commit prepared multicore files
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app/src/main tools docs .github/workflows
+          if git diff --cached --quiet; then
+            echo "No multicore changes to commit"
+          else
+            git commit -m "Add sing-box and mihomo multicore integration"
+            git push
+          fi
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build release APKs
+        run: |
+          chmod +x ./gradlew || true
+          ./gradlew :app:assembleRelease --stacktrace
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivox-multicore-apks-and-logs
+          path: |
+            app/build/outputs/apk/**/*.apk
+            app/build/reports/**
+            app/src/main/assets/core-manifest-multicore.json

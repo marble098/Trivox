@@ -1,0 +1,163 @@
+package com.trivox.client.core
+
+import android.content.Context
+import android.os.Build
+import com.trivox.client.util.Diagnostics
+import org.json.JSONObject
+import java.io.File
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
+
+abstract class ExecutableCoreAdapter(
+    private val context: Context,
+    private val binaryName: String,
+    private val displayName: String
+) : CoreAdapter {
+    private val activeProcess = AtomicReference<Process?>(null)
+
+    override fun isAvailable(): Boolean = runCatching {
+        preparedBinary().isFile
+    }.getOrDefault(false)
+
+    override fun version(): String = runCatching {
+        val binary = preparedBinary()
+        if (!binary.isFile) return@runCatching "missing"
+        val process = ProcessBuilder(binary.absolutePath, "version")
+            .redirectErrorStream(true)
+            .start()
+        process.waitFor(1600, TimeUnit.MILLISECONDS)
+        process.inputStream.bufferedReader().readText()
+            .lineSequence()
+            .firstOrNull { it.isNotBlank() }
+            ?.trim()
+            ?: "unknown"
+    }.getOrDefault("unknown")
+
+    override fun validate(configJson: String): CoreResult {
+        val binary = preparedBinaryOrError() ?: return missing()
+        val config = writeConfig(configJson, "validate")
+        val args = validationArgs(binary, config)
+        return runCatching {
+            val process = ProcessBuilder(args)
+                .directory(coreWorkDir())
+                .redirectErrorStream(true)
+                .start()
+            val finished = process.waitFor(6, TimeUnit.SECONDS)
+            if (!finished) {
+                process.destroyForcibly()
+                CoreResult(false, "$displayName validation timed out")
+            } else {
+                val out = process.inputStream.bufferedReader().readText().trim()
+                if (process.exitValue() == 0) CoreResult(true)
+                else CoreResult(false, out.ifBlank { "$displayName rejected config" })
+            }
+        }.getOrElse {
+            Diagnostics.recordThrowable("$displayName validation", it)
+            CoreResult(false, "$displayName validation failed: ${it.message}")
+        }
+    }
+
+    override fun start(
+        configJson: String,
+        protectSocket: ((Int) -> Boolean)?
+    ): CoreResult {
+        if (protectSocket != null) {
+            return CoreResult(false, "$displayName standalone binary mode supports local proxy mode only in this patch. Use Xray for Android VPN TUN mode.")
+        }
+        val binary = preparedBinaryOrError() ?: return missing()
+        stop()
+        val config = writeConfig(configJson, "run")
+        val args = runArgs(binary, config)
+        return runCatching {
+            val process = ProcessBuilder(args)
+                .directory(coreWorkDir())
+                .redirectErrorStream(true)
+                .start()
+            Thread.sleep(260)
+            if (!process.isAlive && process.exitValue() != 0) {
+                val out = process.inputStream.bufferedReader().readText().trim()
+                CoreResult(false, out.ifBlank { "$displayName exited during startup" })
+            } else {
+                activeProcess.set(process)
+                CoreResult(true, data = JSONObject().put("data", JSONObject().put("running", true)))
+            }
+        }.getOrElse {
+            Diagnostics.recordThrowable("$displayName start", it)
+            CoreResult(false, "$displayName start failed: ${it.message}")
+        }
+    }
+
+    override fun stop(): CoreResult = runCatching {
+        activeProcess.getAndSet(null)?.let { process ->
+            process.destroy()
+            if (!process.waitFor(1200, TimeUnit.MILLISECONDS)) {
+                process.destroyForcibly()
+            }
+        }
+        CoreResult(true)
+    }.getOrElse {
+        CoreResult(false, "$displayName stop failed: ${it.message}")
+    }
+
+    override fun state(): CoreResult {
+        val running = activeProcess.get()?.isAlive == true
+        return CoreResult(true, data = JSONObject().put("data", JSONObject().put("running", running)))
+    }
+
+    override fun realDelay(configPath: String, timeoutSeconds: Int, url: String): CoreResult =
+        CoreResult(false, "$displayName does not expose libXray real-delay API; TCP and live health checks are used for smart selection.")
+
+    protected abstract fun validationArgs(binary: File, config: File): List<String>
+    protected abstract fun runArgs(binary: File, config: File): List<String>
+
+    private fun preparedBinaryOrError(): File? = preparedBinary().takeIf { it.isFile && it.canExecute() }
+
+    private fun preparedBinary(): File {
+        val abi = preferredAbi()
+        val out = File(coreWorkDir(), binaryName)
+        if (out.isFile && out.canExecute()) return out
+        val asset = "cores/$abi/$binaryName"
+        context.assets.open(asset).use { input ->
+            out.outputStream().use { output -> input.copyTo(output) }
+        }
+        out.setExecutable(true, true)
+        return out
+    }
+
+    private fun preferredAbi(): String = Build.SUPPORTED_ABIS.firstOrNull { abi ->
+        abi == "arm64-v8a" || abi == "armeabi-v7a" || abi == "x86_64"
+    } ?: Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
+
+    private fun coreWorkDir(): File = File(context.filesDir, "trivox-cores/$binaryName").apply { mkdirs() }
+
+    private fun writeConfig(configJson: String, name: String): File =
+        File(coreWorkDir(), "$name-${System.nanoTime()}.json").apply { writeText(configJson) }
+
+    private fun missing(): CoreResult = CoreResult(false, "$displayName binary is missing. Run the Trivox multicore GitHub Action first.")
+}
+
+class SingBoxCoreAdapter(context: Context) : ExecutableCoreAdapter(context, "sing-box", "sing-box") {
+    override val id = "sing-box"
+    override val capabilities = CoreCapabilities(
+        protocols = setOf("vless", "vmess", "trojan", "shadowsocks", "socks", "http", "wireguard", "hysteria2", "tuic"),
+        transports = setOf("tcp", "ws", "grpc", "httpupgrade", "quic"),
+        androidTun = false,
+        configValidation = true,
+        realDelayTest = false
+    )
+    override fun validationArgs(binary: File, config: File) = listOf(binary.absolutePath, "check", "-c", config.absolutePath)
+    override fun runArgs(binary: File, config: File) = listOf(binary.absolutePath, "run", "-c", config.absolutePath)
+}
+
+class MihomoCoreAdapter(context: Context) : ExecutableCoreAdapter(context, "mihomo", "mihomo") {
+    override val id = "mihomo"
+    override val capabilities = CoreCapabilities(
+        protocols = setOf("vless", "vmess", "trojan", "shadowsocks", "socks", "http", "wireguard", "hysteria2", "tuic"),
+        transports = setOf("tcp", "ws", "grpc", "httpupgrade", "quic"),
+        androidTun = false,
+        configValidation = true,
+        realDelayTest = false
+    )
+    override fun validationArgs(binary: File, config: File) = listOf(binary.absolutePath, "-t", "-f", config.absolutePath)
+    override fun runArgs(binary: File, config: File) = listOf(binary.absolutePath, "-f", config.absolutePath, "-d", config.parentFile!!.absolutePath)
+}
