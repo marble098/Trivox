@@ -28,6 +28,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 class TrivoxVpnService : VpnService() {
     private val executor =
         Executors.newSingleThreadExecutor()
+    private val cleanupExecutor =
+        Executors.newSingleThreadExecutor()
     private val handler =
         Handler(Looper.getMainLooper())
     private val sessionAccepted =
@@ -422,10 +424,10 @@ class TrivoxVpnService : VpnService() {
 
         val result =
             core.startValidated(
-                request
-            ) { fd ->
-                protect(fd)
-            }
+                request = request,
+                protect = { fd -> protect(fd) },
+                isCancelled = stopRequested::get
+            )
 
         if (!result.success) {
             fail(result.error)
@@ -725,10 +727,10 @@ class TrivoxVpnService : VpnService() {
 
         val result =
             core.startValidated(
-                request
-            ) { fd ->
-                protect(fd)
-            }
+                request = request,
+                protect = { fd -> protect(fd) },
+                isCancelled = stopRequested::get
+            )
 
         if (result.success) {
             ownsCore.set(true)
@@ -860,21 +862,20 @@ class TrivoxVpnService : VpnService() {
         ConnectionSessionStore
             .clear(this)
 
-        executeSafely {
+        cleanupExecutor.execute {
             handler
                 .removeCallbacksAndMessages(
                     null
                 )
             unregisterNetworkCallback()
 
-            if (
-                ownsCore.compareAndSet(
-                    true,
-                    false
-                )
-            ) {
-                core.stop()
-            }
+            ownsCore.set(false)
+            runCatching { core.stop() }
+                .onFailure {
+                    Diagnostics.warning(
+                        "Immediate core stop failed: " + it.message
+                    )
+                }
 
             runCatching {
                 tun?.close()
@@ -1111,6 +1112,7 @@ class TrivoxVpnService : VpnService() {
             )
         }
         tun = null
+        cleanupExecutor.shutdownNow()
         executor.shutdown()
         super.onDestroy()
     }

@@ -127,3 +127,17 @@ DNS traffic arriving from Android's VPN interface is hijacked into Xray's DNS
 outbound. Smart/default DNS uses encrypted IP-based DoH through the selected
 route with cache, parallel fallback, and no dependency on Android's system
 resolver. Direct and System remain explicit opt-in bypass modes.
+
+## Connection, subscription and motion reliability v6
+
+The v6 pass makes WireGuard startup cancellation cooperative and moves service
+cleanup to an independent executor, so disconnect no longer waits behind the
+startup health probe. The health verifier accepts verified HTTP responses from
+the configured test URL and multiple fallbacks while keeping strict time budgets.
+
+Batch TCP ping and Real Delay now operate only on the selected subscription tab.
+Automatic live ping can be disabled or scheduled from 3 to 300 seconds, and its
+session-only measurements no longer overwrite stored batch latency or reshuffle
+the connected card. Empty local subscriptions are supported, grid cards keep a
+fixed footprint, and lightweight platform animations respect the system animator
+setting.

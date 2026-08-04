@@ -199,6 +199,40 @@
                     android:textColor="@color/text_secondary"
                     android:textSize="10sp" />
 
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/livePingEnabledSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="46dp"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:text="@string/live_ping_enabled"
+                    android:textColor="@color/text_primary"
+                    android:textSize="11sp"
+                    app:showText="false" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="-3dp"
+                    android:text="@string/live_ping_enabled_summary"
+                    android:textColor="@color/muted"
+                    android:textSize="10sp" />
+
+                <TextView
+                    style="@style/Widget.Trivox.FieldLabel"
+                    android:layout_marginTop="10dp"
+                    android:text="@string/live_ping_interval" />
+
+                <EditText
+                    android:id="@+id/livePingIntervalInput"
+                    style="@style/Widget.Trivox.Input"
+                    android:layout_marginTop="3dp"
+                    android:hint="@string/live_ping_interval_hint"
+                    android:imeOptions="actionDone"
+                    android:inputType="number"
+                    android:maxLength="3"
+                    android:textDirection="ltr" />
+
                 <TextView
                     style="@style/Widget.Trivox.FieldLabel"
                     android:layout_marginTop="10dp"

@@ -90,16 +90,18 @@ class CoreManager(context: Context) {
 
     fun start(
         request: CoreStartRequest,
-        protect: ((Int) -> Boolean)? = null
+        protect: ((Int) -> Boolean)? = null,
+        isCancelled: () -> Boolean = { false }
     ): CoreResult {
         val (json, prepared) = prepare(request)
         if (!prepared.success || json == null) return prepared
-        return startPrepared(json, request, protect)
+        return startPrepared(json, request, protect, isCancelled)
     }
 
     fun startValidated(
         request: CoreStartRequest,
-        protect: ((Int) -> Boolean)? = null
+        protect: ((Int) -> Boolean)? = null,
+        isCancelled: () -> Boolean = { false }
     ): CoreResult {
         val json = runCatching { buildJson(request) }.getOrElse {
             Diagnostics.recordThrowable("Validated core start", it)
@@ -108,18 +110,25 @@ class CoreManager(context: Context) {
                 "Configuration generation failed: " + it.message
             )
         }
-        return startPrepared(json, request, protect)
+        return startPrepared(json, request, protect, isCancelled)
     }
 
     private fun startPrepared(
         json: String,
         request: CoreStartRequest,
-        protect: ((Int) -> Boolean)?
+        protect: ((Int) -> Boolean)?,
+        isCancelled: () -> Boolean
     ): CoreResult {
+        if (isCancelled()) return cancelledStart()
         val started = adapter.start(json, protect)
         if (!started.success) {
             Diagnostics.error(started.error)
             return started
+        }
+
+        if (isCancelled()) {
+            runCatching { adapter.stop() }
+            return cancelledStart()
         }
 
         if (!request.profile.protocol.equals("wireguard", ignoreCase = true)) {
@@ -129,8 +138,14 @@ class CoreManager(context: Context) {
         val health = TunnelHealthVerifier.measure(
             settings = request.settings,
             attempts = 1,
-            budgetMs = WIREGUARD_START_VERIFY_BUDGET_MS
+            budgetMs = WIREGUARD_START_VERIFY_BUDGET_MS,
+            perProbeTimeoutMs = WIREGUARD_PROBE_TIMEOUT_MS,
+            isCancelled = isCancelled
         )
+        if (isCancelled() || health.errorCategory == "cancelled") {
+            runCatching { adapter.stop() }
+            return cancelledStart()
+        }
         if (health.success) return started
 
         runCatching { adapter.stop() }
@@ -144,6 +159,9 @@ class CoreManager(context: Context) {
         Diagnostics.error(error)
         return CoreResult(false, error)
     }
+
+    private fun cancelledStart(): CoreResult =
+        CoreResult(false, "Connection start cancelled")
 
     fun isRunning(): Boolean = adapter.state()
         .data
@@ -162,6 +180,7 @@ class CoreManager(context: Context) {
         )
 
     companion object {
-        private const val WIREGUARD_START_VERIFY_BUDGET_MS = 12_000
+        private const val WIREGUARD_START_VERIFY_BUDGET_MS = 7_000
+        private const val WIREGUARD_PROBE_TIMEOUT_MS = 900
     }
 }

@@ -23,6 +23,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 class ConnectionService : Service() {
     private val executor =
         Executors.newSingleThreadExecutor()
+    private val cleanupExecutor =
+        Executors.newSingleThreadExecutor()
     private val handler =
         Handler(Looper.getMainLooper())
     private val sessionAccepted =
@@ -329,7 +331,10 @@ class ConnectionService : Service() {
         }
 
         val result =
-            core.start(request)
+            core.start(
+                request = request,
+                isCancelled = stopRequested::get
+            )
 
         if (!result.success) {
             fail(result.error)
@@ -541,20 +546,19 @@ class ConnectionService : Service() {
         ConnectionSessionStore
             .clear(this)
 
-        executeSafely {
+        cleanupExecutor.execute {
             handler
                 .removeCallbacksAndMessages(
                     null
                 )
 
-            if (
-                ownsCore.compareAndSet(
-                    true,
-                    false
-                )
-            ) {
-                core.stop()
-            }
+            ownsCore.set(false)
+            runCatching { core.stop() }
+                .onFailure {
+                    Diagnostics.warning(
+                        "Immediate core stop failed: " + it.message
+                    )
+                }
 
             storeDuration()
 
@@ -759,6 +763,7 @@ class ConnectionService : Service() {
             }
         }
 
+        cleanupExecutor.shutdownNow()
         executor.shutdownNow()
         super.onDestroy()
     }

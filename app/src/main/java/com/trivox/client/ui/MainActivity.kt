@@ -41,6 +41,7 @@ import com.trivox.client.config.ConfigParser
 import com.trivox.client.config.XrayConfigBuilder
 import com.trivox.client.core.ConnectionRuntime
 import com.trivox.client.core.CoreManager
+import com.trivox.client.data.AppSettings
 import com.trivox.client.data.ConfigProfile
 import com.trivox.client.data.ConfigRepository
 import com.trivox.client.data.ConnectionMode
@@ -75,7 +76,6 @@ import java.util.concurrent.Future
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
-import kotlin.math.abs
 
 class MainActivity : ThemedActivity() {
     private lateinit var repository: ConfigRepository
@@ -114,6 +114,8 @@ class MainActivity : ThemedActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private val livePingBusy =
         AtomicBoolean(false)
+    private val manualLivePingRequested =
+        AtomicBoolean(false)
     private val realDelayBusy =
         AtomicBoolean(false)
     private val connectionActionBusy =
@@ -151,10 +153,6 @@ class MainActivity : ThemedActivity() {
     private var activeSubscriptionId: String? = null
     private var subscriptionTabsSignature = ""
     private var quickToolsExpanded = false
-    private var lastLivePingPersistAt = 0L
-    private var lastLivePingPersistMs: Long? = null
-    private var lastLivePingPersistProfileId:
-        String? = null
 
     private val filePicker =
         registerForActivityResult(
@@ -739,6 +737,7 @@ class MainActivity : ThemedActivity() {
             return
         }
 
+        manualLivePingRequested.set(true)
         livePingResult = null
         livePingText.setText(
             R.string
@@ -1214,10 +1213,9 @@ class MainActivity : ThemedActivity() {
                                 true
                             )
 
-                    profile.id ==
-                        current.profileId ||
+                    sourceMatches &&
                         (
-                            sourceMatches &&
+                            profile.id == current.profileId ||
                                 searchMatches
                             )
                 }
@@ -1267,15 +1265,16 @@ class MainActivity : ThemedActivity() {
         renderConnectedInfo(
             current,
             infoProfile,
-            settings.hideIpOnMain
+            settings
         )
     }
 
     private fun renderConnectedInfo(
         snapshot: ConnectionRuntime.Snapshot,
         profile: ConfigProfile?,
-        hideIp: Boolean
+        settings: AppSettings
     ) {
+        val hideIp = settings.hideIpOnMain
         val connectedProfile =
             profile.takeIf {
                 snapshot.state ==
@@ -1316,6 +1315,10 @@ class MainActivity : ThemedActivity() {
             } else if (live != null) {
                 getString(
                     R.string.live_ping_failed
+                )
+            } else if (!settings.livePingEnabled) {
+                getString(
+                    R.string.live_ping_auto_disabled
                 )
             } else {
                 getString(
@@ -1694,9 +1697,16 @@ class MainActivity : ThemedActivity() {
         setBatchControlsEnabled(false)
 
         storageWorker.execute {
+            val subscriptionId = activeSubscriptionId
             val profiles =
                 repository.all()
-                    .filter { it.enabled }
+                    .filter { profile ->
+                        profile.enabled &&
+                            (
+                                subscriptionId == null ||
+                                    profile.subscriptionId == subscriptionId
+                                )
+                    }
 
             if (profiles.isEmpty()) {
                 runOnUiThread {
@@ -2524,6 +2534,10 @@ class MainActivity : ThemedActivity() {
     }
 
     private fun toggleConnection() {
+        if (connectionStartPending.get()) {
+            cancelPendingConnection()
+            return
+        }
         if (!connectionActionBusy.compareAndSet(false, true)) return
         handler.postDelayed(
             { connectionActionBusy.set(false) },
@@ -2539,6 +2553,9 @@ class MainActivity : ThemedActivity() {
         ) {
             pendingSwitchProfileId = null
             pendingSwitchMode = null
+            renderState(
+                runtime.copy(state = ConnectionState.STOPPING)
+            )
             stopActiveConnection(runtime)
             return
         }
@@ -2604,6 +2621,31 @@ class MainActivity : ThemedActivity() {
         }
     }
 
+    private fun cancelPendingConnection() {
+        pendingVpnProfile = null
+        connectionStartPending.set(false)
+        handler.removeCallbacks(connectionStartTimeout)
+        val mode = settingsRepository.load().mode
+        val snapshot = ConnectionRuntime.current()
+        renderState(
+            snapshot.copy(
+                state = ConnectionState.STOPPING,
+                mode = snapshot.mode ?: mode
+            )
+        )
+        if (mode == ConnectionMode.PROXY) {
+            startService(
+                Intent(this, ConnectionService::class.java)
+                    .setAction(ConnectionService.ACTION_STOP)
+            )
+        } else {
+            startService(
+                Intent(this, TrivoxVpnService::class.java)
+                    .setAction(TrivoxVpnService.ACTION_STOP)
+            )
+        }
+    }
+
     private fun showConnectionStartPending(
         profileName: String
     ) {
@@ -2623,9 +2665,9 @@ class MainActivity : ThemedActivity() {
         )
         selectedText.text = profileName
         connectButton.setText(
-            R.string.connecting_now
+            R.string.disconnect
         )
-        connectButton.isEnabled = false
+        connectButton.isEnabled = true
 
         handler.postDelayed(
             connectionStartTimeout,
@@ -2788,11 +2830,7 @@ class MainActivity : ThemedActivity() {
                 ConnectionState.ERROR
             )
         connectButton.isEnabled =
-            snapshot.state !in setOf(
-                ConnectionState.PREPARING,
-                ConnectionState.CONNECTING,
-                ConnectionState.STOPPING
-            )
+            snapshot.state != ConnectionState.STOPPING
 
         if (snapshot.error.isNotBlank()) {
             selectedText.text = snapshot.error
@@ -2824,9 +2862,11 @@ class MainActivity : ThemedActivity() {
                 durationTick,
                 1_000
             )
-            handler.post(
-                livePingTick
-            )
+            if (settingsRepository.load().livePingEnabled) {
+                handler.post(
+                    livePingTick
+                )
+            }
         } else {
             lastInfoProfileId = null
             livePingResult = null
@@ -2888,141 +2928,71 @@ class MainActivity : ThemedActivity() {
     private val livePingTick =
         object : Runnable {
             override fun run() {
-                val snapshot =
-                    ConnectionRuntime
-                        .current()
+                val snapshot = ConnectionRuntime.current()
+                if (snapshot.state != ConnectionState.CONNECTED) return
 
-                if (
-                    snapshot.state !=
-                    ConnectionState.CONNECTED
-                ) {
-                    return
-                }
+                val settings = settingsRepository.load()
+                val manual = manualLivePingRequested.getAndSet(false)
+                if (!settings.livePingEnabled && !manual) return
 
-                val profile =
-                    repository.find(
-                        snapshot.profileId
-                    ) ?: return
-                val sessionId =
-                    snapshot.sessionId
-
-                if (
-                    !livePingBusy
-                        .compareAndSet(
-                            false,
-                            true
-                        )
-                ) {
-                    handler.postDelayed(
-                        this,
-                        LIVE_PING_INTERVAL_MS
-                    )
+                val profile = repository.find(snapshot.profileId) ?: return
+                val sessionId = snapshot.sessionId
+                if (!livePingBusy.compareAndSet(false, true)) {
+                    if (settings.livePingEnabled) {
+                        handler.postDelayed(this, livePingIntervalMs(settings))
+                    }
                     return
                 }
 
                 latencyWorker.execute {
-                    val settings =
-                        settingsRepository
-                            .load()
-                    val result =
-                        runCatching {
-                            when (
-                                settings
-                                    .livePingMethod
-                            ) {
-                                PingMethod
-                                    .TCP_CONNECT ->
-                                    pingManager
-                                        .tcp(
-                                            profile =
-                                                profile,
-                                            attempts =
-                                                settings
-                                                    .testAttempts,
-                                            timeoutMs =
-                                                5_000
-                                        )
+                    val result = runCatching {
+                        when (settings.livePingMethod) {
+                            PingMethod.TCP_CONNECT -> pingManager.tcp(
+                                profile = profile,
+                                attempts = settings.testAttempts,
+                                timeoutMs = 5_000
+                            )
 
-                                PingMethod
-                                    .XRAY_HTTP ->
-                                    TunnelHealthVerifier
-                                        .measure(
-                                            settings = settings,
-                                            attempts = settings.testAttempts
-                                                .coerceAtMost(2),
-                                            budgetMs =
-                                                LIVE_PING_BUDGET_MS
-                                        )
-                            }
-                        }.getOrElse {
-                            Diagnostics
-                                .recordThrowable(
-                                    "Live ping",
-                                    it
-                                )
-                            failedPingResult(
-                                settings
-                                    .livePingMethod,
-                                it
+                            PingMethod.XRAY_HTTP -> TunnelHealthVerifier.measure(
+                                settings = settings,
+                                attempts = settings.testAttempts.coerceAtMost(2),
+                                budgetMs = LIVE_PING_BUDGET_MS,
+                                isCancelled = {
+                                    val latest = ConnectionRuntime.current()
+                                    latest.state != ConnectionState.CONNECTED ||
+                                        latest.sessionId != sessionId
+                                }
                             )
                         }
+                    }.getOrElse {
+                        Diagnostics.recordThrowable("Live ping", it)
+                        failedPingResult(settings.livePingMethod, it)
+                    }
 
-                    val latest =
-                        ConnectionRuntime
-                            .current()
-
+                    val latest = ConnectionRuntime.current()
                     if (
-                        latest.state ==
-                        ConnectionState
-                            .CONNECTED &&
-                        latest.sessionId ==
-                        sessionId &&
-                        latest.profileId ==
-                        profile.id
+                        latest.state == ConnectionState.CONNECTED &&
+                        latest.sessionId == sessionId &&
+                        latest.profileId == profile.id
                     ) {
-                        livePingResult =
-                            result
-
-                        if (
-                            result.success &&
-                            result.latencyMs !=
-                            null &&
-                            shouldPersistLivePing(
-                                profile.id,
-                                result
-                            )
-                        ) {
-                            repository.update(
-                                profile.id
-                            ) {
-                                value ->
-                                applyPingResultToProfile(
-                                    value,
-                                    result
-                                )
-                            }
-                        }
+                        // Live ping is session telemetry only. It intentionally does
+                        // not overwrite the stored batch result, so sorting remains stable.
+                        livePingResult = result
                     }
 
                     livePingBusy.set(false)
-
                     runOnUiThread {
                         refresh()
-
-                        val current =
-                            ConnectionRuntime
-                                .current()
-
+                        val current = ConnectionRuntime.current()
+                        val latestSettings = settingsRepository.load()
                         if (
-                            current.state ==
-                            ConnectionState
-                                .CONNECTED &&
-                            current.sessionId ==
-                            sessionId
+                            current.state == ConnectionState.CONNECTED &&
+                            current.sessionId == sessionId &&
+                            latestSettings.livePingEnabled
                         ) {
                             handler.postDelayed(
                                 this,
-                                LIVE_PING_INTERVAL_MS
+                                livePingIntervalMs(latestSettings)
                             )
                         }
                     }
@@ -3030,44 +3000,8 @@ class MainActivity : ThemedActivity() {
             }
         }
 
-    private fun shouldPersistLivePing(
-        profileId: String,
-        result: PingResult
-    ): Boolean {
-        val latency =
-            result.latencyMs
-                ?: return false
-        val now =
-            System.currentTimeMillis()
-        val profileChanged =
-            lastLivePingPersistProfileId !=
-                profileId
-        val significantChange =
-            lastLivePingPersistMs
-                ?.let {
-                    abs(it - latency) >=
-                        LIVE_PING_SIGNIFICANT_CHANGE_MS
-                }
-                ?: true
-        val due =
-            now - lastLivePingPersistAt >=
-                LIVE_PING_PERSIST_INTERVAL_MS
-
-        if (
-            profileChanged ||
-            significantChange ||
-            due
-        ) {
-            lastLivePingPersistProfileId =
-                profileId
-            lastLivePingPersistMs =
-                latency
-            lastLivePingPersistAt = now
-            return true
-        }
-
-        return false
-    }
+    private fun livePingIntervalMs(settings: AppSettings): Long =
+        settings.livePingIntervalSeconds.coerceIn(3, 300) * 1_000L
 
     private fun applyPingResultToProfile(
         profile: ConfigProfile,
@@ -3351,21 +3285,15 @@ class MainActivity : ThemedActivity() {
         private const val MENU_SETTINGS = 105
         private const val MENU_ROUTING = 106
         private const val MENU_DIAGNOSTICS = 107
-        private const val LIVE_PING_INTERVAL_MS =
-            8_000L
         private const val LIVE_PING_BUDGET_MS =
             10_000
         private const val REAL_DELAY_BUDGET_MS =
             16_000
-        private const val LIVE_PING_PERSIST_INTERVAL_MS =
-            60_000L
-        private const val LIVE_PING_SIGNIFICANT_CHANGE_MS =
-            50L
         private const val LIVE_PING_URL =
             "https://cp.cloudflare.com/generate_204"
         private const val
             CONNECTION_ACTION_COOLDOWN_MS =
-                1_200L
+                250L
         private const val
             CONNECTION_START_UI_TIMEOUT_MS =
                 6_000L

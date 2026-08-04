@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_ping_enabled">پینگ زنده خودکار</string>
+    <string name="live_ping_enabled_summary">فقط هنگام اتصال اجرا می‌شود؛ در حالت خاموش نیز پینگ زنده دستی قابل استفاده است.</string>
+    <string name="live_ping_interval">فاصله پینگ زنده (ثانیه)</string>
+    <string name="live_ping_interval_hint">بین ۳ تا ۳۰۰ ثانیه</string>
+    <string name="invalid_live_ping_interval">فاصله پینگ زنده باید بین ۳ تا ۳۰۰ ثانیه باشد.</string>
+    <string name="live_ping_auto_disabled">پینگ زنده: حالت خودکار خاموش</string>
+    <string name="local_subscription_label">ساب محلی • بدون لینک</string>
+</resources>

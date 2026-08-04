@@ -92,6 +92,14 @@ class SettingsActivity :
             findViewById<TextView>(
                 R.id.pingMethodSummary
             )
+        val livePingEnabled =
+            findViewById<SwitchCompat>(
+                R.id.livePingEnabledSwitch
+            )
+        val livePingInterval =
+            findViewById<EditText>(
+                R.id.livePingIntervalInput
+            )
         val pingAttempts =
             findViewById<Spinner>(
                 R.id.pingAttemptsSpinner
@@ -201,7 +209,7 @@ class SettingsActivity :
                     AppCompatDelegate.MODE_NIGHT_NO
                 }
             )
-            recreate()
+            recreateWithMotion()
         }
 
         val sortModes =
@@ -297,6 +305,11 @@ class SettingsActivity :
                         AdapterView<*>?
                 ) = Unit
             }
+
+        livePingEnabled.isChecked = settings.livePingEnabled
+        livePingInterval.setText(
+            settings.livePingIntervalSeconds.toString()
+        )
 
         val attempts =
             arrayOf(
@@ -480,6 +493,10 @@ class SettingsActivity :
                 testUrl.text
                     .toString()
                     .trim()
+            val livePingIntervalValue =
+                livePingInterval.text
+                    .toString()
+                    .toIntOrNull()
 
             val dnsValues =
                 custom.text
@@ -502,6 +519,17 @@ class SettingsActivity :
                 Toast.makeText(
                     this,
                     R.string.invalid_port,
+                    Toast.LENGTH_LONG
+                ).show()
+                return@setOnClickListener
+            }
+
+            if (
+                livePingIntervalValue !in 3..300
+            ) {
+                Toast.makeText(
+                    this,
+                    R.string.invalid_live_ping_interval,
                     Toast.LENGTH_LONG
                 ).show()
                 return@setOnClickListener
@@ -587,6 +615,10 @@ class SettingsActivity :
                     pingMethod
                         .selectedItemPosition
                 ]
+            settings.livePingEnabled =
+                livePingEnabled.isChecked
+            settings.livePingIntervalSeconds =
+                livePingIntervalValue!!
             settings.pingMethod =
                 PingMethod.TCP_CONNECT
             settings.testAttempts =

@@ -162,6 +162,8 @@ data class AppSettings(
     var gridMode: Boolean = false,
     var pingMethod: PingMethod = PingMethod.XRAY_HTTP,
     var livePingMethod: PingMethod = PingMethod.XRAY_HTTP,
+    var livePingEnabled: Boolean = true,
+    var livePingIntervalSeconds: Int = 8,
     var hideIpOnMain: Boolean = false,
     var sortMode: ProfileSortMode = ProfileSortMode.SMART,
     var darkMode: Boolean = false,
@@ -175,6 +177,7 @@ data class AppSettings(
         if (socksPort == LEGACY_SOCKS_PORT || socksPort !in 1..65535) socksPort = DEFAULT_MIXED_PORT
         httpPort = socksPort
         testAttempts = testAttempts.coerceIn(2, 5)
+        livePingIntervalSeconds = livePingIntervalSeconds.coerceIn(3, 300)
         if (
             testUrl.isBlank() ||
             testUrl == LEGACY_TEST_URL ||
@@ -191,6 +194,8 @@ data class AppSettings(
         .put("showSystemApps", showSystemApps).put("reconnectOnNetworkChange", reconnectOnNetworkChange)
         .put("reconnectOnBoot", reconnectOnBoot).put("blocking", blocking).put("gridMode", gridMode)
         .put("pingMethod", pingMethod.name).put("livePingMethod", livePingMethod.name)
+        .put("livePingEnabled", livePingEnabled)
+        .put("livePingIntervalSeconds", livePingIntervalSeconds)
         .put("hideIpOnMain", hideIpOnMain).put("sortMode", sortMode.name).put("darkMode", darkMode)
         .put("themeMode", themeMode.name).put("localProxyInVpn", localProxyInVpn)
         .put("autoUpdateCheck", autoUpdateCheck).put("testUrl", testUrl).put("testAttempts", testAttempts)
@@ -224,6 +229,10 @@ data class AppSettings(
                     json.optString("livePingMethod"),
                     legacyPingMethod
                 ),
+                livePingEnabled = json.optBoolean("livePingEnabled", true),
+                livePingIntervalSeconds = json
+                    .optInt("livePingIntervalSeconds", 8)
+                    .coerceIn(3, 300),
                 hideIpOnMain = json.optBoolean("hideIpOnMain", false),
                 sortMode = ProfileSortMode.fromStored(json.optString("sortMode")),
                 darkMode = legacyDark, themeMode = ThemeMode.fromStored(json.optString("themeMode"), legacyDark),

@@ -83,8 +83,12 @@ class SubscriptionRefreshCoordinator(
                         appContext
                     )
                         .all()
-                        .filter {
-                            it.enabled
+                        .filter { source ->
+                            source.enabled &&
+                                (
+                                    source.kind != SubscriptionKind.URL ||
+                                        source.url.isNotBlank()
+                                    )
                         }
 
                 for (

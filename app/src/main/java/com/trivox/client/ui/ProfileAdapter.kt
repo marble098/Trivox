@@ -136,7 +136,11 @@ class ProfileAdapter(
                 }
             }
             location.text = locationValue
-            location.visibility = if (locationValue.isBlank()) View.GONE else View.VISIBLE
+            location.visibility = when {
+                locationValue.isNotBlank() -> View.VISIBLE
+                rowIsGrid() -> View.INVISIBLE
+                else -> View.GONE
+            }
 
             val statusValue = when {
                 connected -> itemView.context.getString(R.string.state_connected)
@@ -145,7 +149,11 @@ class ProfileAdapter(
                 else -> ""
             }
             status.text = statusValue
-            status.visibility = if (statusValue.isBlank()) View.GONE else View.VISIBLE
+            status.visibility = when {
+                statusValue.isNotBlank() -> View.VISIBLE
+                rowIsGrid() -> View.INVISIBLE
+                else -> View.GONE
+            }
 
             latency.text = profile.latencyMs?.let { value ->
                 itemView.context.getString(
@@ -168,6 +176,9 @@ class ProfileAdapter(
             ping.setOnClickListener { onPing(profile) }
             action.setOnClickListener { onAction(profile) }
         }
+
+        private fun rowIsGrid(): Boolean =
+            itemViewType == VIEW_GRID
 
         private fun pingMethodLabel(stored: String): String = when (
             PingMethod.fromStored(stored, PingMethod.TCP_CONNECT)

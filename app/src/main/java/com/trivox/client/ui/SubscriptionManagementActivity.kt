@@ -300,17 +300,12 @@ class SubscriptionManagementActivity : ThemedActivity() {
                     )
             )
             url.text =
-                if (
-                    source.kind ==
-                    SubscriptionKind
-                        .NORDVPN
-                ) {
-                    getString(
-                        R.string
-                            .nordvpn_source_label
-                    )
-                } else {
-                    source.url
+                when {
+                    source.kind == SubscriptionKind.NORDVPN ->
+                        getString(R.string.nordvpn_source_label)
+                    source.url.isBlank() ->
+                        getString(R.string.local_subscription_label)
+                    else -> source.url
                 }
             summary.text =
                 getString(
@@ -374,7 +369,11 @@ class SubscriptionManagementActivity : ThemedActivity() {
             }
 
             update.isEnabled =
-                !operationBusy.get()
+                !operationBusy.get() &&
+                    (
+                        source.kind == SubscriptionKind.NORDVPN ||
+                            source.url.isNotBlank()
+                        )
             edit.isEnabled =
                 !operationBusy.get()
             toggle.isEnabled =
@@ -758,9 +757,10 @@ class SubscriptionManagementActivity : ThemedActivity() {
 
                 if (
                     name.isBlank() ||
-                    !validSubscriptionUrl(
-                        url
-                    )
+                    (
+                        url.isNotBlank() &&
+                            !validSubscriptionUrl(url)
+                        )
                 ) {
                     toast(
                         getString(
@@ -806,7 +806,7 @@ class SubscriptionManagementActivity : ThemedActivity() {
                 dialog.dismiss()
                 render()
 
-                if (source == null) {
+                if (source == null && saved.url.isNotBlank()) {
                     updateSources(
                         listOf(saved)
                     )
@@ -821,8 +821,12 @@ class SubscriptionManagementActivity : ThemedActivity() {
         val enabled =
             sourceRepository
                 .all()
-                .filter {
-                    it.enabled
+                .filter { source ->
+                    source.enabled &&
+                        (
+                            source.kind == SubscriptionKind.NORDVPN ||
+                                source.url.isNotBlank()
+                            )
                 }
 
         if (enabled.isEmpty()) {

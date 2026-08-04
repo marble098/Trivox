@@ -169,12 +169,48 @@ object XrayConfigBuilder {
             .coerceAtLeast(minimum)
 
         wireGuard.put("mtu", reliableMtu)
-        wireGuard.put("domainStrategy", "ForceIP")
         wireGuard.put("noKernelTun", true)
+        if (wireGuard.optInt("workers", 0) <= 0) {
+            wireGuard.put("workers", 2)
+        }
+
+        val normalizedAddresses = JSONArray()
+        val addresses = wireGuard.optJSONArray("address") ?: JSONArray()
+        var hasIpv6Address = false
+        for (index in 0 until addresses.length()) {
+            val raw = addresses.optString(index).trim()
+            if (raw.isBlank()) continue
+            hasIpv6Address = hasIpv6Address || ':' in raw
+            normalizedAddresses.put(
+                when {
+                    '/' in raw -> raw
+                    ':' in raw -> "$raw/128"
+                    else -> "$raw/32"
+                }
+            )
+        }
+        if (normalizedAddresses.length() > 0) {
+            wireGuard.put("address", normalizedAddresses)
+        }
+
+        val validStrategies = setOf(
+            "AsIs", "ForceIP", "ForceIPv4", "ForceIPv6", "ForceIPv4v6", "ForceIPv6v4"
+        )
+        val existingStrategy = wireGuard.optString("domainStrategy")
+        if (existingStrategy !in validStrategies) {
+            wireGuard.put(
+                "domainStrategy",
+                if (settings.ipv6 && hasIpv6Address) "ForceIP" else "ForceIPv4"
+            )
+        }
 
         val peers = wireGuard.optJSONArray("peers") ?: JSONArray()
         for (index in 0 until peers.length()) {
             val peer = peers.optJSONObject(index) ?: continue
+            val endpoint = peer.optString("endpoint").trim()
+                .removePrefix("udp://")
+                .removePrefix("UDP://")
+            if (endpoint.isNotBlank()) peer.put("endpoint", endpoint)
             if (peer.optInt("keepAlive", 0) <= 0) {
                 peer.put("keepAlive", WIREGUARD_KEEPALIVE_SECONDS)
             }

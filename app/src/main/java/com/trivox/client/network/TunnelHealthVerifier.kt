@@ -15,33 +15,45 @@ import kotlin.math.abs
  * Native process liveness alone is intentionally not treated as connectivity.
  */
 object TunnelHealthVerifier {
-    private val targets = listOf(
+    private val fallbackTargets = listOf(
         "https://cp.cloudflare.com/generate_204",
-        "https://connectivitycheck.gstatic.com/generate_204"
+        "https://connectivitycheck.gstatic.com/generate_204",
+        "https://www.gstatic.com/generate_204"
     )
 
     fun measure(
         settings: AppSettings,
         attempts: Int = 2,
-        budgetMs: Int = 12_000
+        budgetMs: Int = 12_000,
+        perProbeTimeoutMs: Int = MAX_PROBE_TIMEOUT_MS,
+        isCancelled: () -> Boolean = { false }
     ): PingResult {
         val timestamp = System.currentTimeMillis()
         val count = attempts.coerceIn(1, 3)
-        val budget = budgetMs.coerceIn(2_000, 20_000)
+        val budget = budgetMs.coerceIn(1_500, 20_000)
+        val probeTimeout = perProbeTimeoutMs.coerceIn(
+            MIN_PROBE_TIMEOUT_MS,
+            MAX_PROBE_TIMEOUT_MS
+        )
         val deadline = System.nanoTime() + budget * 1_000_000L
         val samples = mutableListOf<Long>()
         var lastFailure = "tunnel_timeout"
 
-        repeat(count) { sampleIndex ->
-            if (Thread.currentThread().isInterrupted) return@repeat
+        for (sampleIndex in 0 until count) {
+            if (cancelled(isCancelled)) {
+                return cancelledResult(timestamp, samples.size, count)
+            }
             var accepted = false
 
             for (proxyType in listOf(Proxy.Type.HTTP, Proxy.Type.SOCKS)) {
-                if (accepted) break
-                for (target in rotatedTargets(sampleIndex)) {
+                if (accepted || cancelled(isCancelled)) break
+                for (target in rotatedTargets(settings, sampleIndex)) {
+                    if (cancelled(isCancelled)) {
+                        return cancelledResult(timestamp, samples.size, count)
+                    }
                     val remainingMs = (
                         (deadline - System.nanoTime()) / 1_000_000L
-                    ).coerceAtMost(MAX_PROBE_TIMEOUT_MS.toLong()).toInt()
+                    ).coerceAtMost(probeTimeout.toLong()).toInt()
                     if (remainingMs < MIN_PROBE_TIMEOUT_MS) break
 
                     val result = probe(
@@ -83,8 +95,33 @@ object TunnelHealthVerifier {
         )
     }
 
-    private fun rotatedTargets(offset: Int): List<String> =
-        if (offset % targets.size == 0) targets else targets.drop(1) + targets.first()
+    private fun rotatedTargets(settings: AppSettings, offset: Int): List<String> {
+        val targets = buildList {
+            settings.testUrl.trim().takeIf(String::isNotBlank)?.let(::add)
+            addAll(fallbackTargets)
+        }.distinct()
+        if (targets.isEmpty() || offset % targets.size == 0) return targets
+        val shift = offset % targets.size
+        return targets.drop(shift) + targets.take(shift)
+    }
+
+    private fun cancelled(isCancelled: () -> Boolean): Boolean =
+        Thread.currentThread().isInterrupted || isCancelled()
+
+    private fun cancelledResult(
+        timestamp: Long,
+        completed: Int,
+        requested: Int
+    ) = PingResult(
+        method = PingMethod.XRAY_HTTP.name,
+        success = false,
+        latencyMs = null,
+        jitterMs = null,
+        successRatio = completed.toDouble() / requested.coerceAtLeast(1).toDouble(),
+        resolvedIp = "127.0.0.1",
+        timestamp = timestamp,
+        errorCategory = "cancelled"
+    )
 
     private fun probe(
         settings: AppSettings,
@@ -109,12 +146,12 @@ object TunnelHealthVerifier {
             connection.requestMethod = "GET"
             connection.setRequestProperty("Connection", "close")
             connection.setRequestProperty("Cache-Control", "no-cache, no-store")
-            connection.setRequestProperty("User-Agent", "Trivox-TunnelHealth/5")
+            connection.setRequestProperty("User-Agent", "Trivox-TunnelHealth/6")
 
             val started = System.nanoTime()
             val status = connection.responseCode
             val elapsed = ((System.nanoTime() - started) / 1_000_000L).coerceAtLeast(1L)
-            if (status == 204) {
+            if (status in 200..399) {
                 ProbeResult(latencyMs = elapsed)
             } else {
                 ProbeResult(errorCategory = "http_$status")
@@ -137,6 +174,6 @@ object TunnelHealthVerifier {
         val errorCategory: String? = null
     )
 
-    private const val MIN_PROBE_TIMEOUT_MS = 500
+    private const val MIN_PROBE_TIMEOUT_MS = 350
     private const val MAX_PROBE_TIMEOUT_MS = 4_500
 }
