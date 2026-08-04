@@ -1,0 +1,13 @@
+d8fd1c7ad1649b661e3172caca9fd5da0c3944833ecfbdc1690b7466529158d4  ./.github/workflows/openssh-binaries.yml
+6fd624df9b57c7f9132ba6828c3b74521717f685455edefb19cee8f40b6e92c3  ./PATCH_MANIFEST.json
+b6f7beef598798cd7c87de507821f8bbdb7fbfa8135cc61fecf8eedce4c31de8  ./README_FA.md
+34e23e16ff685cf8f61bded8db81357e650e23c0e5846c9051054c8cdb8a6ba3  ./VALIDATION_REPORT.txt
+1154b22d1125db43ef7ae193be67d674af5d2b3e8546797cc063580e9407781a  ./app/src/main/assets/openssh/README.txt
+9afafd7c4718ca7b529bca5988070b8f521fd4ad1ce5d0cddf45f23f0d556b83  ./app/src/main/assets/openssh/manifest.json
+1051663d283ddaa6c4b2b2e55ef7665ee39335e85a62eaf4d66e6b6b1027f84d  ./app/src/main/java/com/trivox/client/network/BatchRealDelayRunner.kt
+c773743a0d37df5dd4a4957c5f78fe5f51c54e5b7fe493e75ec67e65b9601ac9  ./app/src/main/java/com/trivox/client/ssh/OpenSshBinaryManager.kt
+eec224b8bca1040aa065600cb1f7fbd2f1030a7798111e1587beb297185d71ef  ./app/src/main/java/com/trivox/client/ssh/OpenSshCommand.kt
+a8deca78c20f97681529b0372c9d2873329d75ae4493b6e29b567820fe24a5d9  ./tools/apply_trivox_v11.py
+6024d4464487a020d6b6af10a4799098869ec765091da34c93abf68657bae2c3  ./tools/openssh/build-openssh-android.sh
+6353c2cfb784dbb547c27721f2f29a7499a7aeaf92e9659b1a91c5fdb3234c98  ./tools/openssh/prepare-termux-properties.py
+0e815515edc95ffd28cf9ee256da9aeb2344123f6b4c2266aa26af08c6414cdb  ./tools/openssh/write-manifest.py

@@ -248,7 +248,7 @@ class TrivoxVpnService : VpnService() {
             !profile.enabled
         ) {
             fail(
-                "Selected configuration is " +
+                "Selected config is " +
                     "unavailable or disabled"
             )
             return
@@ -398,7 +398,7 @@ class TrivoxVpnService : VpnService() {
             }.getOrElse {
                 CoreResult(
                     false,
-                    "VPN configuration " +
+                    "VPN config " +
                         "validation failed: " +
                         it.message
                 )

@@ -1,16 +1,25 @@
 {
-  "name": "Trivox v10 verified real-delay and connect patch",
-  "baseCommit": "c0aa496e835278626c3de8af96a9852af9994e5c",
-  "core": "Xray v26.7.28",
+  "name": "Trivox v11 dual real-delay, OpenSSH asset pipeline and subscription export patch",
+  "repository": "marble098/Trivox",
+  "branch": "main",
+  "baseCommit": "ca58af07f4a45408dde350534d2baf909cdf8289",
+  "installation": "Extract at repository root, run python3 tools/apply_trivox_v11.py . --check, then run without --check.",
   "changes": [
-    "Replace native-delay trust with live-core verified HTTPS probing",
-    "Clear false/stale Real Delay values on every failed profile",
-    "Use DNS-free strong route proof to shorten successful connect startup",
-    "Classify REALITY, WebSocket, TLS, DNS and config errors from bounded Xray logs",
-    "Expand URI/JSON compatibility for supported Xray 26.7.28 protocols and transports",
-    "Reject removed legacy HTTP/H2/H3 and QUIC transports instead of creating broken profiles",
-    "Preserve modern TLS pinning, ECH and REALITY ML-DSA fields while rejecting unsafe removed switches"
+    "Grouped verified Real Delay with bounded two-probe concurrency and per-profile fallback",
+    "Dual TCP/Real weighted sorting and fastest selection",
+    "Long-press subscription link export",
+    "Visible Configuration text shortened without renaming identifiers",
+    "ABI-aware OpenSSH client build, manifest, extraction and command infrastructure"
   ],
-  "filesAreComplete": true,
-  "pathsRelativeToRepositoryRoot": true
+  "openSshBinaryStatus": "BUILD_REQUIRED_VIA_INCLUDED_GITHUB_ACTIONS",
+  "validation": {
+    "pythonSyntax": true,
+    "shellSyntax": true,
+    "focusedKotlinCompilation": true,
+    "patchAnchors": true,
+    "patchIdempotency": true,
+    "resourceIdentifierSafety": true,
+    "fullGradleBuild": false,
+    "openSshCrossBuild": false
+  }
 }

@@ -1,0 +1,13 @@
+Trivox v11 package validation
+Base commit: ca58af07f4a45408dde350534d2baf909cdf8289
+
+PASS  Python sources compile with py_compile
+PASS  OpenSSH build shell passes bash -n
+PASS  New Kotlin sources compile against focused Android/Trivox API stubs
+PASS  Guarded patch --check on current-anchor fixture
+PASS  Patch application on current-anchor fixture
+PASS  Second patch application is idempotent
+PASS  Visible-text shortening preserves XML resource names and stable literal keys
+PASS  Required new files copied to repository-relative paths
+NOT RUN  Full Android Gradle test/lint (complete checkout/SDK/libXray unavailable)
+NOT RUN  OpenSSH Android cross-build (provided GitHub Actions workflow is the build gate)

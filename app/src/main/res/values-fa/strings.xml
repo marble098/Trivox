@@ -356,4 +356,7 @@
 <string name="subscription_cleanup_confirm">%1$d کانفیگ مطابق از %2$s حذف شود؟</string>
 <string name="subscription_cleanup_done">%1$d کانفیگ حذف شد.</string>
 <string name="subscription_cleanup_none">کانفیگ مطابقی پیدا نشد.</string>
+    <string name="subscription_export_links">خروجی لینک‌های کانفیگ</string>
+    <string name="subscription_export_none">در این ساب لینک کانفیگ قابل اشتراکی وجود ندارد.</string>
+    <string name="subscription_export_title">لینک‌های کانفیگ %1$s</string>
 </resources>

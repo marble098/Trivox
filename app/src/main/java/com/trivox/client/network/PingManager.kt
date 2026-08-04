@@ -512,25 +512,36 @@ class PingManager(
         callback: (ConfigProfile, PingResult) -> Unit
     ): List<Future<*>> {
         val real = settings.pingMethod == PingMethod.XRAY_HTTP
+        if (real && core != null && profiles.isNotEmpty()) {
+            return listOf(
+                xrayExecutor.submit(Callable {
+                    BatchRealDelayRunner(core).run(
+                        profiles = profiles,
+                        settings = settings,
+                        workDir = workDir,
+                        callback = callback,
+                        fallback = { profile ->
+                            realXray(
+                                profile = profile,
+                                settings = settings,
+                                workDir = workDir,
+                                attempts = BATCH_XRAY_ATTEMPTS,
+                                timeoutSeconds = BATCH_XRAY_TIMEOUT_SECONDS,
+                                allowSingleSample = false,
+                                maxTargetsPerSample = BATCH_XRAY_MAX_TARGETS
+                            )
+                        }
+                    )
+                })
+            )
+        }
+
         return submitBounded(
             profiles = profiles,
-            executor = if (real) xrayExecutor else tcpExecutor,
-            workers = if (real) 1 else MAX_TCP_WORKERS
+            executor = tcpExecutor,
+            workers = MAX_TCP_WORKERS
         ) { profile ->
-            val result = if (real) {
-                realXray(
-                    profile = profile,
-                    settings = settings,
-                    workDir = workDir,
-                    attempts = BATCH_XRAY_ATTEMPTS,
-                    timeoutSeconds = BATCH_XRAY_TIMEOUT_SECONDS,
-                    allowSingleSample = false,
-                    maxTargetsPerSample = BATCH_XRAY_MAX_TARGETS
-                )
-            } else {
-                measure(profile, settings, workDir)
-            }
-            callback(profile, result)
+            callback(profile, measure(profile, settings, workDir))
         }
     }
 

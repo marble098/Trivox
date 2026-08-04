@@ -1,0 +1,7 @@
+{
+  "format": 1,
+  "version": "BUILD_REQUIRED",
+  "packageName": "com.trivox.client",
+  "prefix": "/data/data/com.trivox.client/files/usr",
+  "abis": {}
+}

@@ -223,7 +223,7 @@ class ConnectionService : Service() {
             !profile.enabled
         ) {
             fail(
-                "Selected configuration is " +
+                "Selected config is " +
                     "unavailable or disabled"
             )
             return

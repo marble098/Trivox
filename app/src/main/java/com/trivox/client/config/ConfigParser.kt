@@ -28,7 +28,7 @@ object ConfigParser {
     fun parseText(input: String): List<ConfigProfile> {
         if (input.length > MAX_INPUT_CHARS) {
             throw ConfigParseException(
-                "Configuration input exceeds the ${MAX_INPUT_CHARS / 1024} KiB safety limit"
+                "Config input exceeds the ${MAX_INPUT_CHARS / 1024} KiB safety limit"
             )
         }
         val text = input.trim().removePrefix("\uFEFF")
@@ -77,7 +77,7 @@ object ConfigParser {
         }
         if (unique.isEmpty()) {
             throw ConfigParseException(
-                errors.joinToString("; ").ifBlank { "No supported configurations found" }
+                errors.joinToString("; ").ifBlank { "No supported configs found" }
             )
         }
         return unique.values.toList()
@@ -98,7 +98,7 @@ object ConfigParser {
     fun parseUri(raw: String): ConfigProfile {
         if (raw.length > MAX_LINE_CHARS) {
             throw ConfigParseException(
-                "Configuration URI exceeds the ${MAX_LINE_CHARS / 1024} KiB safety limit"
+                "Config URI exceeds the ${MAX_LINE_CHARS / 1024} KiB safety limit"
             )
         }
         return when (raw.substringBefore("://").lowercase(Locale.ROOT)) {
@@ -110,7 +110,7 @@ object ConfigParser {
             "http", "https" -> parseHttp(raw)
             "hy2", "hysteria2", "hysteria" -> parseHysteria2(raw)
             "wg", "wireguard" -> parseWireGuardUri(raw)
-            else -> throw ConfigParseException("Unsupported configuration scheme")
+            else -> throw ConfigParseException("Unsupported config scheme")
         }
     }
 

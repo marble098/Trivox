@@ -1199,6 +1199,7 @@ class MainActivity : ThemedActivity() {
                 }
         val labels = arrayOf(
             getString(R.string.subscription_open_settings),
+            getString(R.string.subscription_export_links),
             getString(R.string.subscription_delete_all_profiles),
             getString(R.string.subscription_delete_without_tcp),
             getString(R.string.subscription_delete_without_real),
@@ -1210,12 +1211,13 @@ class MainActivity : ThemedActivity() {
             .setItems(labels) { _, which ->
                 when (which) {
                     0 -> openSubscriptionManager(sourceId = subscriptionId)
-                    1 -> confirmSubscriptionProfileCleanup(
+                    1 -> exportSubscriptionLinks(source, profiles)
+                    2 -> confirmSubscriptionProfileCleanup(
                         source = source,
                         profiles = profiles,
                         title = labels[which]
                     ) { true }
-                    2 -> confirmSubscriptionProfileCleanup(
+                    3 -> confirmSubscriptionProfileCleanup(
                         source = source,
                         profiles = profiles,
                         title = labels[which]
@@ -1223,7 +1225,7 @@ class MainActivity : ThemedActivity() {
                         it.tcpTestStatus != TestStatus.ALIVE ||
                             it.tcpLatencyMs == null
                     }
-                    3 -> confirmSubscriptionProfileCleanup(
+                    4 -> confirmSubscriptionProfileCleanup(
                         source = source,
                         profiles = profiles,
                         title = labels[which]
@@ -1231,7 +1233,7 @@ class MainActivity : ThemedActivity() {
                         it.realTestStatus != TestStatus.ALIVE ||
                             it.realLatencyMs == null
                     }
-                    4 -> confirmSubscriptionProfileCleanup(
+                    5 -> confirmSubscriptionProfileCleanup(
                         source = source,
                         profiles = profiles,
                         title = labels[which]
@@ -1242,6 +1244,46 @@ class MainActivity : ThemedActivity() {
                 }
             }
             .show()
+    }
+
+
+    private fun exportSubscriptionLinks(
+        source: SubscriptionSource,
+        profiles: List<ConfigProfile>
+    ) {
+        val links = profiles
+            .asSequence()
+            .map { it.raw.trim() }
+            .filter(String::isNotBlank)
+            .filter { value ->
+                runCatching { URI(value).scheme }
+                    .getOrNull()
+                    ?.lowercase(Locale.ROOT) in SHARE_SCHEMES
+            }
+            .distinct()
+            .toList()
+
+        if (links.isEmpty()) {
+            toast(getString(R.string.subscription_export_none))
+            return
+        }
+
+        val payload = links.joinToString("\n")
+        val title = getString(
+            R.string.subscription_export_title,
+            source.name
+        )
+        startActivity(
+            Intent.createChooser(
+                Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TITLE, title)
+                    putExtra(Intent.EXTRA_SUBJECT, title)
+                    putExtra(Intent.EXTRA_TEXT, payload)
+                },
+                title
+            )
+        )
     }
 
     private fun confirmSubscriptionProfileCleanup(
@@ -1614,7 +1656,7 @@ class MainActivity : ThemedActivity() {
                 MAX_SHARED_INPUT_CHARS
             ) {
                 throw IllegalArgumentException(
-                    "Configuration file exceeds the 4 MiB safety limit"
+                    "Config file exceeds the 4 MiB safety limit"
                 )
             }
 
@@ -2110,17 +2152,18 @@ class MainActivity : ThemedActivity() {
     private fun selectFastestProfile() {
         val fastest =
             repository.all()
-                .filter {
-                    it.enabled &&
-                        it.tcpTestStatus ==
-                        TestStatus.ALIVE &&
-                        it.tcpLatencyMs !=
-                        null
-                }
-                .minByOrNull {
-                    it.tcpLatencyMs
-                        ?: Long.MAX_VALUE
-                }
+                .asSequence()
+                .filter { it.enabled }
+                .filter { dualLatencyTier(it) < 3 }
+                .minWithOrNull(
+                    compareBy<ConfigProfile> {
+                        dualLatencyTier(it)
+                    }.thenBy {
+                        dualLatencyScore(it)
+                    }.thenBy {
+                        it.name.lowercase(Locale.ROOT)
+                    }
+                )
 
         if (fastest == null) {
             toast(
@@ -2141,8 +2184,7 @@ class MainActivity : ThemedActivity() {
                 R.string
                     .fastest_selected,
                 fastest.name,
-                fastest.tcpLatencyMs
-                    ?: 0
+                dualLatencyScore(fastest)
             )
         )
     }
@@ -3282,6 +3324,35 @@ class MainActivity : ThemedActivity() {
         setBatchControlsEnabled(true)
     }
 
+    private fun dualLatencyTier(profile: ConfigProfile): Int {
+        val tcpAlive =
+            profile.tcpTestStatus == TestStatus.ALIVE &&
+                profile.tcpLatencyMs != null
+        val realAlive =
+            profile.realTestStatus == TestStatus.ALIVE &&
+                profile.realLatencyMs != null
+        return when {
+            tcpAlive && realAlive -> 0
+            realAlive -> 1
+            tcpAlive -> 2
+            else -> 3
+        }
+    }
+
+    private fun dualLatencyScore(profile: ConfigProfile): Long {
+        val tcp = profile.tcpLatencyMs
+            ?.takeIf { profile.tcpTestStatus == TestStatus.ALIVE }
+        val real = profile.realLatencyMs
+            ?.takeIf { profile.realTestStatus == TestStatus.ALIVE }
+        return when {
+            tcp != null && real != null ->
+                ((tcp * 40L) + (real * 60L)) / 100L
+            real != null -> real + SINGLE_METHOD_PENALTY_MS
+            tcp != null -> tcp + SINGLE_METHOD_PENALTY_MS
+            else -> Long.MAX_VALUE
+        }
+    }
+
     private fun profileComparator(
         settings:
             com.trivox.client.data
@@ -3296,17 +3367,8 @@ class MainActivity : ThemedActivity() {
                         > {
                         it.favorite
                     }
-                        .thenBy {
-                            if (
-                                it.tcpTestStatus ==
-                                TestStatus.ALIVE &&
-                                it.tcpLatencyMs != null
-                            ) 0 else 1
-                        }
-                        .thenBy {
-                            it.tcpLatencyMs
-                                ?: Long.MAX_VALUE
-                        }
+                        .thenBy(::dualLatencyTier)
+                        .thenBy(::dualLatencyScore)
                         .thenBy {
                             it.name.lowercase(
                                 Locale.ROOT
@@ -3315,19 +3377,10 @@ class MainActivity : ThemedActivity() {
 
                 ProfileSortMode
                     .LOWEST_LATENCY ->
-                    compareBy<
-                        ConfigProfile
-                        > {
-                        if (
-                            it.tcpTestStatus ==
-                            TestStatus.ALIVE &&
-                            it.tcpLatencyMs != null
-                        ) 0 else 1
-                    }
-                        .thenBy {
-                            it.tcpLatencyMs
-                                ?: Long.MAX_VALUE
-                        }
+                    compareBy<ConfigProfile>(
+                        ::dualLatencyTier
+                    )
+                        .thenBy(::dualLatencyScore)
                         .thenBy {
                             it.name.lowercase(
                                 Locale.ROOT
@@ -3407,7 +3460,7 @@ class MainActivity : ThemedActivity() {
                 MAX_SHARED_INPUT_CHARS
             ) {
                 Diagnostics.warning(
-                    "Rejected oversized shared configuration input"
+                    "Rejected oversized shared config input"
                 )
                 toast(
                     getString(
@@ -3494,6 +3547,7 @@ class MainActivity : ThemedActivity() {
         private const val
             PROFILE_SWITCH_DELAY_MS = 350L
         private const val PING_RESULT_FLUSH_MS = 220L
+        private const val SINGLE_METHOD_PENALTY_MS = 5_000L
         private const val MAIN_UI_PREFS = "main_ui"
         private const val KEY_ACTIVE_SUBSCRIPTION =
             "active_subscription_id"

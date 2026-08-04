@@ -106,10 +106,10 @@ class CoreManager(context: Context) {
             if (!validation.success) null to validation
             else json to CoreResult(true)
         }.getOrElse {
-            Diagnostics.recordThrowable("Core configuration preparation", it)
+            Diagnostics.recordThrowable("Core config preparation", it)
             null to CoreResult(
                 false,
-                "Configuration generation failed: " + it.message
+                "Config generation failed: " + it.message
             )
         }
 
@@ -132,7 +132,7 @@ class CoreManager(context: Context) {
             Diagnostics.recordThrowable("Validated core start", it)
             return CoreResult(
                 false,
-                "Configuration generation failed: " + it.message
+                "Config generation failed: " + it.message
             )
         }
         return startPrepared(json, request, protect, isCancelled)

@@ -89,7 +89,7 @@ class SubscriptionManager {
 
             if (profiles.isEmpty()) {
                 throw IOException(
-                    "Subscription contains no supported configurations"
+                    "Subscription contains no supported configs"
                 )
             }
 
