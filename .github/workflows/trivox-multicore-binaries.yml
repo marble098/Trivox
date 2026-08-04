@@ -26,6 +26,9 @@ jobs:
       - name: Apply source multicore patch
         run: python3 tools/patch-trivox-multicore.py
 
+      - name: Fix quick core button code
+        run: python3 tools/fix-quick-core-button.py
+
       - name: Download latest prerelease sing-box and mihomo assets
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -62,7 +65,7 @@ jobs:
       - name: Build release APKs
         run: |
           chmod +x ./gradlew || true
-          ./gradlew :app:assembleRelease --stacktrace
+          ./gradlew clean :app:assembleRelease --no-build-cache --stacktrace
 
       - uses: actions/upload-artifact@v4
         if: always()

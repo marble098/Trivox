@@ -102,7 +102,6 @@ class MainActivity : ThemedActivity() {
     private lateinit var quickToolsPanel: View
     private lateinit var quickToolsToggle: AppCompatImageButton
     private lateinit var modeSpinner: Spinner
-    private lateinit var quickCoreButton: Button
     private lateinit var refreshExitButton: Button
     private lateinit var copySummaryButton: Button
     private lateinit var subscriptionTabs: LinearLayout
@@ -293,7 +292,6 @@ class MainActivity : ThemedActivity() {
         quickToolsToggle =
             findViewById(R.id.quickToolsToggle)
         modeSpinner = findViewById(R.id.modeSpinner)
-        quickCoreButton = findViewById(R.id.quickCoreButton)
         refreshExitButton = findViewById(R.id.refreshExitButton)
         copySummaryButton = findViewById(R.id.copySummaryButton)
         subscriptionTabs = findViewById(R.id.subscriptionTabs)
@@ -487,6 +485,9 @@ class MainActivity : ThemedActivity() {
         quickCoreButton.setOnClickListener { showCorePicker() }
         renderCoreButton()
 
+        findViewById<Button>(R.id.quickCoreButton).setOnClickListener { showCorePicker() }
+        renderCoreButton()
+
         findViewById<EditText>(R.id.searchInput)
             .addTextChangedListener(
                 object : TextWatcher {
@@ -542,7 +543,7 @@ class MainActivity : ThemedActivity() {
 
     private fun renderCoreButton() {
         val settings = settingsRepository.load()
-        quickCoreButton.text = if (settings.smartCoreSelection) {
+        findViewById<Button>(R.id.quickCoreButton).text = if (settings.smartCoreSelection) {
             getString(R.string.core_smart_badge, settings.lastSmartCoreId.label)
         } else {
             getString(R.string.core_manual_badge, settings.coreId.label)
