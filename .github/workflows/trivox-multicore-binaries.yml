@@ -29,6 +29,11 @@ jobs:
       - name: Fix quick core button code
         run: python3 tools/fix-quick-core-button.py
 
+      - name: Verify quick core button cleanup
+        run: |
+          python3 tools/fix-quick-core-button.py
+          ! grep -n "[^.]quickCoreButton" app/src/main/java/com/trivox/client/ui/MainActivity.kt
+
       - name: Download latest prerelease sing-box and mihomo assets
         env:
           GITHUB_TOKEN: ${{ github.token }}
