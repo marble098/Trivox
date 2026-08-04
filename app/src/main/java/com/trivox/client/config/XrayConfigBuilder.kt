@@ -31,10 +31,13 @@ object Validators {
 }
 
 object XrayConfigBuilder {
-    private const val WIREGUARD_RELIABLE_MTU = 1360
-    private const val WIREGUARD_KEEPALIVE_SECONDS = 25
     private const val MAX_CUSTOM_DNS_SERVERS = 8
     private const val DNS_ROUTING_TAG = "dns-in"
+    private const val HAPPY_EYEBALLS_DELAY_MS = 180
+    private val TCP_DEFAULT_STREAM_PROTOCOLS = setOf(
+        "vless", "vmess", "trojan", "http", "socks", "shadowsocks"
+    )
+    private val UDP_FIRST_TRANSPORTS = setOf("mkcp", "kcp", "hysteria")
 
     private val privateNetworks = listOf(
         "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8",
@@ -113,17 +116,22 @@ object XrayConfigBuilder {
         val result = JSONArray()
         if (chain == null) {
             result.put(
-                normalizeOutbound(JSONObject(profile.outboundJson), settings)
-                    .put("tag", "proxy")
+                normalizeOutbound(
+                    JSONObject(profile.outboundJson),
+                    settings,
+                    allowAutomaticDnsStrategy = true
+                ).put("tag", "proxy")
             )
         } else {
             val bridge = normalizeOutbound(
                 JSONObject(chain.bridge.toString()),
-                settings
+                settings,
+                allowAutomaticDnsStrategy = false
             ).put("tag", "chain-bridge")
             val exit = normalizeOutbound(
                 JSONObject(chain.exit.toString()),
-                settings
+                settings,
+                allowAutomaticDnsStrategy = false
             )
                 .put("tag", "proxy")
                 .put(
@@ -143,28 +151,110 @@ object XrayConfigBuilder {
 
     private fun normalizeOutbound(
         outbound: JSONObject,
-        settings: AppSettings
+        settings: AppSettings,
+        allowAutomaticDnsStrategy: Boolean
     ): JSONObject {
-        when (outbound.optString("protocol").lowercase()) {
-            "shadowsocks" -> normalizeShadowsocks(outbound)
+        val normalized = XrayCompatibility.normalizeOutbound(outbound)
+        when (normalized.optString("protocol").lowercase()) {
+            "shadowsocks" -> normalizeShadowsocks(normalized)
             "wireguard" -> {
-                normalizeWireGuard(outbound, settings)
-                /*
-                 * Xray WireGuard does not support streamSettings. Removing an
-                 * inherited/null stream object avoids validation failures without
-                 * altering the provider's WireGuard settings.
-                 */
-                outbound.remove("streamSettings")
-                return outbound
+                normalizeWireGuard(normalized, settings)
+                normalized.remove("streamSettings")
+                return normalized
             }
         }
 
-        val stream = outbound.optJSONObject("streamSettings") ?: return outbound
-        val network = stream.optString("network").trim().lowercase()
-        if (network.isBlank() || network == "none" || network == "null") {
-            stream.put("network", "tcp")
+        applyNetworkTuning(
+            normalized,
+            settings,
+            allowAutomaticDnsStrategy
+        )
+        return normalized
+    }
+
+    private fun applyNetworkTuning(
+        outbound: JSONObject,
+        settings: AppSettings,
+        allowAutomaticDnsStrategy: Boolean
+    ) {
+        if (!settings.networkTuningEnabled) return
+
+        val protocol = outbound.optString("protocol").lowercase()
+        val stream = outbound.optJSONObject("streamSettings")
+            ?: if (protocol in TCP_DEFAULT_STREAM_PROTOCOLS) {
+                JSONObject().put("network", "tcp").also {
+                    outbound.put("streamSettings", it)
+                }
+            } else {
+                return
+            }
+
+        val transport = stream.optString("network", "tcp").lowercase()
+        if (transport in UDP_FIRST_TRANSPORTS) return
+
+        val sockopt = stream.optJSONObject("sockopt")
+            ?: JSONObject().also { stream.put("sockopt", it) }
+
+        if (settings.tcpFastOpen && !sockopt.has("tcpFastOpen")) {
+            sockopt.put("tcpFastOpen", true)
         }
-        return outbound
+        if (
+            settings.tcpKeepAliveIdleSeconds > 0 &&
+            !sockopt.has("tcpKeepAliveIdle")
+        ) {
+            sockopt.put("tcpKeepAliveIdle", settings.tcpKeepAliveIdleSeconds)
+        }
+        if (
+            settings.tcpKeepAliveIntervalSeconds > 0 &&
+            !sockopt.has("tcpKeepAliveInterval")
+        ) {
+            sockopt.put(
+                "tcpKeepAliveInterval",
+                settings.tcpKeepAliveIntervalSeconds
+            )
+        }
+        if (settings.tcpUserTimeoutMs > 0 && !sockopt.has("tcpUserTimeout")) {
+            sockopt.put("tcpUserTimeout", settings.tcpUserTimeoutMs)
+        }
+        if (settings.adaptiveHandshake && !sockopt.has("happyEyeballs")) {
+            val hasDialerProxy = sockopt.optString("dialerProxy").isNotBlank()
+            val hasTargetStrategy = outbound.optString("targetStrategy").isNotBlank()
+            var domainStrategy = sockopt.optString("domainStrategy").trim()
+
+            /*
+             * Happy Eyeballs only works when the proxy endpoint is resolved by
+             * Sockopt. For a normal single profile we can safely select UseIP,
+             * because dns() installs a narrowly-scoped local bootstrap for that
+             * endpoint. Proxy chains are deliberately excluded from automatic
+             * resolution: each hop can have a different hostname, and forcing
+             * the wrong resolver path can create a DNS-via-proxy loop.
+             */
+            if (
+                domainStrategy.isBlank() &&
+                allowAutomaticDnsStrategy &&
+                !hasDialerProxy &&
+                !hasTargetStrategy
+            ) {
+                domainStrategy = "UseIP"
+                sockopt.put("domainStrategy", domainStrategy)
+            }
+
+            if (
+                domainStrategy.isNotBlank() &&
+                !domainStrategy.equals("AsIs", ignoreCase = true) &&
+                !hasDialerProxy &&
+                !hasTargetStrategy
+            ) {
+                sockopt.put(
+                    "happyEyeballs",
+                    JSONObject()
+                        .put("prioritizeIPv6", false)
+                        .put("tryDelayMs", HAPPY_EYEBALLS_DELAY_MS)
+                        .put("interleave", 1)
+                        .put("maxConcurrentTry", 2)
+                )
+            }
+        }
     }
 
     private fun normalizeShadowsocks(outbound: JSONObject) {
@@ -210,12 +300,12 @@ object XrayConfigBuilder {
          */
         wireGuard.put(
             "mtu",
-            minOf(currentMtu, settings.mtu, WIREGUARD_RELIABLE_MTU)
+            minOf(currentMtu, settings.mtu, settings.wireGuardMtu)
                 .coerceAtLeast(576)
         )
         wireGuard.put("noKernelTun", true)
         if (wireGuard.optInt("workers", 0) <= 0) {
-            wireGuard.put("workers", 2)
+            wireGuard.put("workers", settings.wireGuardWorkers)
         }
 
         val addressValues = mutableListOf<String>()
@@ -262,12 +352,13 @@ object XrayConfigBuilder {
         )
         val existingStrategy = wireGuard.optString("domainStrategy")
         if (existingStrategy !in validStrategies) {
+            val configured = settings.wireGuardDomainStrategy
+                .takeIf { it in validStrategies }
             wireGuard.put(
                 "domainStrategy",
-                when {
+                configured ?: when {
                     hasIpv4Address && hasIpv6Address && settings.ipv6 ->
                         "ForceIPv4v6"
-
                     hasIpv6Address && settings.ipv6 -> "ForceIPv6"
                     else -> "ForceIPv4"
                 }
@@ -306,26 +397,18 @@ object XrayConfigBuilder {
             if (endpoint.isNotBlank()) peer.put("endpoint", endpoint)
 
             val keepAlive = when {
-                peer.optInt("keepAlive", -1) >= 0 ->
-                    peer.optInt("keepAlive")
-
-                peer.optInt("persistentKeepalive", -1) >= 0 ->
-                    peer.optInt("persistentKeepalive")
-
-                peer.optInt("persistent_keepalive", -1) >= 0 ->
-                    peer.optInt("persistent_keepalive")
-
-                else -> 0
-            }
+                peer.has("keepAlive") -> peer.optInt("keepAlive", 0)
+                peer.has("persistentKeepalive") ->
+                    peer.optInt("persistentKeepalive", 0)
+                peer.has("persistent_keepalive") ->
+                    peer.optInt("persistent_keepalive", 0)
+                else -> settings.wireGuardKeepAliveSeconds
+            }.coerceIn(0, 65_535)
             peer.remove("persistentKeepalive")
             peer.remove("persistent_keepalive")
-            peer.put(
-                "keepAlive",
-                keepAlive.takeIf { it > 0 }
-                    ?: WIREGUARD_KEEPALIVE_SECONDS
-            )
+            peer.put("keepAlive", keepAlive)
 
-            normalizeAllowedIps(peer)
+            normalizeAllowedIps(peer, settings)
 
             if (promotedReserved == null || promotedReserved == JSONObject.NULL) {
                 promotedReserved = peer.opt("reserved")
@@ -356,7 +439,10 @@ object XrayConfigBuilder {
             ?.let { target.put(canonical, it) }
     }
 
-    private fun normalizeAllowedIps(peer: JSONObject) {
+    private fun normalizeAllowedIps(
+        peer: JSONObject,
+        settings: AppSettings
+    ) {
         val raw = when {
             peer.has("allowedIPs") -> peer.opt("allowedIPs")
             peer.has("allowedIps") -> peer.opt("allowedIps")
@@ -380,9 +466,13 @@ object XrayConfigBuilder {
                 .map(String::trim)
                 .filterTo(values, String::isNotBlank)
         }
-        if (values.isNotEmpty()) {
-            peer.put("allowedIPs", JSONArray(values.distinct()))
+        val normalized = values.distinct().ifEmpty {
+            buildList {
+                add("0.0.0.0/0")
+                if (settings.ipv6) add("::/0")
+            }
         }
+        peer.put("allowedIPs", JSONArray(normalized))
     }
 
     private fun rejectAmneziaOnlyFields(value: JSONObject) {

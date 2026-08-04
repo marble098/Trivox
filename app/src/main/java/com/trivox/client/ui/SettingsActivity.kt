@@ -1,8 +1,8 @@
 package com.trivox.client.ui
 
 import android.content.Intent
-import android.net.Uri
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -14,7 +14,6 @@ import android.widget.EditText
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.appcompat.widget.SwitchCompat
 import androidx.appcompat.widget.Toolbar
@@ -22,6 +21,7 @@ import androidx.core.os.LocaleListCompat
 import com.trivox.client.BuildConfig
 import com.trivox.client.R
 import com.trivox.client.config.Validators
+import com.trivox.client.data.AppSettings
 import com.trivox.client.data.DnsMode
 import com.trivox.client.data.PingMethod
 import com.trivox.client.data.ProfileSortMode
@@ -33,825 +33,406 @@ import org.json.JSONObject
 import java.net.URI
 import java.security.MessageDigest
 
-class SettingsActivity :
-    ThemedActivity() {
-    override fun onCreate(
-        savedInstanceState: Bundle?
-    ) {
-        super.onCreate(
-            savedInstanceState
+class SettingsActivity : ThemedActivity() {
+    private lateinit var repository: SettingsRepository
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_settings)
+        findViewById<Toolbar>(R.id.toolbar).setNavigationOnClickListener { finish() }
+
+        repository = SettingsRepository(this)
+        val settings = repository.load()
+
+        val language = spinner(R.id.languageSpinner)
+        val darkMode = switch(R.id.darkModeSwitch)
+        val hideIp = check(R.id.hideIpOnMainCheck)
+        val sortMode = spinner(R.id.sortModeSpinner)
+        val pingMethod = spinner(R.id.pingMethodSpinner)
+        val pingSummary = text(R.id.pingMethodSummary)
+        val livePingEnabled = switch(R.id.livePingEnabledSwitch)
+        val livePingInterval = edit(R.id.livePingIntervalInput)
+        val pingAttempts = spinner(R.id.pingAttemptsSpinner)
+        val testUrl = edit(R.id.testUrlInput)
+        val networkTuning = switch(R.id.networkTuningEnabledSwitch)
+        val adaptiveHandshake = switch(R.id.adaptiveHandshakeSwitch)
+        val tcpFastOpen = switch(R.id.tcpFastOpenSwitch)
+        val tcpKeepAliveIdle = edit(R.id.tcpKeepAliveIdleInput)
+        val tcpKeepAliveInterval = edit(R.id.tcpKeepAliveIntervalInput)
+        val tcpUserTimeout = edit(R.id.tcpUserTimeoutInput)
+        val networkBufferSize = edit(R.id.networkBufferSizeInput)
+        val mixedPort = edit(R.id.socksPort)
+        val localProxyInVpn = check(R.id.localProxyInVpnCheck)
+        val mtu = edit(R.id.mtuInput)
+        val ipv6 = check(R.id.ipv6Check)
+        val blocking = check(R.id.blockingCheck)
+        val wireGuardMtu = edit(R.id.wireGuardMtuInput)
+        val wireGuardWorkers = spinner(R.id.wireGuardWorkersSpinner)
+        val wireGuardKeepAlive = edit(R.id.wireGuardKeepAliveInput)
+        val wireGuardHandshakeTimeout = edit(R.id.wireGuardHandshakeTimeoutInput)
+        val wireGuardDomainStrategy = spinner(R.id.wireGuardDomainStrategySpinner)
+        val dnsMode = spinner(R.id.dnsMode)
+        val customDns = edit(R.id.customDns)
+        val reconnectNetwork = check(R.id.reconnectNetwork)
+        val reconnectBoot = check(R.id.reconnectBoot)
+        val autoUpdate = check(R.id.autoUpdateCheck)
+        val updateStatus = text(R.id.updateStatus)
+
+        language.adapter = compactAdapter(
+            arrayOf(
+                getString(R.string.language_system),
+                getString(R.string.language_persian),
+                getString(R.string.language_english)
+            )
         )
-        setContentView(
-            R.layout.activity_settings
-        )
-
-        findViewById<Toolbar>(
-            R.id.toolbar
-        ).setNavigationOnClickListener {
-            finish()
-        }
-
-        val repository =
-            SettingsRepository(this)
-        val settings =
-            repository.load()
-
-        val language =
-            findViewById<Spinner>(
-                R.id.languageSpinner
-            )
-        val darkMode =
-            findViewById<SwitchCompat>(
-                R.id.darkModeSwitch
-            )
-        val hideIpOnMain =
-            findViewById<CheckBox>(
-                R.id.hideIpOnMainCheck
-            )
-        val localProxyInVpn =
-            findViewById<CheckBox>(
-                R.id.localProxyInVpnCheck
-            )
-        val autoUpdate =
-            findViewById<CheckBox>(
-                R.id.autoUpdateCheck
-            )
-        val updateStatus =
-            findViewById<TextView>(
-                R.id.updateStatus
-            )
-        val sortMode =
-            findViewById<Spinner>(
-                R.id.sortModeSpinner
-            )
-        val pingMethod =
-            findViewById<Spinner>(
-                R.id.pingMethodSpinner
-            )
-        val pingSummary =
-            findViewById<TextView>(
-                R.id.pingMethodSummary
-            )
-        val livePingEnabled =
-            findViewById<SwitchCompat>(
-                R.id.livePingEnabledSwitch
-            )
-        val livePingInterval =
-            findViewById<EditText>(
-                R.id.livePingIntervalInput
-            )
-        val pingAttempts =
-            findViewById<Spinner>(
-                R.id.pingAttemptsSpinner
-            )
-        val testUrl =
-            findViewById<EditText>(
-                R.id.testUrlInput
-            )
-        val mixedPort =
-            findViewById<EditText>(
-                R.id.socksPort
-            )
-        val mtu =
-            findViewById<EditText>(
-                R.id.mtuInput
-            )
-        val ipv6 =
-            findViewById<CheckBox>(
-                R.id.ipv6Check
-            )
-        val dns =
-            findViewById<Spinner>(
-                R.id.dnsMode
-            )
-        val custom =
-            findViewById<EditText>(
-                R.id.customDns
-            )
-        val network =
-            findViewById<CheckBox>(
-                R.id.reconnectNetwork
-            )
-        val boot =
-            findViewById<CheckBox>(
-                R.id.reconnectBoot
-            )
-        val blocking =
-            findViewById<CheckBox>(
-                R.id.blockingCheck
-            )
-
-        language.adapter =
-            compactAdapter(
-                arrayOf(
-                    getString(
-                        R.string
-                            .language_system
-                    ),
-                    getString(
-                        R.string
-                            .language_persian
-                    ),
-                    getString(
-                        R.string
-                            .language_english
-                    )
-                )
-            )
-
-        val currentTag =
-            AppCompatDelegate
-                .getApplicationLocales()
-                .toLanguageTags()
-                .substringBefore(',')
-                .lowercase()
-
+        val currentTag = AppCompatDelegate.getApplicationLocales()
+            .toLanguageTags()
+            .substringBefore(',')
+            .lowercase()
         language.setSelection(
             when {
-                currentTag
-                    .startsWith("fa") ->
-                    1
-
-                currentTag
-                    .startsWith("en") ->
-                    2
-
+                currentTag.startsWith("fa") -> 1
+                currentTag.startsWith("en") -> 2
                 else -> 0
             }
         )
 
-        darkMode.isChecked =
-            settings.themeMode == ThemeMode.DARK
-
-        darkMode.setOnCheckedChangeListener {
-                _, checked ->
-            val selected =
-                if (checked) {
-                    ThemeMode.DARK
-                } else {
-                    ThemeMode.LIGHT
-                }
-            val latest =
-                repository.load()
-
-            if (latest.themeMode == selected) {
-                return@setOnCheckedChangeListener
+        darkMode.isChecked = settings.themeMode == ThemeMode.DARK
+        darkMode.setOnCheckedChangeListener { _, checked ->
+            val selected = if (checked) ThemeMode.DARK else ThemeMode.LIGHT
+            val latest = repository.load()
+            if (latest.themeMode != selected) {
+                latest.themeMode = selected
+                latest.darkMode = checked
+                repository.save(latest)
+                applyNightModeWithMotion(
+                    if (checked) AppCompatDelegate.MODE_NIGHT_YES
+                    else AppCompatDelegate.MODE_NIGHT_NO
+                )
             }
-
-            latest.themeMode = selected
-            latest.darkMode = checked
-            repository.save(latest)
-
-            applyNightModeWithMotion(
-                if (checked) {
-                    AppCompatDelegate.MODE_NIGHT_YES
-                } else {
-                    AppCompatDelegate.MODE_NIGHT_NO
-                }
-            )
         }
 
-        val sortModes =
-            ProfileSortMode.entries
-
-        sortMode.adapter =
-            compactAdapter(
-                arrayOf(
-                    getString(
-                        R.string
-                            .sort_smart
-                    ),
-                    getString(
-                        R.string
-                            .sort_latency
-                    ),
-                    getString(
-                        R.string
-                            .sort_name
-                    ),
-                    getString(
-                        R.string
-                            .sort_recent
-                    ),
-                    getString(
-                        R.string
-                            .sort_group
-                    )
-                )
+        val sortModes = ProfileSortMode.entries
+        sortMode.adapter = compactAdapter(
+            arrayOf(
+                getString(R.string.sort_smart),
+                getString(R.string.sort_latency),
+                getString(R.string.sort_name),
+                getString(R.string.sort_recent),
+                getString(R.string.sort_group)
             )
-        sortMode.setSelection(
-            sortModes
-                .indexOf(
-                    settings.sortMode
-                )
-                .coerceAtLeast(0)
         )
+        sortMode.setSelection(sortModes.indexOf(settings.sortMode).coerceAtLeast(0))
 
-        val pingMethods =
-            PingMethod.entries
-
-        pingMethod.adapter =
-            compactAdapter(
-                arrayOf(
-                    getString(
-                        R.string
-                            .ping_method_tcp
-                    ),
-                    getString(
-                        R.string
-                            .ping_method_xray
-                    )
-                )
+        val pingMethods = PingMethod.entries
+        pingMethod.adapter = compactAdapter(
+            arrayOf(
+                getString(R.string.ping_method_tcp),
+                getString(R.string.ping_method_xray)
             )
+        )
         pingMethod.setSelection(
-            pingMethods
-                .indexOf(
-                    settings.livePingMethod
-                )
-                .coerceAtLeast(0)
+            pingMethods.indexOf(settings.livePingMethod).coerceAtLeast(0)
         )
-        pingMethod
-            .onItemSelectedListener =
-            object :
-                AdapterView
-                    .OnItemSelectedListener {
-                override fun onItemSelected(
-                    parent:
-                        AdapterView<*>?,
-                    view: View?,
-                    position: Int,
-                    id: Long
-                ) {
-                    pingSummary.setText(
-                        if (
-                            pingMethods[
-                                position
-                            ] ==
-                            PingMethod
-                                .TCP_CONNECT
-                        ) {
-                            R.string
-                                .ping_method_tcp_summary
-                        } else {
-                            R.string
-                                .ping_method_xray_summary
-                        }
-                    )
-                }
-
-                override fun onNothingSelected(
-                    parent:
-                        AdapterView<*>?
-                ) = Unit
+        pingMethod.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(
+                parent: AdapterView<*>?,
+                view: View?,
+                position: Int,
+                id: Long
+            ) {
+                pingSummary.setText(
+                    if (pingMethods[position] == PingMethod.TCP_CONNECT) {
+                        R.string.ping_method_tcp_summary
+                    } else {
+                        R.string.ping_method_xray_summary
+                    }
+                )
             }
 
-        livePingEnabled.isChecked = settings.livePingEnabled
-        livePingInterval.setText(
-            settings.livePingIntervalSeconds.toString()
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
+
+        val attempts = arrayOf("2", "3", "4", "5")
+        pingAttempts.adapter = compactAdapter(attempts)
+        pingAttempts.setSelection(settings.testAttempts.coerceIn(2, 5) - 2)
+
+        val workerValues = (1..8).map(Int::toString).toTypedArray()
+        wireGuardWorkers.adapter = compactAdapter(workerValues)
+        wireGuardWorkers.setSelection(settings.wireGuardWorkers.coerceIn(1, 8) - 1)
+
+        val wireGuardStrategies = AppSettings.WIREGUARD_DOMAIN_STRATEGIES
+        wireGuardDomainStrategy.adapter = compactAdapter(wireGuardStrategies.toTypedArray())
+        wireGuardDomainStrategy.setSelection(
+            wireGuardStrategies.indexOf(settings.wireGuardDomainStrategy)
+                .coerceAtLeast(0)
         )
 
-        val attempts =
+        val dnsModes = DnsMode.entries
+        dnsMode.adapter = compactAdapter(
             arrayOf(
-                "2",
-                "3",
-                "4",
-                "5"
+                getString(R.string.dns_imported),
+                getString(R.string.dns_default),
+                getString(R.string.dns_custom),
+                getString(R.string.dns_system),
+                getString(R.string.dns_direct),
+                getString(R.string.dns_proxy)
             )
+        )
+        dnsMode.setSelection(dnsModes.indexOf(settings.dnsMode).coerceAtLeast(0))
 
-        pingAttempts.adapter =
-            compactAdapter(attempts)
-        pingAttempts.setSelection(
-            settings
-                .testAttempts
-                .coerceIn(2, 5) -
-                2
-        )
-        testUrl.setText(
-            settings.testUrl
-        )
-        mixedPort.setText(
-            settings.socksPort
-                .toString()
-        )
-        mtu.setText(
-            settings.mtu
-                .toString()
-        )
-        ipv6.isChecked =
-            settings.ipv6
-        custom.setText(
-            settings.customDns
-                .joinToString("\n")
-        )
-        network.isChecked =
-            settings
-                .reconnectOnNetworkChange
-        boot.isChecked =
-            settings.reconnectOnBoot
-        blocking.isChecked =
-            settings.blocking
-        hideIpOnMain.isChecked =
-            settings.hideIpOnMain
-        localProxyInVpn.isChecked =
-            settings.localProxyInVpn
-        autoUpdate.isChecked =
-            settings.autoUpdateCheck
+        hideIp.isChecked = settings.hideIpOnMain
+        livePingEnabled.isChecked = settings.livePingEnabled
+        livePingInterval.setText(settings.livePingIntervalSeconds.toString())
+        testUrl.setText(settings.testUrl)
+        networkTuning.isChecked = settings.networkTuningEnabled
+        adaptiveHandshake.isChecked = settings.adaptiveHandshake
+        tcpFastOpen.isChecked = settings.tcpFastOpen
+        tcpKeepAliveIdle.setText(settings.tcpKeepAliveIdleSeconds.toString())
+        tcpKeepAliveInterval.setText(settings.tcpKeepAliveIntervalSeconds.toString())
+        tcpUserTimeout.setText(settings.tcpUserTimeoutMs.toString())
+        networkBufferSize.setText(settings.networkBufferSizeKb.toString())
+        mixedPort.setText(settings.socksPort.toString())
+        localProxyInVpn.isChecked = settings.localProxyInVpn
+        mtu.setText(settings.mtu.toString())
+        ipv6.isChecked = settings.ipv6
+        blocking.isChecked = settings.blocking
+        wireGuardMtu.setText(settings.wireGuardMtu.toString())
+        wireGuardKeepAlive.setText(settings.wireGuardKeepAliveSeconds.toString())
+        wireGuardHandshakeTimeout.setText(settings.wireGuardHandshakeTimeoutMs.toString())
+        customDns.setText(settings.customDns.joinToString("\n"))
+        reconnectNetwork.isChecked = settings.reconnectOnNetworkChange
+        reconnectBoot.isChecked = settings.reconnectOnBoot
+        autoUpdate.isChecked = settings.autoUpdateCheck
 
-        findViewById<Button>(
-            R.id.telegramProxyButton
-        ).setOnClickListener {
-            val port = mixedPort.text.toString()
-                .toIntOrNull()
-                ?.takeIf { it in 1..65535 }
+        findViewById<Button>(R.id.manageSubscriptionsButton).setOnClickListener {
+            startActivity(Intent(this, SubscriptionManagementActivity::class.java))
+        }
+        updateSubscriptionCount()
+
+        findViewById<Button>(R.id.telegramProxyButton).setOnClickListener {
+            val port = mixedPort.text.toString().toIntOrNull()
+                ?.takeIf(Validators::validPort)
                 ?: settings.socksPort
-            val uri = Uri.parse(
-                "tg://socks?server=localhost&port=$port"
-            )
             runCatching {
                 startActivity(
-                    Intent(Intent.ACTION_VIEW, uri)
+                    Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse("tg://socks?server=localhost&port=$port")
+                    )
                 )
             }.onFailure {
-                Toast.makeText(
-                    this,
-                    R.string.telegram_not_available,
-                    Toast.LENGTH_LONG
-                ).show()
+                toast(R.string.telegram_not_available)
             }
         }
 
-        findViewById<Button>(
-            R.id.checkUpdateButton
-        ).setOnClickListener {
-            updateStatus.setText(
-                R.string.update_checking
-            )
-            UpdateChecker.check(
-                this,
-                showCurrentResult = true
-            ) { result ->
+        findViewById<Button>(R.id.checkUpdateButton).setOnClickListener {
+            updateStatus.setText(R.string.update_checking)
+            UpdateChecker.check(this, showCurrentResult = true) { result ->
                 updateStatus.text = when {
-                    result.available ->
-                        getString(
-                            R.string.update_found,
-                            result.version
-                        )
+                    result.available -> getString(R.string.update_found, result.version)
                     result.error.isNotBlank() ->
-                        getString(
-                            R.string.update_check_failed,
-                            result.error
-                        )
-                    else ->
-                        getString(
-                            R.string.update_current
-                        )
+                        getString(R.string.update_check_failed, result.error)
+                    else -> getString(R.string.update_current)
                 }
-            }
-        }
-
-        val dnsModes =
-            DnsMode.entries
-
-        dns.adapter =
-            compactAdapter(
-                arrayOf(
-                    getString(
-                        R.string
-                            .dns_imported
-                    ),
-                    getString(
-                        R.string
-                            .dns_default
-                    ),
-                    getString(
-                        R.string
-                            .dns_custom
-                    ),
-                    getString(
-                        R.string
-                            .dns_system
-                    ),
-                    getString(
-                        R.string
-                            .dns_direct
-                    ),
-                    getString(
-                        R.string
-                            .dns_proxy
-                    )
-                )
-            )
-
-        dns.setSelection(
-            dnsModes
-                .indexOf(
-                    settings.dnsMode
-                )
-                .coerceAtLeast(0)
-        )
-
-        val subscriptionCount =
-            SubscriptionRepository(this)
-                .all()
-                .size
-
-        findViewById<Button>(
-            R.id.manageSubscriptionsButton
-        ).apply {
-            text =
-                getString(
-                    R.string
-                        .manage_subscriptions_count,
-                    subscriptionCount
-                )
-            setOnClickListener {
-                startActivity(
-                    Intent(
-                        this@SettingsActivity,
-                        SubscriptionManagementActivity::
-                            class.java
-                    )
-                )
             }
         }
 
         renderAbout()
 
-        findViewById<Button>(
-            R.id.saveButton
-        ).setOnClickListener {
-            val port =
-                mixedPort.text
-                    .toString()
-                    .toIntOrNull()
-            val mtuValue =
-                mtu.text
-                    .toString()
-                    .toIntOrNull()
-            val testUrlValue =
-                testUrl.text
-                    .toString()
-                    .trim()
-            val livePingIntervalValue =
-                livePingInterval.text
-                    .toString()
-                    .toIntOrNull()
+        findViewById<Button>(R.id.saveButton).setOnClickListener {
+            val port = mixedPort.intValue()
+            val mtuValue = mtu.intValue()
+            val liveIntervalValue = livePingInterval.intValue()
+            val keepIdleValue = tcpKeepAliveIdle.intValue()
+            val keepIntervalValue = tcpKeepAliveInterval.intValue()
+            val userTimeoutValue = tcpUserTimeout.intValue()
+            val bufferValue = networkBufferSize.intValue()
+            val wgMtuValue = wireGuardMtu.intValue()
+            val wgKeepAliveValue = wireGuardKeepAlive.intValue()
+            val wgHandshakeValue = wireGuardHandshakeTimeout.intValue()
+            val testUrlValue = testUrl.text.toString().trim()
+            val dnsValues = customDns.text.lineSequence()
+                .map(String::trim)
+                .filter(String::isNotEmpty)
+                .distinct()
+                .toList()
 
-            val dnsValues =
-                custom.text
-                    .lineSequence()
-                    .map(
-                        String::trim
-                    )
-                    .filter(
-                        String::isNotEmpty
-                    )
-                    .toList()
-
-            if (
-                port == null ||
-                !Validators
-                    .validPort(port) ||
-                mtuValue !in
-                576..9000
-            ) {
-                Toast.makeText(
-                    this,
-                    R.string.invalid_port,
-                    Toast.LENGTH_LONG
-                ).show()
+            val basicValid =
+                port != null && Validators.validPort(port) &&
+                    mtuValue != null && mtuValue in 576..9000 &&
+                    liveIntervalValue != null && liveIntervalValue in 3..300 &&
+                    validTestUrl(testUrlValue)
+            if (!basicValid) {
+                toast(R.string.invalid_port)
                 return@setOnClickListener
             }
 
-            if (
-                livePingIntervalValue !in 3..300
-            ) {
-                Toast.makeText(
-                    this,
-                    R.string.invalid_live_ping_interval,
-                    Toast.LENGTH_LONG
-                ).show()
+            val tuningValid =
+                keepIdleValue != null && keepIdleValue in 0..3600 &&
+                    keepIntervalValue != null && keepIntervalValue in 0..600 &&
+                    userTimeoutValue != null && userTimeoutValue in 0..120_000 &&
+                    bufferValue != null && bufferValue in 8..256 &&
+                    wgMtuValue != null && wgMtuValue in 576..9000 &&
+                    wgKeepAliveValue != null && wgKeepAliveValue in 0..300 &&
+                    wgHandshakeValue != null && wgHandshakeValue in 5_000..60_000
+            if (!tuningValid) {
+                toast(R.string.invalid_network_tuning_v9)
                 return@setOnClickListener
             }
 
+            val selectedDnsMode = dnsModes[dnsMode.selectedItemPosition]
             if (
-                !validTestUrl(
-                    testUrlValue
-                )
+                selectedDnsMode == DnsMode.CUSTOM &&
+                (dnsValues.isEmpty() || !dnsValues.all(Validators::validateDns))
             ) {
-                Toast.makeText(
-                    this,
-                    R.string
-                        .invalid_test_url,
-                    Toast.LENGTH_LONG
-                ).show()
+                toast(R.string.invalid_dns)
                 return@setOnClickListener
             }
 
-            if (
-                dnsModes[
-                    dns.selectedItemPosition
-                ] ==
-                DnsMode.CUSTOM &&
-                (
-                    dnsValues.isEmpty() ||
-                        !dnsValues.all(
-                            Validators::
-                                validateDns
-                        )
-                    )
-            ) {
-                Toast.makeText(
-                    this,
-                    R.string.invalid_dns,
-                    Toast.LENGTH_LONG
-                ).show()
-                return@setOnClickListener
+            settings.socksPort = port!!
+            settings.httpPort = port
+            settings.mtu = mtuValue!!
+            settings.ipv6 = ipv6.isChecked
+            settings.dnsMode = selectedDnsMode
+            settings.customDns = dnsValues
+            settings.reconnectOnNetworkChange = reconnectNetwork.isChecked
+            settings.reconnectOnBoot = reconnectBoot.isChecked
+            settings.blocking = blocking.isChecked
+            settings.themeMode = if (darkMode.isChecked) ThemeMode.DARK else ThemeMode.LIGHT
+            settings.darkMode = darkMode.isChecked
+            settings.hideIpOnMain = hideIp.isChecked
+            settings.localProxyInVpn = localProxyInVpn.isChecked
+            settings.autoUpdateCheck = autoUpdate.isChecked
+            settings.sortMode = sortModes[sortMode.selectedItemPosition]
+            settings.livePingMethod = pingMethods[pingMethod.selectedItemPosition]
+            // Keep the original batch-test default; the main screen still has
+            // dedicated TCP Ping and Real Delay actions.
+            settings.pingMethod = PingMethod.TCP_CONNECT
+            settings.livePingEnabled = livePingEnabled.isChecked
+            settings.livePingIntervalSeconds = liveIntervalValue!!
+            settings.testAttempts = attempts[pingAttempts.selectedItemPosition].toInt()
+            settings.testUrl = testUrlValue
+            settings.networkTuningEnabled = networkTuning.isChecked
+            settings.adaptiveHandshake = adaptiveHandshake.isChecked
+            settings.tcpFastOpen = tcpFastOpen.isChecked
+            settings.tcpKeepAliveIdleSeconds = keepIdleValue!!
+            settings.tcpKeepAliveIntervalSeconds = keepIntervalValue!!
+            settings.tcpUserTimeoutMs = userTimeoutValue!!
+            settings.networkBufferSizeKb = bufferValue!!
+            settings.wireGuardMtu = wgMtuValue!!
+            settings.wireGuardWorkers = workerValues[
+                wireGuardWorkers.selectedItemPosition
+            ].toInt()
+            settings.wireGuardKeepAliveSeconds = wgKeepAliveValue!!
+            settings.wireGuardHandshakeTimeoutMs = wgHandshakeValue!!
+            settings.wireGuardDomainStrategy = wireGuardStrategies[
+                wireGuardDomainStrategy.selectedItemPosition
+            ]
+            repository.save(settings.normalize())
+
+            val localeTags = when (language.selectedItemPosition) {
+                1 -> "fa"
+                2 -> "en"
+                else -> ""
             }
-
-            settings.socksPort =
-                port
-            settings.httpPort =
-                port
-            settings.mtu =
-                mtuValue!!
-            settings.ipv6 =
-                ipv6.isChecked
-            settings.dnsMode =
-                dnsModes[
-                    dns.selectedItemPosition
-                ]
-            settings.customDns =
-                dnsValues
-            settings
-                .reconnectOnNetworkChange =
-                network.isChecked
-            settings.reconnectOnBoot =
-                boot.isChecked
-            settings.blocking =
-                blocking.isChecked
-            settings.themeMode =
-                if (darkMode.isChecked) {
-                    ThemeMode.DARK
-                } else {
-                    ThemeMode.LIGHT
-                }
-            settings.darkMode =
-                darkMode.isChecked
-            settings.hideIpOnMain =
-                hideIpOnMain.isChecked
-            settings.localProxyInVpn =
-                localProxyInVpn.isChecked
-            settings.autoUpdateCheck =
-                autoUpdate.isChecked
-            settings.sortMode =
-                sortModes[
-                    sortMode
-                        .selectedItemPosition
-                ]
-            settings.livePingMethod =
-                pingMethods[
-                    pingMethod
-                        .selectedItemPosition
-                ]
-            settings.livePingEnabled =
-                livePingEnabled.isChecked
-            settings.livePingIntervalSeconds =
-                livePingIntervalValue!!
-            settings.pingMethod =
-                PingMethod.TCP_CONNECT
-            settings.testAttempts =
-                attempts[
-                    pingAttempts
-                        .selectedItemPosition
-                ].toInt()
-            settings.testUrl =
-                testUrlValue
-
-            repository.save(settings)
-
-            val localeTags =
-                when (
-                    language
-                        .selectedItemPosition
-                ) {
-                    1 -> "fa"
-                    2 -> "en"
-                    else -> ""
-                }
-
-            getSharedPreferences(
-                "locale",
-                MODE_PRIVATE
-            ).edit()
-                .putBoolean(
-                    "initialized",
-                    true
-                )
+            getSharedPreferences("locale", MODE_PRIVATE)
+                .edit()
+                .putBoolean("initialized", true)
                 .apply()
-
-            Toast.makeText(
-                this,
-                R.string.settings_saved,
-                Toast.LENGTH_SHORT
-            ).show()
-
-            AppCompatDelegate
-                .setApplicationLocales(
-                    LocaleListCompat
-                        .forLanguageTags(
-                            localeTags
-                        )
-                )
-
+            toast(R.string.settings_saved, Toast.LENGTH_SHORT)
+            AppCompatDelegate.setApplicationLocales(
+                LocaleListCompat.forLanguageTags(localeTags)
+            )
             finish()
         }
     }
 
     override fun onResume() {
         super.onResume()
-
-        val button =
-            findViewById<Button>(
-                R.id.manageSubscriptionsButton
-            )
-        val count =
-            SubscriptionRepository(this)
-                .all()
-                .size
-        button.text =
-            getString(
-                R.string
-                    .manage_subscriptions_count,
-                count
-            )
+        if (::repository.isInitialized) updateSubscriptionCount()
     }
 
-    private fun validTestUrl(
-        value: String
-    ): Boolean =
-        runCatching {
-            URI(value)
-        }.getOrNull()
-            ?.let { uri ->
-                uri.scheme
-                    ?.lowercase() in
-                    setOf(
-                        "http",
-                        "https"
-                    ) &&
-                    !uri.host
-                        .isNullOrBlank() &&
-                    uri.userInfo == null
-            } == true
+    private fun updateSubscriptionCount() {
+        findViewById<Button>(R.id.manageSubscriptionsButton).text = getString(
+            R.string.manage_subscriptions_count,
+            SubscriptionRepository(this).all().size
+        )
+    }
+
+    private fun validTestUrl(value: String): Boolean = runCatching {
+        URI(value)
+    }.getOrNull()?.let { uri ->
+        uri.scheme?.lowercase() in setOf("http", "https") &&
+            !uri.host.isNullOrBlank() &&
+            uri.userInfo == null
+    } == true
 
     private fun renderAbout() {
-        findViewById<TextView>(
-            R.id.aboutCreators
-        ).text =
-            getString(
-                R.string
-                    .about_creators_value
-            )
-
-        findViewById<TextView>(
-            R.id.aboutAppVersion
-        ).text =
-            getString(
-                R.string
-                    .about_app_version_value,
-                BuildConfig.VERSION_NAME,
-                BuildConfig.VERSION_CODE,
-                BuildConfig.BUILD_TYPE,
-                BuildConfig.GIT_SHA
-            )
-
-        findViewById<TextView>(
-            R.id.aboutCoreVersion
-        ).text =
-            getString(
-                R.string
-                    .about_core_version_value,
-                readCoreVersion()
-            )
-
-        findViewById<TextView>(
-            R.id.aboutSigning
-        ).text =
-            getString(
-                R.string
-                    .about_signing_value,
-                signingCertificateSha256()
-            )
-
-        findViewById<TextView>(
-            R.id.aboutPackage
-        ).text =
-            getString(
-                R.string
-                    .about_package_value,
-                packageName
-            )
+        text(R.id.aboutCreators).text = getString(R.string.about_creators_value)
+        text(R.id.aboutAppVersion).text = getString(
+            R.string.about_app_version_value,
+            BuildConfig.VERSION_NAME,
+            BuildConfig.VERSION_CODE,
+            BuildConfig.BUILD_TYPE,
+            BuildConfig.GIT_SHA
+        )
+        text(R.id.aboutCoreVersion).text = getString(
+            R.string.about_core_version_value,
+            readCoreVersion()
+        )
+        text(R.id.aboutSigning).text = getString(
+            R.string.about_signing_value,
+            signingCertificateSha256()
+        )
+        text(R.id.aboutPackage).text = getString(
+            R.string.about_package_value,
+            packageName
+        )
     }
 
-    private fun readCoreVersion():
-        String =
-        runCatching {
-            assets
-                .open(
-                    "core-manifest.json"
-                )
-                .bufferedReader()
-                .use {
-                    JSONObject(
-                        it.readText()
-                    ).optString(
-                        "version",
-                        "unknown"
-                    )
-                }
-        }.getOrDefault(
-            "unknown"
-        )
-
-    private fun signingCertificateSha256():
-        String =
-        runCatching {
-            val packageInfo =
-                if (
-                    Build.VERSION.SDK_INT >=
-                    Build.VERSION_CODES.P
-                ) {
-                    packageManager
-                        .getPackageInfo(
-                            packageName,
-                            PackageManager
-                                .GET_SIGNING_CERTIFICATES
-                        )
-                } else {
-                    @Suppress(
-                        "DEPRECATION"
-                    )
-                    packageManager
-                        .getPackageInfo(
-                            packageName,
-                            PackageManager
-                                .GET_SIGNATURES
-                        )
-                }
-
-            val signatures =
-                if (
-                    Build.VERSION.SDK_INT >=
-                    Build.VERSION_CODES.P
-                ) {
-                    packageInfo
-                        .signingInfo
-                        ?.apkContentsSigners
-                } else {
-                    @Suppress(
-                        "DEPRECATION"
-                    )
-                    packageInfo.signatures
-                }
-
-            val certificate =
-                signatures
-                    ?.firstOrNull()
-                    ?.toByteArray()
-                    ?: error(
-                        "No APK signer"
-                    )
-
-            MessageDigest
-                .getInstance(
-                    "SHA-256"
-                )
-                .digest(certificate)
-                .joinToString(":") {
-                    "%02X".format(
-                        it.toInt() and
-                            0xff
-                    )
-                }
-        }.getOrDefault(
-            getString(
-                R.string
-                    .about_unavailable
-            )
-        )
-
-    private fun compactAdapter(
-        values: Array<String>
-    ): ArrayAdapter<String> =
-        ArrayAdapter(
-            this,
-            R.layout.spinner_item,
-            values
-        ).also {
-            it.setDropDownViewResource(
-                R.layout
-                    .spinner_dropdown_item
-            )
+    private fun readCoreVersion(): String = runCatching {
+        assets.open("core-manifest.json").bufferedReader().use {
+            JSONObject(it.readText()).optString("version", "unknown")
         }
+    }.getOrDefault("unknown")
+
+    private fun signingCertificateSha256(): String = runCatching {
+        val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            packageManager.getPackageInfo(
+                packageName,
+                PackageManager.GET_SIGNING_CERTIFICATES
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
+        }
+        val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            packageInfo.signingInfo?.apkContentsSigners
+        } else {
+            @Suppress("DEPRECATION")
+            packageInfo.signatures
+        }
+        val certificate = signatures?.firstOrNull()?.toByteArray()
+            ?: error("No APK signer")
+        MessageDigest.getInstance("SHA-256")
+            .digest(certificate)
+            .joinToString(":") { "%02X".format(it.toInt() and 0xff) }
+    }.getOrDefault(getString(R.string.about_unavailable))
+
+    private fun compactAdapter(values: Array<String>): ArrayAdapter<String> =
+        ArrayAdapter(this, R.layout.spinner_item, values).also {
+            it.setDropDownViewResource(R.layout.spinner_dropdown_item)
+        }
+
+    private fun EditText.intValue(): Int? = text.toString().trim().toIntOrNull()
+    private fun spinner(id: Int): Spinner = findViewById(id)
+    private fun edit(id: Int): EditText = findViewById(id)
+    private fun check(id: Int): CheckBox = findViewById(id)
+    private fun switch(id: Int): SwitchCompat = findViewById(id)
+    private fun text(id: Int): TextView = findViewById(id)
+
+    private fun toast(message: Int, duration: Int = Toast.LENGTH_LONG) {
+        Toast.makeText(this, message, duration).show()
+    }
 }

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="network_tuning_section">بهینه‌سازی اتصال و شبکه</string>
+    <string name="network_tuning_summary">فقط گزینه‌های مستند و امن سوکت Xray اعمال می‌شوند و مقادیر صریح کانفیگ تغییر نمی‌کنند. اندازه بافر مربوط به خواندن‌های محدود بخش کاتلین است، نه ترافیک بومی libXray.</string>
+    <string name="network_tuning_enabled">فعال‌سازی بهینه‌سازی امن شبکه</string>
+    <string name="adaptive_handshake">هندشیک سریع و بررسی تطبیقی مسیر واقعی</string>
+    <string name="tcp_fast_open">درخواست TCP Fast Open در دستگاه‌های سازگار</string>
+    <string name="tcp_keepalive_idle">زمان بیکاری Keep-Alive در TCP (ثانیه؛ صفر یعنی عدم اعمال)</string>
+    <string name="tcp_keepalive_interval">فاصله Keep-Alive در TCP (ثانیه؛ صفر یعنی عدم اعمال)</string>
+    <string name="tcp_user_timeout">مهلت TCP User Timeout (میلی‌ثانیه؛ صفر یعنی عدم اعمال)</string>
+    <string name="network_buffer_size_kb">بافر محدود شبکه در برنامه (کیبی‌بایت؛ ۸ تا ۲۵۶)</string>
+    <string name="wireguard_section_v9">وایرگارد مبتنی بر Xray 26.7.28</string>
+    <string name="wireguard_summary_v9">تنظیمات خروجی وایرگاردِ userspace در Xray را کنترل می‌کند. MTU پایین‌تر و مقادیر صریح واردشده همیشه اولویت دارند. فیلدهای اختصاصی AmneziaWG همچنان به هسته سازگار AmneziaWG نیاز دارند.</string>
+    <string name="wireguard_mtu_v9">سقف MTU وایرگارد (۵۷۶ تا ۹۰۰۰)</string>
+    <string name="wireguard_workers_v9">تعداد Worker وایرگارد (۱ تا ۸)</string>
+    <string name="wireguard_keepalive_v9">Keep-Alive پیش‌فرض Peer (ثانیه؛ صفر یعنی غیرفعال)</string>
+    <string name="wireguard_handshake_timeout_v9">بودجه بررسی شروع اتصال (میلی‌ثانیه؛ ۵۰۰۰ تا ۶۰۰۰۰)</string>
+    <string name="wireguard_domain_strategy_v9">راهبرد دامنه وایرگارد</string>
+    <string name="invalid_network_tuning_v9">یک یا چند مقدار بهینه‌سازی شبکه یا وایرگارد خارج از محدوده مجاز است.</string>
+</resources>

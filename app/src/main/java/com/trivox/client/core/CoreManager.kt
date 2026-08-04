@@ -6,6 +6,7 @@ import com.trivox.client.data.ConnectionMode
 import com.trivox.client.data.ConnectionState
 import com.trivox.client.network.TunnelHealthVerifier
 import com.trivox.client.util.Diagnostics
+import java.lang.ref.WeakReference
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -22,7 +23,8 @@ object ConnectionRuntime {
     )
 
     private val snapshot = AtomicReference(Snapshot())
-    private val listeners = CopyOnWriteArrayList<(Snapshot) -> Unit>()
+    private val listeners =
+        CopyOnWriteArrayList<WeakReference<(Snapshot) -> Unit>>()
     private val sessionCounter = AtomicLong(0)
 
     fun current(): Snapshot = snapshot.get()
@@ -49,7 +51,10 @@ object ConnectionRuntime {
     }
 
     fun addListener(listener: (Snapshot) -> Unit) {
-        listeners += listener
+        pruneListeners()
+        if (listeners.none { it.get() === listener }) {
+            listeners += WeakReference(listener)
+        }
         runCatching { listener(snapshot.get()) }
             .onFailure {
                 Diagnostics.warning("Connection listener failed: " + it.message)
@@ -57,16 +62,34 @@ object ConnectionRuntime {
     }
 
     private fun notifyListeners(value: Snapshot) {
-        listeners.forEach { listener ->
-            runCatching { listener(value) }
-                .onFailure {
-                    Diagnostics.warning("Connection listener failed: " + it.message)
-                }
+        listeners.forEach { reference ->
+            val listener = reference.get()
+            if (listener == null) {
+                listeners.remove(reference)
+            } else {
+                runCatching { listener(value) }
+                    .onFailure {
+                        Diagnostics.warning(
+                            "Connection listener failed: " + it.message
+                        )
+                    }
+            }
         }
     }
 
     fun removeListener(listener: (Snapshot) -> Unit) {
-        listeners -= listener
+        listeners.forEach { reference ->
+            val current = reference.get()
+            if (current == null || current === listener) {
+                listeners.remove(reference)
+            }
+        }
+    }
+
+    private fun pruneListeners() {
+        listeners.forEach { reference ->
+            if (reference.get() == null) listeners.remove(reference)
+        }
     }
 }
 
@@ -143,24 +166,35 @@ class CoreManager(context: Context) {
             "wireguard",
             ignoreCase = true
         )
+        val adaptive = request.settings.adaptiveHandshake
+        val budgetMs = if (wireGuard) {
+            request.settings.wireGuardHandshakeTimeoutMs
+        } else if (adaptive) {
+            GENERAL_ADAPTIVE_VERIFY_BUDGET_MS
+        } else {
+            GENERAL_CONSERVATIVE_VERIFY_BUDGET_MS
+        }
         val health = TunnelHealthVerifier.measure(
             settings = request.settings,
             mode = request.mode,
-            attempts = START_VERIFY_ATTEMPTS,
-            budgetMs = if (wireGuard) {
-                WIREGUARD_START_VERIFY_BUDGET_MS
-            } else {
-                GENERAL_START_VERIFY_BUDGET_MS
-            },
+            attempts = if (adaptive) 3 else 2,
+            budgetMs = budgetMs,
             perProbeTimeoutMs = if (wireGuard) {
-                WIREGUARD_PROBE_TIMEOUT_MS
+                (budgetMs / 3).coerceIn(2_000, 7_000)
+            } else if (adaptive) {
+                GENERAL_ADAPTIVE_PROBE_TIMEOUT_MS
             } else {
-                GENERAL_PROBE_TIMEOUT_MS
+                GENERAL_CONSERVATIVE_PROBE_TIMEOUT_MS
             },
             initialDelayMs = when {
-                wireGuard -> WIREGUARD_INITIAL_GRACE_MS
-                request.mode == ConnectionMode.VPN -> VPN_INITIAL_GRACE_MS
-                else -> PROXY_INITIAL_GRACE_MS
+                wireGuard && adaptive -> WIREGUARD_ADAPTIVE_GRACE_MS
+                wireGuard -> WIREGUARD_CONSERVATIVE_GRACE_MS
+                request.mode == ConnectionMode.VPN && adaptive ->
+                    VPN_ADAPTIVE_GRACE_MS
+                request.mode == ConnectionMode.VPN ->
+                    VPN_CONSERVATIVE_GRACE_MS
+                adaptive -> PROXY_ADAPTIVE_GRACE_MS
+                else -> PROXY_CONSERVATIVE_GRACE_MS
             },
             isCancelled = isCancelled
         )
@@ -220,13 +254,15 @@ class CoreManager(context: Context) {
         )
 
     companion object {
-        private const val START_VERIFY_ATTEMPTS = 3
-        private const val GENERAL_START_VERIFY_BUDGET_MS = 14_000
-        private const val GENERAL_PROBE_TIMEOUT_MS = 4_500
-        private const val WIREGUARD_START_VERIFY_BUDGET_MS = 22_000
-        private const val WIREGUARD_PROBE_TIMEOUT_MS = 6_000
-        private const val PROXY_INITIAL_GRACE_MS = 180
-        private const val VPN_INITIAL_GRACE_MS = 450
-        private const val WIREGUARD_INITIAL_GRACE_MS = 1_200
+        private const val GENERAL_ADAPTIVE_VERIFY_BUDGET_MS = 11_000
+        private const val GENERAL_CONSERVATIVE_VERIFY_BUDGET_MS = 15_000
+        private const val GENERAL_ADAPTIVE_PROBE_TIMEOUT_MS = 3_500
+        private const val GENERAL_CONSERVATIVE_PROBE_TIMEOUT_MS = 5_000
+        private const val PROXY_ADAPTIVE_GRACE_MS = 80
+        private const val PROXY_CONSERVATIVE_GRACE_MS = 220
+        private const val VPN_ADAPTIVE_GRACE_MS = 220
+        private const val VPN_CONSERVATIVE_GRACE_MS = 550
+        private const val WIREGUARD_ADAPTIVE_GRACE_MS = 500
+        private const val WIREGUARD_CONSERVATIVE_GRACE_MS = 1_200
     }
 }

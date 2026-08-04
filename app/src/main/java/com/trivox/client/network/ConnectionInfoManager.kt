@@ -4,11 +4,9 @@ import com.trivox.client.BuildConfig
 import com.trivox.client.data.AppSettings
 import com.trivox.client.data.ConnectionMode
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
 import java.net.InetSocketAddress
 import java.net.Proxy
-import java.net.URL
+import java.net.URI
 import java.util.Locale
 import javax.net.ssl.HttpsURLConnection
 
@@ -35,7 +33,11 @@ class ConnectionInfoManager {
         val failures = mutableListOf<String>()
         providers.forEach { provider ->
             runCatching {
-                val body = request(provider.url, proxy)
+                val body = request(
+                    provider.url,
+                    proxy,
+                    settings.networkBufferSizeKb
+                )
                 provider.parse(body)
             }.onSuccess {
                 if (it.ip.isNotBlank()) return it
@@ -52,8 +54,12 @@ class ConnectionInfoManager {
         )
     }
 
-    private fun request(url: String, proxy: Proxy): String {
-        val connection = URL(url).openConnection(proxy) as HttpsURLConnection
+    private fun request(
+        url: String,
+        proxy: Proxy,
+        bufferSizeKb: Int
+    ): String {
+        val connection = URI(url).toURL().openConnection(proxy) as HttpsURLConnection
         connection.connectTimeout = PROVIDER_TIMEOUT_MS
         connection.readTimeout = PROVIDER_TIMEOUT_MS
         connection.instanceFollowRedirects = false
@@ -71,30 +77,16 @@ class ConnectionInfoManager {
             if (status !in 200..299) {
                 throw IllegalStateException("HTTP $status")
             }
-            readBounded(connection)
+            connection.inputStream.use { input ->
+                NetworkBufferPool.readUtf8Bounded(
+                    input = input,
+                    maxBytes = MAX_RESPONSE_SIZE,
+                    preferredBufferKb = bufferSizeKb
+                )
+            }
         } finally {
             connection.disconnect()
         }
-    }
-
-    private fun readBounded(connection: HttpsURLConnection): String {
-        val output = StringBuilder()
-        BufferedReader(
-            InputStreamReader(connection.inputStream, Charsets.UTF_8)
-        ).use { reader ->
-            val buffer = CharArray(4 * 1024)
-            while (true) {
-                val count = reader.read(buffer)
-                if (count < 0) break
-                if (output.length + count > MAX_RESPONSE_SIZE) {
-                    throw IllegalStateException(
-                        "IP service response is too large"
-                    )
-                }
-                output.append(buffer, 0, count)
-            }
-        }
-        return output.toString()
     }
 
     private data class Provider(

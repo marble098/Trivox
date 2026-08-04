@@ -51,6 +51,9 @@ object TunnelHealthVerifier {
 
         val deadline = System.nanoTime() + budget * NANOS_PER_MILLISECOND
         val samplesNanos = mutableListOf<Long>()
+        val requiredSamples = requiredSuccesses(count)
+        val routes = probeRoutes(mode)
+        val targets = connectivityTargets(settings)
         var lastFailure = "tunnel_timeout"
 
         for (sampleIndex in 0 until count) {
@@ -75,10 +78,10 @@ object TunnelHealthVerifier {
             )
 
             var accepted = false
-            for (route in probeRoutes(mode)) {
+            for (route in routes) {
                 if (accepted || cancelled(isCancelled)) break
 
-                for (target in rotatedTargets(settings, sampleIndex)) {
+                for (target in rotatedTargets(targets, sampleIndex)) {
                     if (cancelled(isCancelled)) {
                         return cancelledResult(timestamp, samplesNanos.size, count)
                     }
@@ -105,15 +108,47 @@ object TunnelHealthVerifier {
                 }
             }
 
+            if (samplesNanos.size >= requiredSamples) {
+                return completedResult(
+                    timestamp = timestamp,
+                    mode = mode,
+                    samplesNanos = samplesNanos,
+                    attempts = count,
+                    lastFailure = lastFailure
+                )
+            }
+
+            val completedAttempts = sampleIndex + 1
+            val attemptsRemaining = count - completedAttempts
+            if (samplesNanos.size + attemptsRemaining < requiredSamples) {
+                break
+            }
+
             if (
-                sampleIndex + 1 < count &&
+                completedAttempts < count &&
                 !waitCancellable(INTER_SAMPLE_DELAY_MS, isCancelled)
             ) {
                 return cancelledResult(timestamp, samplesNanos.size, count)
             }
         }
 
-        val summary = PingStatistics.summarize(samplesNanos, count)
+        return completedResult(
+            timestamp = timestamp,
+            mode = mode,
+            samplesNanos = samplesNanos,
+            attempts = count,
+            lastFailure = lastFailure
+        )
+    }
+
+    private fun completedResult(
+        timestamp: Long,
+        mode: ConnectionMode?,
+        samplesNanos: List<Long>,
+        attempts: Int,
+        lastFailure: String
+    ): PingResult {
+        val summary = PingStatistics.summarize(samplesNanos, attempts)
         return PingResult(
             method = PingMethod.XRAY_HTTP.name,
             success = summary.success,
@@ -141,15 +176,20 @@ object TunnelHealthVerifier {
             listOf(ProbeRoute.HTTP_PROXY, ProbeRoute.SOCKS_PROXY)
         }
 
-    private fun rotatedTargets(settings: AppSettings, offset: Int): List<String> {
-        val targets = buildList {
+    private fun connectivityTargets(settings: AppSettings): List<String> =
+        buildList {
             settings.testUrl.trim().takeIf(String::isNotBlank)?.let(::add)
             addAll(fallbackTargets)
         }.distinct()
+
+    private fun rotatedTargets(targets: List<String>, offset: Int): List<String> {
         if (targets.isEmpty() || offset % targets.size == 0) return targets
         val shift = offset % targets.size
         return targets.drop(shift) + targets.take(shift)
     }
+
+    private fun requiredSuccesses(attempts: Int): Int =
+        if (attempts <= 1) 1 else (attempts * 2 + 2) / 3
 
     private fun cancelled(isCancelled: () -> Boolean): Boolean =
         Thread.currentThread().isInterrupted || isCancelled()

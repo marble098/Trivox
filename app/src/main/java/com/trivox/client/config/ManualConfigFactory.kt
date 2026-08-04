@@ -96,8 +96,13 @@ object ManualConfigFactory {
                     .put("secretKey", privateKey.trim())
                     .put("address", JSONArray(addresses))
                     .put("noKernelTun", true)
-                    .put("mtu", mtu.coerceIn(1280, 9000))
-                    .put("domainStrategy", "ForceIP")
+                    .put("mtu", mtu.coerceIn(576, 9000))
+                    /*
+                     * Domain strategy, workers and default peer keep-alive are
+                     * intentionally supplied by XrayConfigBuilder from Settings.
+                     * The generated profile therefore remains portable and does
+                     * not silently override the user's global WireGuard policy.
+                     */
                     .put("peers", JSONArray().put(peer))
             )
 

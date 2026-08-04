@@ -23,14 +23,13 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:fillViewport="true"
-        android:scrollbars="vertical">
+        android:fillViewport="true">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingBottom="8dp">
+            android:paddingBottom="12dp">
 
             <TextView
                 style="@style/Widget.Trivox.SectionTitle"
@@ -43,10 +42,7 @@
                 android:orientation="vertical"
                 android:padding="10dp">
 
-                <TextView
-                    style="@style/Widget.Trivox.FieldLabel"
-                    android:text="@string/language" />
-
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:text="@string/language" />
                 <Spinner
                     android:id="@+id/languageSpinner"
                     android:layout_width="match_parent"
@@ -56,72 +52,31 @@
                     android:paddingStart="10dp"
                     android:paddingEnd="8dp" />
 
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginTop="9dp"
-                    android:layout_marginBottom="5dp"
-                    android:background="@color/divider" />
-
                 <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/darkModeSwitch"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
+                    android:layout_height="46dp"
+                    android:layout_marginTop="5dp"
                     android:gravity="center_vertical"
-                    android:minHeight="48dp"
                     android:text="@string/dark_theme"
                     android:textColor="@color/text_primary"
                     android:textSize="12sp"
-                    android:textStyle="bold"
-                    app:showText="false"
-                    app:thumbTint="@color/theme_switch_thumb"
-                    app:trackTint="@color/theme_switch_track" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="-4dp"
-                    android:text="@string/dark_theme_summary"
-                    android:textColor="@color/muted"
-                    android:textSize="10sp" />
-
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginTop="9dp"
-                    android:layout_marginBottom="5dp"
-                    android:background="@color/divider" />
+                    app:showText="false" />
 
                 <CheckBox
                     android:id="@+id/hideIpOnMainCheck"
                     style="@style/Widget.Trivox.CheckBox"
                     android:text="@string/hide_ip_on_main" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="-3dp"
-                    android:text="@string/hide_ip_on_main_summary"
-                    android:textColor="@color/muted"
-                    android:textSize="10sp" />
             </LinearLayout>
 
-            <TextView
-                style="@style/Widget.Trivox.SectionTitle"
-                android:text="@string/profile_sorting_section" />
-
+            <TextView style="@style/Widget.Trivox.SectionTitle" android:text="@string/profile_sorting_section" />
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="@drawable/panel_background"
                 android:orientation="vertical"
                 android:padding="10dp">
-
-                <TextView
-                    style="@style/Widget.Trivox.FieldLabel"
-                    android:text="@string/sort_mode" />
-
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:text="@string/sort_mode" />
                 <Spinner
                     android:id="@+id/sortModeSpinner"
                     android:layout_width="match_parent"
@@ -130,34 +85,6 @@
                     android:background="@drawable/input_background"
                     android:paddingStart="10dp"
                     android:paddingEnd="8dp" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="5dp"
-                    android:text="@string/sort_position_summary_v5"
-                    android:textColor="@color/muted"
-                    android:textSize="10sp" />
-            </LinearLayout>
-
-            <TextView
-                style="@style/Widget.Trivox.SectionTitle"
-                android:text="@string/subscription_management_section" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="@drawable/panel_background"
-                android:orientation="vertical"
-                android:padding="10dp">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/subscription_management_summary"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="11sp" />
-
                 <Button
                     android:id="@+id/manageSubscriptionsButton"
                     style="@style/Widget.Trivox.Button.Secondary"
@@ -167,21 +94,14 @@
                     android:text="@string/manage_subscriptions" />
             </LinearLayout>
 
-            <TextView
-                style="@style/Widget.Trivox.SectionTitle"
-                android:text="@string/ping_section" />
-
+            <TextView style="@style/Widget.Trivox.SectionTitle" android:text="@string/ping_section" />
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="@drawable/panel_background"
                 android:orientation="vertical"
                 android:padding="10dp">
-
-                <TextView
-                    style="@style/Widget.Trivox.FieldLabel"
-                    android:text="@string/live_ping_method" />
-
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:text="@string/live_ping_method" />
                 <Spinner
                     android:id="@+id/pingMethodSpinner"
                     android:layout_width="match_parent"
@@ -190,54 +110,31 @@
                     android:background="@drawable/input_background"
                     android:paddingStart="10dp"
                     android:paddingEnd="8dp" />
-
                 <TextView
                     android:id="@+id/pingMethodSummary"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="5dp"
-                    android:textColor="@color/text_secondary"
+                    android:textColor="@color/muted"
                     android:textSize="10sp" />
-
                 <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/livePingEnabledSwitch"
                     android:layout_width="match_parent"
-                    android:layout_height="46dp"
-                    android:layout_marginTop="8dp"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="4dp"
                     android:gravity="center_vertical"
                     android:text="@string/live_ping_enabled"
                     android:textColor="@color/text_primary"
-                    android:textSize="11sp"
-                    app:showText="false" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="-3dp"
-                    android:text="@string/live_ping_enabled_summary"
-                    android:textColor="@color/muted"
-                    android:textSize="10sp" />
-
-                <TextView
-                    style="@style/Widget.Trivox.FieldLabel"
-                    android:layout_marginTop="10dp"
-                    android:text="@string/live_ping_interval" />
-
+                    android:textSize="11sp" />
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:layout_marginTop="8dp" android:text="@string/live_ping_interval" />
                 <EditText
                     android:id="@+id/livePingIntervalInput"
                     style="@style/Widget.Trivox.Input"
                     android:layout_marginTop="3dp"
-                    android:hint="@string/live_ping_interval_hint"
-                    android:imeOptions="actionDone"
                     android:inputType="number"
                     android:maxLength="3"
                     android:textDirection="ltr" />
-
-                <TextView
-                    style="@style/Widget.Trivox.FieldLabel"
-                    android:layout_marginTop="10dp"
-                    android:text="@string/ping_attempts" />
-
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:layout_marginTop="8dp" android:text="@string/ping_attempts" />
                 <Spinner
                     android:id="@+id/pingAttemptsSpinner"
                     android:layout_width="match_parent"
@@ -246,257 +143,168 @@
                     android:background="@drawable/input_background"
                     android:paddingStart="10dp"
                     android:paddingEnd="8dp" />
-
-                <TextView
-                    style="@style/Widget.Trivox.FieldLabel"
-                    android:layout_marginTop="10dp"
-                    android:text="@string/ping_test_url" />
-
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:layout_marginTop="8dp" android:text="@string/ping_test_url" />
                 <EditText
                     android:id="@+id/testUrlInput"
                     style="@style/Widget.Trivox.Input"
                     android:layout_marginTop="3dp"
-                    android:hint="@string/ping_test_url_hint"
-                    android:imeOptions="actionDone"
                     android:inputType="textUri"
                     android:textDirection="ltr" />
             </LinearLayout>
 
-            <TextView
-                style="@style/Widget.Trivox.SectionTitle"
-                android:text="@string/local_proxy_section" />
-
+            <TextView style="@style/Widget.Trivox.SectionTitle" android:text="@string/network_tuning_section" />
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="@drawable/panel_background"
                 android:orientation="vertical"
                 android:padding="10dp">
-
-                <TextView
-                    style="@style/Widget.Trivox.FieldLabel"
-                    android:text="@string/mixed_proxy_hint" />
-
-                <EditText
-                    android:id="@+id/socksPort"
-                    style="@style/Widget.Trivox.Input"
-                    android:layout_marginTop="4dp"
-                    android:hint="@string/mixed_port"
-                    android:inputType="number"
-                    android:textDirection="ltr" />
-
-                <CheckBox
-                    android:id="@+id/localProxyInVpnCheck"
-                    style="@style/Widget.Trivox.CheckBox"
-                    android:layout_marginTop="6dp"
-                    android:text="@string/local_proxy_in_vpn" />
-
-                <Button
-                    android:id="@+id/telegramProxyButton"
-                    style="@style/Widget.Trivox.Button.Secondary"
-                    android:layout_width="match_parent"
-                    android:layout_height="42dp"
-                    android:layout_marginTop="6dp"
-                    android:text="@string/open_telegram_proxy" />
-            </LinearLayout>
-
-            <TextView
-                style="@style/Widget.Trivox.SectionTitle"
-                android:text="@string/vpn_section" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="@drawable/panel_background"
-                android:orientation="vertical"
-                android:padding="10dp">
-
-                <EditText
-                    android:id="@+id/mtuInput"
-                    style="@style/Widget.Trivox.Input"
-                    android:hint="@string/mtu"
-                    android:inputType="number" />
-
-                <CheckBox
-                    android:id="@+id/ipv6Check"
-                    style="@style/Widget.Trivox.CheckBox"
-                    android:layout_marginTop="4dp"
-                    android:text="@string/ipv6" />
-
-                <CheckBox
-                    android:id="@+id/blockingCheck"
-                    style="@style/Widget.Trivox.CheckBox"
-                    android:text="@string/blocking_mode" />
-            </LinearLayout>
-
-            <TextView
-                style="@style/Widget.Trivox.SectionTitle"
-                android:text="@string/dns_section" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="@drawable/panel_background"
-                android:orientation="vertical"
-                android:padding="10dp">
-
-                <Spinner
-                    android:id="@+id/dnsMode"
-                    android:layout_width="match_parent"
-                    android:layout_height="42dp"
-                    android:background="@drawable/input_background"
-                    android:paddingStart="10dp"
-                    android:paddingEnd="8dp" />
-
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:lineSpacingExtra="1dp"
-                    android:text="@string/dns_smart_summary_v5"
+                    android:text="@string/network_tuning_summary"
                     android:textColor="@color/muted"
                     android:textSize="10sp" />
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/networkTuningEnabledSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="4dp"
+                    android:gravity="center_vertical"
+                    android:text="@string/network_tuning_enabled"
+                    android:textColor="@color/text_primary"
+                    android:textSize="11sp" />
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/adaptiveHandshakeSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:gravity="center_vertical"
+                    android:text="@string/adaptive_handshake"
+                    android:textColor="@color/text_primary"
+                    android:textSize="11sp" />
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/tcpFastOpenSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:gravity="center_vertical"
+                    android:text="@string/tcp_fast_open"
+                    android:textColor="@color/text_primary"
+                    android:textSize="11sp" />
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:layout_marginTop="5dp" android:text="@string/tcp_keepalive_idle" />
+                <EditText android:id="@+id/tcpKeepAliveIdleInput" style="@style/Widget.Trivox.Input" android:layout_marginTop="3dp" android:inputType="number" android:textDirection="ltr" />
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:layout_marginTop="7dp" android:text="@string/tcp_keepalive_interval" />
+                <EditText android:id="@+id/tcpKeepAliveIntervalInput" style="@style/Widget.Trivox.Input" android:layout_marginTop="3dp" android:inputType="number" android:textDirection="ltr" />
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:layout_marginTop="7dp" android:text="@string/tcp_user_timeout" />
+                <EditText android:id="@+id/tcpUserTimeoutInput" style="@style/Widget.Trivox.Input" android:layout_marginTop="3dp" android:inputType="number" android:textDirection="ltr" />
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:layout_marginTop="7dp" android:text="@string/network_buffer_size_kb" />
+                <EditText android:id="@+id/networkBufferSizeInput" style="@style/Widget.Trivox.Input" android:layout_marginTop="3dp" android:inputType="number" android:textDirection="ltr" />
+            </LinearLayout>
 
+            <TextView style="@style/Widget.Trivox.SectionTitle" android:text="@string/local_proxy_section" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/panel_background"
+                android:orientation="vertical"
+                android:padding="10dp">
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:text="@string/mixed_proxy_hint" />
+                <EditText android:id="@+id/socksPort" style="@style/Widget.Trivox.Input" android:layout_marginTop="3dp" android:inputType="number" android:textDirection="ltr" />
+                <CheckBox android:id="@+id/localProxyInVpnCheck" style="@style/Widget.Trivox.CheckBox" android:text="@string/local_proxy_in_vpn" />
+                <Button android:id="@+id/telegramProxyButton" style="@style/Widget.Trivox.Button.Secondary" android:layout_width="match_parent" android:layout_height="42dp" android:text="@string/open_telegram_proxy" />
+            </LinearLayout>
+
+            <TextView style="@style/Widget.Trivox.SectionTitle" android:text="@string/vpn_section" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/panel_background"
+                android:orientation="vertical"
+                android:padding="10dp">
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:text="@string/mtu" />
+                <EditText android:id="@+id/mtuInput" style="@style/Widget.Trivox.Input" android:layout_marginTop="3dp" android:inputType="number" android:textDirection="ltr" />
+                <CheckBox android:id="@+id/ipv6Check" style="@style/Widget.Trivox.CheckBox" android:text="@string/ipv6" />
+                <CheckBox android:id="@+id/blockingCheck" style="@style/Widget.Trivox.CheckBox" android:text="@string/blocking_mode" />
+            </LinearLayout>
+
+            <TextView style="@style/Widget.Trivox.SectionTitle" android:text="@string/wireguard_section_v9" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/panel_background"
+                android:orientation="vertical"
+                android:padding="10dp">
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/wireguard_summary_v9" android:textColor="@color/muted" android:textSize="10sp" />
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:layout_marginTop="8dp" android:text="@string/wireguard_mtu_v9" />
+                <EditText android:id="@+id/wireGuardMtuInput" style="@style/Widget.Trivox.Input" android:layout_marginTop="3dp" android:inputType="number" android:textDirection="ltr" />
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:layout_marginTop="7dp" android:text="@string/wireguard_workers_v9" />
+                <Spinner android:id="@+id/wireGuardWorkersSpinner" android:layout_width="match_parent" android:layout_height="42dp" android:layout_marginTop="3dp" android:background="@drawable/input_background" android:paddingStart="10dp" android:paddingEnd="8dp" />
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:layout_marginTop="7dp" android:text="@string/wireguard_keepalive_v9" />
+                <EditText android:id="@+id/wireGuardKeepAliveInput" style="@style/Widget.Trivox.Input" android:layout_marginTop="3dp" android:inputType="number" android:textDirection="ltr" />
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:layout_marginTop="7dp" android:text="@string/wireguard_handshake_timeout_v9" />
+                <EditText android:id="@+id/wireGuardHandshakeTimeoutInput" style="@style/Widget.Trivox.Input" android:layout_marginTop="3dp" android:inputType="number" android:textDirection="ltr" />
+                <TextView style="@style/Widget.Trivox.FieldLabel" android:layout_marginTop="7dp" android:text="@string/wireguard_domain_strategy_v9" />
+                <Spinner android:id="@+id/wireGuardDomainStrategySpinner" android:layout_width="match_parent" android:layout_height="42dp" android:layout_marginTop="3dp" android:background="@drawable/input_background" android:paddingStart="10dp" android:paddingEnd="8dp" />
+            </LinearLayout>
+
+            <TextView style="@style/Widget.Trivox.SectionTitle" android:text="@string/dns_section" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/panel_background"
+                android:orientation="vertical"
+                android:padding="10dp">
+                <Spinner android:id="@+id/dnsMode" android:layout_width="match_parent" android:layout_height="42dp" android:background="@drawable/input_background" android:paddingStart="10dp" android:paddingEnd="8dp" />
                 <EditText
                     android:id="@+id/customDns"
                     android:layout_width="match_parent"
                     android:layout_height="96dp"
                     android:layout_marginTop="7dp"
                     android:background="@drawable/input_background"
-                    android:fontFamily="@font/vazirmatn"
                     android:gravity="top|start"
                     android:hint="@string/custom_dns_hint"
                     android:inputType="textMultiLine"
                     android:padding="10dp"
-                    android:scrollbars="vertical"
                     android:textColor="@color/text_primary"
                     android:textColorHint="@color/muted"
                     android:textDirection="ltr"
                     android:textSize="11sp" />
             </LinearLayout>
 
-            <TextView
-                style="@style/Widget.Trivox.SectionTitle"
-                android:text="@string/reconnect_section" />
-
+            <TextView style="@style/Widget.Trivox.SectionTitle" android:text="@string/reconnect_section" />
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="@drawable/panel_background"
                 android:orientation="vertical"
                 android:padding="10dp">
-
-                <CheckBox
-                    android:id="@+id/reconnectNetwork"
-                    style="@style/Widget.Trivox.CheckBox"
-                    android:text="@string/reconnect_network" />
-
-                <CheckBox
-                    android:id="@+id/reconnectBoot"
-                    style="@style/Widget.Trivox.CheckBox"
-                    android:text="@string/reconnect_boot" />
+                <CheckBox android:id="@+id/reconnectNetwork" style="@style/Widget.Trivox.CheckBox" android:text="@string/reconnect_network" />
+                <CheckBox android:id="@+id/reconnectBoot" style="@style/Widget.Trivox.CheckBox" android:text="@string/reconnect_boot" />
             </LinearLayout>
 
-            <TextView
-                style="@style/Widget.Trivox.SectionTitle"
-                android:text="@string/update_section" />
-
+            <TextView style="@style/Widget.Trivox.SectionTitle" android:text="@string/update_section" />
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="@drawable/panel_background"
                 android:orientation="vertical"
                 android:padding="10dp">
-
-                <CheckBox
-                    android:id="@+id/autoUpdateCheck"
-                    style="@style/Widget.Trivox.CheckBox"
-                    android:text="@string/auto_update_check" />
-
-                <Button
-                    android:id="@+id/checkUpdateButton"
-                    style="@style/Widget.Trivox.Button.Secondary"
-                    android:layout_width="match_parent"
-                    android:layout_height="42dp"
-                    android:layout_marginTop="4dp"
-                    android:text="@string/check_update_now" />
-
-                <TextView
-                    android:id="@+id/updateStatus"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="5dp"
-                    android:textColor="@color/muted"
-                    android:textSize="10sp" />
+                <CheckBox android:id="@+id/autoUpdateCheck" style="@style/Widget.Trivox.CheckBox" android:text="@string/auto_update_check" />
+                <Button android:id="@+id/checkUpdateButton" style="@style/Widget.Trivox.Button.Secondary" android:layout_width="match_parent" android:layout_height="42dp" android:text="@string/check_update_now" />
+                <TextView android:id="@+id/updateStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:textColor="@color/muted" android:textSize="10sp" />
             </LinearLayout>
 
-            <TextView
-                style="@style/Widget.Trivox.SectionTitle"
-                android:text="@string/about_section" />
-
+            <TextView style="@style/Widget.Trivox.SectionTitle" android:text="@string/about_section" />
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="@drawable/panel_background"
                 android:orientation="vertical"
-                android:padding="12dp">
-
-                <TextView
-                    style="@style/Widget.Trivox.FieldLabel"
-                    android:text="@string/about_creators_label" />
-
-                <TextView
-                    android:id="@+id/aboutCreators"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:fontFamily="@font/vazirmatn_bold"
-                    android:textColor="@color/text_primary"
-                    android:textDirection="locale"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/aboutAppVersion"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="9dp"
-                    android:fontFamily="@font/vazirmatn_medium"
-                    android:textColor="@color/text_primary"
-                    android:textDirection="locale"
-                    android:textSize="12sp" />
-
-                <TextView
-                    android:id="@+id/aboutCoreVersion"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="5dp"
-                    android:fontFamily="@font/vazirmatn"
-                    android:textColor="@color/text_primary"
-                    android:textDirection="locale"
-                    android:textSize="12sp" />
-
-                <TextView
-                    android:id="@+id/aboutSigning"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="5dp"
-                    android:fontFamily="@font/vazirmatn"
-                    android:textColor="@color/muted"
-                    android:textDirection="ltr"
-                    android:textIsSelectable="true"
-                    android:textSize="10sp" />
-
-                <TextView
-                    android:id="@+id/aboutPackage"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:fontFamily="@font/vazirmatn"
-                    android:textColor="@color/muted"
-                    android:textDirection="ltr"
-                    android:textIsSelectable="true"
-                    android:textSize="10sp" />
+                android:padding="10dp">
+                <TextView android:id="@+id/aboutCreators" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/text_primary" android:textStyle="bold" />
+                <TextView android:id="@+id/aboutAppVersion" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textColor="@color/text_secondary" android:textDirection="ltr" />
+                <TextView android:id="@+id/aboutCoreVersion" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:textColor="@color/text_secondary" android:textDirection="ltr" />
+                <TextView android:id="@+id/aboutSigning" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:ellipsize="middle" android:maxLines="2" android:textColor="@color/text_secondary" android:textDirection="ltr" />
+                <TextView android:id="@+id/aboutPackage" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:textColor="@color/text_secondary" android:textDirection="ltr" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>
@@ -506,6 +314,6 @@
         style="@style/Widget.Trivox.Button.Primary"
         android:layout_width="match_parent"
         android:layout_height="48dp"
-        android:layout_marginTop="7dp"
+        android:layout_marginTop="6dp"
         android:text="@string/save" />
 </LinearLayout>
