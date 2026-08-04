@@ -160,7 +160,7 @@ git -C "$REPO_DIR" diff --check
 
 if ((RUN_GRADLE)); then
   say "Running Android unit tests"
-  (cd "$REPO_DIR" && ./gradlew --no-daemon testDebugUnitTest)
+  (cd "$REPO_DIR" && chmod +x gradlew && ./gradlew --no-daemon testDebugUnitTest)
 fi
 
 CHANGED=(

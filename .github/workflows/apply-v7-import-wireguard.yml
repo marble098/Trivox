@@ -64,7 +64,9 @@ jobs:
         run: python3 tools/audit-trivox.py --ci
 
       - name: Run unit tests
-        run: ./gradlew --no-daemon testDebugUnitTest
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon testDebugUnitTest
 
       - name: Commit and push verified source changes
         id: commit
