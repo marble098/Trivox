@@ -5,7 +5,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'app/src/main/assets/cores'
 MANIFEST = ROOT / 'app/src/main/assets/core-manifest-multicore.json'
-ABIS = {'arm64-v8a': ['android-arm64','linux-arm64','arm64-v8a'], 'armeabi-v7a': ['android-armv7','linux-armv7','armeabi-v7a','armv7'], 'x86_64': ['android-amd64','linux-amd64','x86_64','amd64']}
+ALL_ABIS = {'arm64-v8a': ['android-arm64','linux-arm64','arm64-v8a'], 'armeabi-v7a': ['android-armv7','linux-armv7','armeabi-v7a','armv7'], 'x86_64': ['android-amd64','linux-amd64','x86_64','amd64']}
+_requested = [x.strip() for x in os.environ.get('TRIVOX_MULTICORE_ABIS', 'arm64-v8a,armeabi-v7a').split(',') if x.strip()]
+ABIS = {k: ALL_ABIS[k] for k in _requested if k in ALL_ABIS}
+if not ABIS:
+    raise SystemExit('No valid TRIVOX_MULTICORE_ABIS selected')
 TOKEN = os.environ.get('GITHUB_TOKEN') or os.environ.get('GH_TOKEN')
 HDR = {'Accept':'application/vnd.github+json','User-Agent':'trivox-multicore-preparer'}
 if TOKEN: HDR['Authorization'] = 'Bearer ' + TOKEN
