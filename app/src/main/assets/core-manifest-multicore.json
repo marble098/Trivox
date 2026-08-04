@@ -19,12 +19,6 @@
           "asset": "SFA-1.14.0-beta.5-legacy-android-5-armeabi-v7a.apk",
           "sha256": "c18dbd440885109f31cb9ef1118dcefd3c75481bca7abfaf5a0f56f270bcfbc3",
           "path": "app/src/main/assets/cores/armeabi-v7a/sing-box"
-        },
-        {
-          "abi": "x86_64",
-          "asset": "sing-box-1.14.0-beta.5-android-amd64.tar.gz",
-          "sha256": "286f141e8a48fc2b609e1d9df5bba03aca3e2a17e0b86c16d60393b776a68ac0",
-          "path": "app/src/main/assets/cores/x86_64/sing-box"
         }
       ]
     },
@@ -46,12 +40,6 @@
           "asset": "mihomo-android-armv7-alpha-d46944f.gz",
           "sha256": "3811543191e70f68b33398fd5aa36fc39f1d7ca6d8aec8ead7c04a872eda2ef2",
           "path": "app/src/main/assets/cores/armeabi-v7a/mihomo"
-        },
-        {
-          "abi": "x86_64",
-          "asset": "mihomo-android-amd64-alpha-d46944f.gz",
-          "sha256": "ee1703982b6aa694574e7064aee382c3e7c02a11837cfacd0f3295d87206ffe1",
-          "path": "app/src/main/assets/cores/x86_64/mihomo"
         }
       ]
     }
