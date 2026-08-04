@@ -253,6 +253,7 @@ object XrayConfigBuilder {
         }
 
         val validStrategies = setOf(
+            "AsIs",
             "ForceIP",
             "ForceIPv4",
             "ForceIPv6",
@@ -505,9 +506,10 @@ object XrayConfigBuilder {
             ?.let { runCatching { JSONObject(it) }.getOrNull() }
             ?: return null
 
-        val originalServers = when (val value = imported.opt("servers")) {
-            is JSONArray -> value
-            is String -> JSONArray().put(value)
+        val serverValue: Any? = imported.opt("servers")
+        val originalServers = when {
+            serverValue is JSONArray -> serverValue
+            serverValue is String -> JSONArray().put(serverValue)
             else -> JSONArray()
         }
         val servers = withBootstrap(profile, originalServers)
