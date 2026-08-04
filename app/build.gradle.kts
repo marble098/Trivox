@@ -124,12 +124,7 @@ android {
         testInstrumentationRunner =
             "androidx.test.runner." +
                 "AndroidJUnitRunner"
-
-        ndk {
-            abiFilters +=
-                requestedAbis
-        }
-    }
+}
 
     signingConfigs {
         if (signingPropsFile.isFile) {
