@@ -14,11 +14,18 @@ jobs:
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
-      - name: Install host tools
+      - name: Verify host tools
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y docker.io dpkg-dev python3 git
-          sudo systemctl start docker
+          set -Eeuo pipefail
+          for command in docker dpkg-deb python3 git; do
+            command -v "$command" >/dev/null || {
+              echo "::error::Missing host command: $command"
+              exit 1
+            }
+          done
+          docker version
+          docker info
       - name: Build ABI assets
         env:
           TERMUX_PKG_MAKE_PROCESSES: "2"
@@ -41,7 +48,10 @@ jobs:
           rm -rf openssh-overlay
           mkdir -p openssh-overlay/app/src/main/assets
           cp -a app/src/main/assets/openssh openssh-overlay/app/src/main/assets/
-          find openssh-overlay -type f -print0 | sort -z | xargs -0 sha256sum > openssh-overlay/SHA256SUMS.txt
+          (
+            cd openssh-overlay
+            find . -type f ! -name SHA256SUMS.txt -print0               | sort -z               | xargs -0 sha256sum > SHA256SUMS.txt
+          )
       - uses: actions/upload-artifact@v4
         with:
           name: trivox-openssh-overlay
