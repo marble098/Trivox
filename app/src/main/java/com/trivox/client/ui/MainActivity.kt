@@ -3319,13 +3319,10 @@ class MainActivity : ThemedActivity() {
                         ConfigProfile
                         > {
                         if (
-                            it.latencyMethod ==
-                            selectedMethod
-                        ) {
-                            0
-                        } else {
-                            1
-                        }
+                            it.tcpTestStatus ==
+                            TestStatus.ALIVE &&
+                            it.tcpLatencyMs != null
+                        ) 0 else 1
                     }
                         .thenBy {
                             it.tcpLatencyMs
