@@ -22,7 +22,7 @@ object ConfigParser {
     private val supported = setOf(
         "vless", "vmess", "trojan", "ss", "shadowsocks",
         "socks", "socks5", "http", "https",
-        "hy2", "hysteria2", "hysteria",
+        "hy2", "hysteria2", "hysteria", "tuic",
         "wg", "wireguard", "ssh", "openssh", "nordwhisper", "sing-box", "mihomo", "clashmeta", "clash"
     )
 
@@ -123,6 +123,7 @@ object ConfigParser {
             "socks", "socks5" -> parseSocks(raw)
             "http", "https" -> parseHttp(raw)
             "hy2", "hysteria2", "hysteria" -> parseHysteria2(raw)
+            "tuic" -> parseTuic(raw)
             "wg", "wireguard" -> parseWireGuardUri(raw)
             "ssh", "openssh" -> OpenSshProfileCodec.parse(raw)
             "nordwhisper" -> NordWhisperCompatibility.reject(raw)
@@ -398,6 +399,45 @@ object ConfigParser {
             )
             .put("streamSettings", stream)
         return parsed.profile("hysteria", outbound, raw)
+    }
+
+    private fun parseTuic(raw: String): ConfigProfile {
+        val parsed = parseStandardUri(raw, "TUIC")
+        val uuid = parsed.userInfo.substringBefore(':').ifBlank {
+            parsed.query["uuid"].orEmpty()
+        }
+        val password = parsed.userInfo.substringAfter(':', "").ifBlank {
+            parsed.query["password"].orEmpty()
+        }
+        if (uuid.isBlank()) {
+            throw ConfigParseException("TUIC UUID is missing")
+        }
+        val user = JSONObject()
+            .put("id", uuid)
+            .put("encryption", "none")
+        val settings = JSONObject()
+            .put("uuid", uuid)
+            .put("password", password)
+            .put("congestion_control", parsed.query["congestion_control"] ?: parsed.query["congestion_controller"] ?: "bbr")
+            .put(
+                "vnext",
+                JSONArray().put(
+                    JSONObject()
+                        .put("address", parsed.host)
+                        .put("port", parsed.port)
+                        .put("users", JSONArray().put(user))
+                )
+            )
+        val stream = JSONObject()
+            .put("network", "tuic")
+            .put("security", "tls")
+            .put("tlsSettings", tlsSettings(parsed.query, parsed.host))
+        val outbound = JSONObject()
+            .put("tag", "proxy")
+            .put("protocol", "tuic")
+            .put("settings", settings)
+            .put("streamSettings", stream)
+        return parsed.profile("tuic", outbound, raw)
     }
 
     private fun parseWireGuardUri(raw: String): ConfigProfile {

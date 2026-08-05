@@ -96,6 +96,8 @@ abstract class ExecutableCoreAdapter(
     override fun realDelay(configPath: String, timeoutSeconds: Int, url: String): CoreResult =
         CoreResult(false, "$displayName does not expose libXray real-delay API; TCP and live health checks are used for smart selection.")
 
+    protected open val configExtension: String = "json"
+
     protected abstract fun validationArgs(binary: File, config: File): List<String>
     protected abstract fun runArgs(binary: File, config: File): List<String>
 
@@ -128,9 +130,15 @@ abstract class ExecutableCoreAdapter(
     }
 
     private fun nativeBinary(): File? {
-        val dir = context.applicationInfo.nativeLibraryDir ?: return null
-        val file = File(dir, libraryFileName)
-        return file.takeIf { it.isFile && it.canExecute() && isLikelyElf(it) }
+        val dir = context.applicationInfo.nativeLibraryDir
+        val candidates = listOfNotNull(
+            dir?.let { File(it, libraryFileName) },
+            dir?.let { File(it, "lib$binaryName.so") },
+            dir?.let { File(it, binaryName) },
+            File(coreWorkDir(), binaryName),
+            File(coreWorkDir(), libraryFileName)
+        )
+        return candidates.firstOrNull { it.isFile && it.canExecute() && isLikelyElf(it) }
     }
 
     private fun legacyAssetBinaryForOldAndroid(): File? {
@@ -165,7 +173,7 @@ abstract class ExecutableCoreAdapter(
     } ?: Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
 
     private fun writeConfig(configJson: String, name: String): File =
-        File(coreWorkDir(), "$name-${System.nanoTime()}.json").apply { writeText(configJson) }
+        File(coreWorkDir(), "$name-${System.nanoTime()}.$configExtension").apply { writeText(configJson) }
 
     private fun missing(): CoreResult =
         CoreResult(false, "$displayName binary is missing, compressed, or not executable. Rebuild APK with native ELF jniLibs.")
@@ -182,6 +190,7 @@ class SingBoxCoreAdapter(context: Context) : ExecutableCoreAdapter(
     "sing-box"
 ) {
     override val id = "sing-box"
+    override val configExtension = "json"
     override val capabilities = CoreCapabilities(
         protocols = setOf("vless", "vmess", "trojan", "shadowsocks", "socks", "http", "wireguard", "hysteria2", "tuic"),
         transports = setOf("tcp", "ws", "grpc", "httpupgrade", "quic"),
@@ -203,6 +212,7 @@ class MihomoCoreAdapter(context: Context) : ExecutableCoreAdapter(
     "mihomo"
 ) {
     override val id = "mihomo"
+    override val configExtension = "yaml"
     override val capabilities = CoreCapabilities(
         protocols = setOf("vless", "vmess", "trojan", "shadowsocks", "socks", "http", "wireguard", "hysteria2", "tuic"),
         transports = setOf("tcp", "ws", "grpc", "httpupgrade", "quic"),
@@ -216,3 +226,4 @@ class MihomoCoreAdapter(context: Context) : ExecutableCoreAdapter(
     override fun runArgs(binary: File, config: File) =
         listOf(binary.absolutePath, "-d", coreWorkDir().absolutePath, "-f", config.absolutePath)
 }
+

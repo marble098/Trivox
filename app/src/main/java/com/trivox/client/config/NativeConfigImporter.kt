@@ -129,6 +129,16 @@ object NativeConfigImporter {
                         .put("users", credentialUsers(out.optString("username"), out.optString("password")))
                 )
             )
+            "hy2", "hysteria2", "hysteria" -> settings.put("version", 2).put("address", server).put("port", port).put("auth", out.optString("password", out.optString("auth")))
+            "tuic" -> {
+                val user = JSONObject().put("id", out.optString("uuid"))
+                settings.put("uuid", out.optString("uuid")).put("password", out.optString("password")).put("congestion_control", out.optString("congestion_control", "bbr"))
+                    .put("vnext", JSONArray().put(JSONObject().put("address", server).put("port", port).put("users", JSONArray().put(user))))
+            }
+            "wireguard", "wg" -> {
+                val peer = JSONObject().put("endpoint", "$server:$port").put("publicKey", out.optString("peer_public_key"))
+                settings.put("secretKey", out.optString("private_key")).put("address", out.optJSONArray("local_address") ?: JSONArray().put("10.0.0.2/32")).put("peers", JSONArray().put(peer))
+            }
             else -> return null
         }
         xray.put("settings", settings)
@@ -251,6 +261,16 @@ object NativeConfigImporter {
                         .put("users", credentialUsers(text(map["username"]), text(map["password"])))
                 )
             )
+            "hy2", "hysteria2", "hysteria" -> settings.put("version", 2).put("address", server).put("port", port).put("auth", text(map["password"]))
+            "tuic" -> {
+                val user = JSONObject().put("id", text(map["uuid"]))
+                settings.put("uuid", text(map["uuid"])).put("password", text(map["password"])).put("congestion_control", text(map["congestion-controller"] ?: map["congestion_control"] ?: "bbr"))
+                    .put("vnext", JSONArray().put(JSONObject().put("address", server).put("port", port).put("users", JSONArray().put(user))))
+            }
+            "wireguard", "wg" -> {
+                val peer = JSONObject().put("endpoint", "$server:$port").put("publicKey", text(map["public-key"] ?: map["public_key"]))
+                settings.put("secretKey", text(map["private-key"] ?: map["private_key"])).put("address", JSONArray().put(text(map["ip"]).ifBlank { "10.0.0.2/32" })).put("peers", JSONArray().put(peer))
+            }
             else -> return null
         }
         xray.put("settings", settings)

@@ -215,6 +215,30 @@ val outbound = profile.outboundJson.trim()
             }
             "socks" -> out.put("version", "5")
             "http" -> Unit
+            "hy2", "hysteria2", "hysteria" -> {
+                out.put("type", "hysteria2")
+                val auth = settings.optString("auth").ifBlank {
+                    stream.optJSONObject("hysteriaSettings")?.optString("auth", "") ?: firstServer(settings)?.optString("password", "") ?: ""
+                }
+                out.put("password", auth)
+                singBoxTls(stream, server)?.let { out.put("tls", it) } ?: out.put("tls", JSONObject().put("enabled", true).put("server_name", server))
+            }
+            "tuic" -> {
+                out.put("type", "tuic")
+                val user = firstUser(settings)
+                out.put("uuid", user?.optString("id", "") ?: settings.optString("uuid", ""))
+                out.put("password", firstServer(settings)?.optString("password", "") ?: settings.optString("password", ""))
+                out.put("congestion_control", settings.optString("congestion_control", "bbr"))
+                singBoxTls(stream, server)?.let { out.put("tls", it) } ?: out.put("tls", JSONObject().put("enabled", true).put("server_name", server))
+            }
+            "wireguard", "wg" -> {
+                out.put("type", "wireguard")
+                settings.optJSONArray("address")?.let { out.put("local_address", it) }
+                settings.optString("secretKey").takeIf(String::isNotBlank)?.let { out.put("private_key", it) }
+                val peer = settings.optJSONArray("peers")?.optJSONObject(0)
+                peer?.optString("publicKey")?.takeIf(String::isNotBlank)?.let { out.put("peer_public_key", it) }
+                peer?.optJSONArray("reserved")?.let { out.put("reserved", it) } ?: settings.optJSONArray("reserved")?.let { out.put("reserved", it) }
+            }
             else -> throw IllegalArgumentException("Unsupported protocol for sing-box: $type")
         }
         singBoxTransport(stream)?.let { out.put("transport", it) }
@@ -271,6 +295,46 @@ val outbound = profile.outboundJson.trim()
                 val s = firstServer(settings)
                 proxy["cipher"] = s?.optString("method", "") ?: ""
                 proxy["password"] = s?.optString("password", "") ?: ""
+            }
+            "socks", "socks5" -> {
+                proxy["type"] = "socks5"
+                val s = firstServer(settings)
+                s?.optJSONArray("users")?.optJSONObject(0)?.let { u ->
+                    proxy["username"] = u.optString("user", "")
+                    proxy["password"] = u.optString("pass", "")
+                }
+            }
+            "http", "https" -> {
+                proxy["type"] = "http"
+                val s = firstServer(settings)
+                s?.optJSONArray("users")?.optJSONObject(0)?.let { u ->
+                    proxy["username"] = u.optString("user", "")
+                    proxy["password"] = u.optString("pass", "")
+                }
+                mihomoTls(proxy, stream)
+            }
+            "hy2", "hysteria2", "hysteria" -> {
+                proxy["type"] = "hysteria2"
+                val auth = settings.optString("auth").ifBlank {
+                    stream.optJSONObject("hysteriaSettings")?.optString("auth", "") ?: firstServer(settings)?.optString("password", "") ?: ""
+                }
+                proxy["password"] = auth
+                mihomoTls(proxy, stream)
+            }
+            "tuic" -> {
+                proxy["type"] = "tuic"
+                val user = firstUser(settings)
+                proxy["uuid"] = user?.optString("id", "") ?: settings.optString("uuid", "")
+                proxy["password"] = firstServer(settings)?.optString("password", "") ?: settings.optString("password", "")
+                proxy["congestion-controller"] = settings.optString("congestion_control", "bbr")
+                mihomoTls(proxy, stream)
+            }
+            "wireguard", "wg" -> {
+                proxy["type"] = "wireguard"
+                settings.optJSONArray("address")?.optString(0)?.let { proxy["ip"] = it }
+                settings.optString("secretKey").takeIf(String::isNotBlank)?.let { proxy["private-key"] = it }
+                val peer = settings.optJSONArray("peers")?.optJSONObject(0)
+                peer?.optString("publicKey")?.takeIf(String::isNotBlank)?.let { proxy["public-key"] = it }
             }
             else -> throw IllegalArgumentException("Unsupported protocol for mihomo: $type")
         }

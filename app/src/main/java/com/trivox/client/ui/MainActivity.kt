@@ -594,7 +594,8 @@ class MainActivity : ThemedActivity() {
 
     private fun showAddOptions() {
         val labels = arrayOf(
-            getString(R.string.import_existing),
+            getString(R.string.import_clipboard) + " (Auto-Detect)",
+            getString(R.string.import_file),
             getString(R.string.add_url_subscription),
             getString(R.string.add_nordvpn_subscription),
             getString(R.string.add_manual_config),
@@ -605,20 +606,47 @@ class MainActivity : ThemedActivity() {
             .setTitle(R.string.add_options)
             .setItems(labels) { _, position ->
                 when (position) {
-                    0 -> showImportDialog()
-                    1 -> openSubscriptionManager(
+                    0 -> {
+                        val clipboard = getSystemService(ClipboardManager::class.java)
+                        val text = clipboard?.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
+                        if (text.isNotBlank()) {
+                            importText(text, null)
+                        } else {
+                            toast(getString(R.string.import_hint))
+                            showImportDialog()
+                        }
+                    }
+                    1 -> {
+                        pendingFileImportTargetId = null
+                        filePicker.launch(
+                            arrayOf(
+                                "text/plain",
+                                "text/yaml",
+                                "text/x-yaml",
+                                "application/yaml",
+                                "application/x-yaml",
+                                "application/json",
+                                "application/octet-stream",
+                                "application/x-clash-config",
+                                "application/x-mihomo-config",
+                                "application/x-sing-box-config",
+                                "application/x-wireguard-profile"
+                            )
+                        )
+                    }
+                    2 -> openSubscriptionManager(
                         kind = SubscriptionKind.URL
                     )
-                    2 -> openSubscriptionManager(
+                    3 -> openSubscriptionManager(
                         kind = SubscriptionKind.NORDVPN
                     )
-                    3 -> startActivity(
+                    4 -> startActivity(
                         Intent(
                             this,
                             ManualConfigActivity::class.java
                         )
                     )
-                    4 -> startActivity(
+                    5 -> startActivity(
                         Intent(
                             this,
                             ProxyChainActivity::class.java
@@ -1879,6 +1907,9 @@ class MainActivity : ThemedActivity() {
             getString(R.string.share_link),
             getString(R.string.copy_json),
             getString(R.string.share_json),
+            getString(R.string.subscription_convert_xray),
+            getString(R.string.subscription_convert_singbox),
+            getString(R.string.subscription_convert_mihomo),
             getString(R.string.rename),
             getString(R.string.duplicate),
             getString(
@@ -1903,24 +1934,43 @@ class MainActivity : ThemedActivity() {
                     4 -> shareProfileLink(profile)
                     5 -> copyProfileJson(profile)
                     6 -> shareProfileJson(profile)
-                    7 -> rename(profile)
-                    8 -> duplicateProfile(profile)
-                    9 -> storageWorker.execute {
+                    7 -> convertSingleProfile(profile, CoreId.XRAY)
+                    8 -> convertSingleProfile(profile, CoreId.SING_BOX)
+                    9 -> convertSingleProfile(profile, CoreId.MIHOMO)
+                    10 -> rename(profile)
+                    11 -> duplicateProfile(profile)
+                    12 -> storageWorker.execute {
                         repository.update(profile.id) {
                             it.favorite = !it.favorite
                         }
                         runOnUiThread(::refresh)
                     }
-                    10 -> storageWorker.execute {
+                    13 -> storageWorker.execute {
                         repository.update(profile.id) {
                             it.enabled = !it.enabled
                         }
                         runOnUiThread(::refresh)
                     }
-                    11 -> confirmDelete(profile)
+                    14 -> confirmDelete(profile)
                 }
             }
             .show()
+    }
+
+    private fun convertSingleProfile(profile: ConfigProfile, target: CoreId) {
+        storageWorker.execute {
+            val result = CoreConversionManager(this).convertAndSave(profile, target)
+            runOnUiThread {
+                result.onSuccess { converted ->
+                    subscriptionTabsSignature = ""
+                    renderSubscriptionTabs(force = true)
+                    refresh()
+                    toast(getString(R.string.config_added) + " [${target.label}]")
+                }.onFailure { error ->
+                    toast(getString(R.string.import_failed, error.message ?: getString(R.string.unknown_error)))
+                }
+            }
+        }
     }
 
     private fun editProfile(profile: ConfigProfile) {
