@@ -360,9 +360,9 @@ if "private fun showCoreConversion(" not in s:
                     summary.added,
                     summary.failed
                 ) + if (summary.firstError.isNotBlank()) {
-                    "\n" + summary.firstError
+                    "\\n" + summary.firstError
                 } else if (warning.isNotBlank()) {
-                    "\n" + warning
+                    "\\n" + warning
                 } else {
                     ""
                 }

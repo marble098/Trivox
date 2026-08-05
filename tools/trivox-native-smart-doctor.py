@@ -51,7 +51,12 @@ check("Smart selector has listener and proof scoring", "listenerReady" in select
 check("CoreManager delegates smart selection", "smartCoreSelector.select(request)" in manager)
 check("Conversion expands provider documents", "SubscriptionExpansionManager().expand" in conversion)
 check("Converted profiles survive normal subscription refresh", "destinationSubscriptionId = null" in conversion)
+raw_error = '"' + chr(10) + '" + summary.firstError'
+raw_warning = '"' + chr(10) + '" + warning'
+escaped_error = '"\\n" + summary.firstError'
+escaped_warning = '"\\n" + warning'
 check("Subscription name/row long press opens conversion", "setOnLongClickListener(conversionLongClick)" in ui and "showCoreConversion" in ui)
+check("Conversion dialog newline literals are compile-safe", escaped_error in ui and escaped_warning in ui and raw_error not in ui and raw_warning not in ui)
 check("Workflow reapplies patch after legacy mutators", "Apply native subscriptions and smart core fix" in workflow)
 check("Workflow verifies patch before compile", "Verify native subscriptions and smart core" in workflow)
 

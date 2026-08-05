@@ -480,11 +480,9 @@ class SubscriptionManagementActivity : ThemedActivity() {
                     summary.added,
                     summary.failed
                 ) + if (summary.firstError.isNotBlank()) {
-                    "
-" + summary.firstError
+                    "\n" + summary.firstError
                 } else if (warning.isNotBlank()) {
-                    "
-" + warning
+                    "\n" + warning
                 } else {
                     ""
                 }
