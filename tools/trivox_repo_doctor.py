@@ -22,6 +22,7 @@ workflow = text(".github/workflows/trivox-multicore-binaries.yml")
 
 check("CoreManager has true native VPN bridge verifier", "verifyNativeBridgeRoute(" in core)
 check("CoreManager verifies native VPN through local proxy proof", "Native VPN bridge proof passed" in core and "mode = ConnectionMode.PROXY" in core)
+check("CoreManager native bridge timing constants compile", all(k in core for k in ["NATIVE_BRIDGE_VERIFY_BUDGET_MS", "NATIVE_BRIDGE_PROBE_TIMEOUT_MS", "NATIVE_BRIDGE_GRACE_MS"]))
 check("CoreManager exposes exact self-bypass decision", "requiresSelfBypassForVpn(" in core)
 check("TrivoxVpnService no longer bypasses app only because Smart is enabled", "settings.smartCoreSelection ||" not in vpn and "core.requiresSelfBypassForVpn(profile, settings)" in vpn)
 check("MainActivity quickCoreButton duplicate setup cleaned", main.count("findViewById<Button>(R.id.quickCoreButton).setOnClickListener") <= 1, str(main.count("findViewById<Button>(R.id.quickCoreButton).setOnClickListener")))

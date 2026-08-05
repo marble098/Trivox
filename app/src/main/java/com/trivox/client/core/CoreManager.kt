@@ -517,6 +517,9 @@ class CoreManager(context: Context) {
         private const val GENERAL_CONSERVATIVE_VERIFY_BUDGET_MS = 11_000
         private const val GENERAL_ADAPTIVE_PROBE_TIMEOUT_MS = 2_800
         private const val GENERAL_CONSERVATIVE_PROBE_TIMEOUT_MS = 4_500
+        private const val NATIVE_BRIDGE_VERIFY_BUDGET_MS = 9_000
+        private const val NATIVE_BRIDGE_PROBE_TIMEOUT_MS = 3_200
+        private const val NATIVE_BRIDGE_GRACE_MS = 450
         private const val PROXY_ADAPTIVE_GRACE_MS = 40
         private const val PROXY_CONSERVATIVE_GRACE_MS = 120
         private const val VPN_ADAPTIVE_GRACE_MS = 90

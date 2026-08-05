@@ -157,26 +157,22 @@ def patch_core_manager():
 """
         s = replace_once(s, insert_before, method + insert_before, "CoreManager requiresSelfBypassForVpn")
 
-    if "NATIVE_BRIDGE_VERIFY_BUDGET_MS" not in s:
-        before = "        private const val PROXY_CONSERVATIVE_GRACE_MS = 450\n"
-        after = (
-            "        private const val PROXY_CONSERVATIVE_GRACE_MS = 450\n"
-            "        private const val NATIVE_BRIDGE_VERIFY_BUDGET_MS = 9_000\n"
-            "        private const val NATIVE_BRIDGE_PROBE_TIMEOUT_MS = 3_200\n"
-            "        private const val NATIVE_BRIDGE_GRACE_MS = 450\n"
-        )
-        if before in s:
-            s = s.replace(before, after, 1)
+    required_native_constants = (
+        "        private const val NATIVE_BRIDGE_VERIFY_BUDGET_MS = 9_000\n"
+        "        private const val NATIVE_BRIDGE_PROBE_TIMEOUT_MS = 3_200\n"
+        "        private const val NATIVE_BRIDGE_GRACE_MS = 450\n"
+    )
+    if "private const val NATIVE_BRIDGE_VERIFY_BUDGET_MS" not in s:
+        marker = "        private const val PROXY_ADAPTIVE_GRACE_MS ="
+        idx = s.find(marker)
+        if idx >= 0:
+            s = s[:idx] + required_native_constants + s[idx:]
         else:
-            before = "        private const val GENERAL_CONSERVATIVE_PROBE_TIMEOUT_MS = 4_000\n    }\n}"
-            after = (
-                "        private const val GENERAL_CONSERVATIVE_PROBE_TIMEOUT_MS = 4_000\n"
-                "        private const val NATIVE_BRIDGE_VERIFY_BUDGET_MS = 9_000\n"
-                "        private const val NATIVE_BRIDGE_PROBE_TIMEOUT_MS = 3_200\n"
-                "        private const val NATIVE_BRIDGE_GRACE_MS = 450\n"
-                "    }\n}"
-            )
-            s = replace_once(s, before, after, "CoreManager constants fallback")
+            marker = "    }\n}"
+            idx = s.rfind(marker)
+            if idx < 0:
+                raise SystemExit("CoreManager companion object constants anchor not found")
+            s = s[:idx] + required_native_constants + s[idx:]
 
     write_if_changed(path, s)
 
