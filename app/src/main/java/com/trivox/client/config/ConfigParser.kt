@@ -18,6 +18,7 @@ class ConfigParseException(message: String) : IllegalArgumentException(message)
  * that appears valid but can never connect.
  */
 object ConfigParser {
+    private val URI_LINE_PATTERN = Regex("^[A-Za-z][A-Za-z0-9+.-]*://")
     private val supported = setOf(
         "vless", "vmess", "trojan", "ss", "shadowsocks",
         "socks", "socks5", "http", "https",
@@ -33,7 +34,6 @@ object ConfigParser {
         }
         val text = input.trim().removePrefix("\uFEFF")
         if (text.isBlank()) return emptyList()
-        NativeConfigImporter.parseTextOrNull(text)?.let { return it }
         NativeConfigImporter.parseTextOrNull(text)?.let { native ->
             if (native.isNotEmpty()) return native
         }
@@ -43,16 +43,26 @@ object ConfigParser {
         if (text.startsWith("{")) return listOf(parseJson(text))
 
         val directLines = boundedLines(text)
-        val candidates = if (directLines.any { "://" in it || it.startsWith("{") }) {
-            directLines
+        val directCandidates = directLines.filter { line ->
+            val candidate = line.trim()
+            candidate.startsWith("{") || URI_LINE_PATTERN.containsMatchIn(candidate)
+        }
+        val candidates = if (directCandidates.isNotEmpty()) {
+            directCandidates
         } else {
             val decoded = decodeBase64OrNull(text) ?: throw ConfigParseException(
-                "Input is neither a supported URI, Xray JSON, wg-quick, nor Base64 subscription content"
+                "Input is neither a supported URI, native Mihomo/sing-box document, Xray JSON, wg-quick, nor Base64 subscription content"
             )
+            NativeConfigImporter.parseTextOrNull(decoded)?.let { native ->
+                if (native.isNotEmpty()) return native
+            }
             if (looksLikeWireGuardQuickConfig(decoded)) {
                 return listOf(parseWireGuardQuickConfig(decoded))
             }
-            boundedLines(decoded)
+            boundedLines(decoded).filter { line ->
+                val candidate = line.trim()
+                candidate.startsWith("{") || URI_LINE_PATTERN.containsMatchIn(candidate)
+            }
         }
 
         val unique = LinkedHashMap<String, ConfigProfile>()

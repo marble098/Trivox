@@ -41,6 +41,12 @@ jobs:
       - name: Reapply deep debug normalization
         run: python3 tools/apply-deep-debug-fix.py
 
+      - name: Apply native subscriptions and smart core fix
+        run: python3 tools/apply-native-subscription-smartcore-fix.py "$GITHUB_WORKSPACE"
+
+      - name: Verify native subscriptions and smart core
+        run: python3 tools/trivox-native-smart-doctor.py "$GITHUB_WORKSPACE"
+
       - name: Run Trivox static doctor
         run: python3 tools/trivox_repo_doctor.py
 

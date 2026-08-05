@@ -14,8 +14,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import com.trivox.client.R
 import com.trivox.client.core.ConnectionRuntime
+import com.trivox.client.core.CoreConversionManager
 import com.trivox.client.data.ConfigRepository
 import com.trivox.client.data.ConnectionState
+import com.trivox.client.data.CoreId
 import com.trivox.client.data.SubscriptionKind
 import com.trivox.client.data.SubscriptionRepository
 import com.trivox.client.data.SubscriptionSource
@@ -420,6 +422,12 @@ class SubscriptionManagementActivity : ThemedActivity() {
             delete.setOnClickListener {
                 confirmDelete(source)
             }
+            val conversionLongClick = View.OnLongClickListener {
+                showCoreConversion(source)
+                true
+            }
+            row.setOnLongClickListener(conversionLongClick)
+            name.setOnLongClickListener(conversionLongClick)
 
             listContainer.addView(row)
         }
@@ -431,6 +439,58 @@ class SubscriptionManagementActivity : ThemedActivity() {
                 sources.any {
                     it.enabled
                 }
+    }
+
+    private fun showCoreConversion(source: SubscriptionSource) {
+        if (operationBusy.get()) {
+            toast(getString(R.string.subscription_conversion_busy))
+            return
+        }
+        val cores = CoreId.entries
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.subscription_conversion_title, source.name))
+            .setMessage(R.string.subscription_conversion_hint)
+            .setItems(cores.map { it.label }.toTypedArray()) { _, position ->
+                convertSubscriptionToCore(source, cores[position])
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun convertSubscriptionToCore(source: SubscriptionSource, target: CoreId) {
+        if (!operationBusy.compareAndSet(false, true)) {
+            toast(getString(R.string.subscription_conversion_busy))
+            return
+        }
+        progressText.visibility = View.VISIBLE
+        progressText.text = getString(R.string.subscription_conversion_progress, target.label)
+        render()
+        activeTask = worker.submit {
+            val summary = CoreConversionManager(applicationContext)
+                .convertSubscriptionFromSource(source, target)
+            operationBusy.set(false)
+            activeTask = null
+            runOnUiThreadIfAlive {
+                progressText.visibility = View.GONE
+                render()
+                val warning = summary.warnings.firstOrNull().orEmpty()
+                val message = getString(
+                    R.string.subscription_conversion_result,
+                    summary.target.label,
+                    summary.added,
+                    summary.failed
+                ) + if (summary.firstError.isNotBlank()) {
+                    "
+" + summary.firstError
+                } else if (warning.isNotBlank()) {
+                    "
+" + warning
+                } else {
+                    ""
+                }
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun showAddSourceOptions() {

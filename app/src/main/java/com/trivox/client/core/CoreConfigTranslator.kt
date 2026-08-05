@@ -1,6 +1,7 @@
 package com.trivox.client.core
 
 import com.trivox.client.config.NativeConfigImporter
+import com.trivox.client.config.NativeProfileDocument
 import com.trivox.client.config.XrayConfigBuilder
 import com.trivox.client.data.ConfigProfile
 import com.trivox.client.data.CoreId
@@ -8,28 +9,41 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 object CoreConfigTranslator {
-    fun build(request: CoreStartRequest, coreId: CoreId): String = when (coreId) {
-        CoreId.XRAY -> XrayConfigBuilder.build(
-            profile = xrayProfileFor(request.profile),
-            settings = request.settings,
-            mode = request.mode,
-            tunFd = request.tunFd,
-            errorLogPath = com.trivox.client.util.Diagnostics.xrayErrorLogPath()
-        )
-        CoreId.SING_BOX -> buildSingBox(request.profile, request.settings.socksPort).toString()
-        CoreId.MIHOMO -> buildMihomoYaml(request.profile, request.settings.socksPort)
+    fun build(request: CoreStartRequest, coreId: CoreId): String {
+        NativeProfileDocument.exactRuntimeConfig(
+            request.profile,
+            coreId,
+            request.settings.socksPort
+        )?.let { return it }
+        return when (coreId) {
+            CoreId.XRAY -> XrayConfigBuilder.build(
+                profile = xrayProfileFor(request.profile),
+                settings = request.settings,
+                mode = request.mode,
+                tunFd = request.tunFd,
+                errorLogPath = com.trivox.client.util.Diagnostics.xrayErrorLogPath()
+            )
+            CoreId.SING_BOX -> buildSingBox(request.profile, request.settings.socksPort).toString()
+            CoreId.MIHOMO -> buildMihomoYaml(request.profile, request.settings.socksPort)
+        }
     }
 
-    fun buildNativeProfile(profile: ConfigProfile, coreId: CoreId, mixedPort: Int): String = when (coreId) {
-        CoreId.XRAY -> xrayOutboundFor(profile)
-        CoreId.SING_BOX -> buildSingBox(profile, mixedPort).toString(2)
-        CoreId.MIHOMO -> buildMihomoYaml(profile, mixedPort)
+    fun buildNativeProfile(profile: ConfigProfile, coreId: CoreId, mixedPort: Int): String {
+        NativeProfileDocument.exactRuntimeConfig(profile, coreId, mixedPort)?.let { return it }
+        return when (coreId) {
+            CoreId.XRAY -> xrayOutboundFor(profile)
+            CoreId.SING_BOX -> buildSingBox(profile, mixedPort).toString(2)
+            CoreId.MIHOMO -> buildMihomoYaml(profile, mixedPort)
+        }
     }
 
     fun xrayOutboundFor(profile: ConfigProfile): String = xrayProfileFor(profile).outboundJson
 
     private fun xrayProfileFor(profile: ConfigProfile): ConfigProfile {
-        val outbound = profile.outboundJson.trim()
+                NativeProfileDocument.affinity(profile)?.let { required ->
+            error("Complete native documents cannot be passed to Xray; this profile requires ${required.label}")
+        }
+val outbound = profile.outboundJson.trim()
         if (outbound.startsWith("{") && runCatching { JSONObject(outbound).has("protocol") }.getOrDefault(false)) {
             return profile
         }
@@ -72,7 +86,13 @@ object CoreConfigTranslator {
         stream.optString("security", "").lowercase()
 
     private fun streamNetwork(stream: JSONObject): String =
-        stream.optString("network", "tcp").lowercase()
+        when (val network = stream.optString("network", "tcp").trim().lowercase()) {
+            "", "none", "raw" -> "tcp"
+            "websocket" -> "ws"
+            "http-upgrade", "http_upgrade" -> "httpupgrade"
+            "splithttp" -> "xhttp"
+            else -> network
+        }
 
     private fun firstNonBlank(vararg values: String?): String =
         values.firstOrNull { !it.isNullOrBlank() }.orEmpty()

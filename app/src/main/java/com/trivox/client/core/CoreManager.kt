@@ -88,6 +88,8 @@ class CoreManager(context: Context) {
         CoreId.SING_BOX to SingBoxCoreAdapter(appContext),
         CoreId.MIHOMO to MihomoCoreAdapter(appContext)
     )
+    private val smartCoreSelector = SmartCoreSelector(appContext, adapters)
+
 
     private data class StartPlan(
         val activeCore: CoreId,
@@ -464,39 +466,8 @@ class CoreManager(context: Context) {
         return if (settings.smartCoreSelection) smartSelect(request) else settings.coreId
     }
 
-    fun smartSelect(request: CoreStartRequest): CoreId {
-        val settings = SettingsRepository(appContext).load()
-        if (!settings.smartCoreSelection) return settings.coreId
-
-        val order = when (request.mode) {
-            ConnectionMode.VPN -> listOf(CoreId.MIHOMO, CoreId.SING_BOX, CoreId.XRAY)
-            ConnectionMode.PROXY -> listOf(CoreId.MIHOMO, CoreId.SING_BOX, CoreId.XRAY)
-        }
-        val available = order.filter { adapters[it]?.isAvailable() == true }.ifEmpty { listOf(CoreId.XRAY) }
-        val diagnostics = StringBuilder()
-
-        available.forEach { coreId ->
-            val plan = runCatching {
-                buildPlanForCandidate(request, coreId)
-            }.getOrElse {
-                diagnostics.append(coreId.name).append(": build failed: ").append(it.message ?: "unknown").append("\n")
-                return@forEach
-            }
-            val validation = validatePlan(plan)
-            if (validation.success) {
-                settings.lastSmartCoreId = coreId
-                SettingsRepository(appContext).save(settings)
-                Diagnostics.info("Smart core selected: " + coreId.label + " for " + request.mode.name)
-                return coreId
-            }
-            diagnostics.append(coreId.name).append(": ").append(validation.error).append("\n")
-        }
-
-        settings.lastSmartCoreId = CoreId.XRAY
-        SettingsRepository(appContext).save(settings)
-        Diagnostics.warning("Smart core fallback to Xray. Candidates failed: " + diagnostics.toString().trim())
-        return CoreId.XRAY
-    }
+    fun smartSelect(request: CoreStartRequest): CoreId =
+        smartCoreSelector.select(request)
 
     private fun buildPlanForCandidate(request: CoreStartRequest, coreId: CoreId): StartPlan {
         val adapter = adapters[coreId] ?: adapters.getValue(CoreId.XRAY)
@@ -517,9 +488,9 @@ class CoreManager(context: Context) {
         private const val GENERAL_CONSERVATIVE_VERIFY_BUDGET_MS = 11_000
         private const val GENERAL_ADAPTIVE_PROBE_TIMEOUT_MS = 2_800
         private const val GENERAL_CONSERVATIVE_PROBE_TIMEOUT_MS = 4_500
-        private const val NATIVE_BRIDGE_VERIFY_BUDGET_MS = 9_000
-        private const val NATIVE_BRIDGE_PROBE_TIMEOUT_MS = 3_200
-        private const val NATIVE_BRIDGE_GRACE_MS = 450
+        private const val NATIVE_BRIDGE_VERIFY_BUDGET_MS = 18_000
+        private const val NATIVE_BRIDGE_PROBE_TIMEOUT_MS = 4_800
+        private const val NATIVE_BRIDGE_GRACE_MS = 1_000
         private const val PROXY_ADAPTIVE_GRACE_MS = 40
         private const val PROXY_CONSERVATIVE_GRACE_MS = 120
         private const val VPN_ADAPTIVE_GRACE_MS = 90

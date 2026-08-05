@@ -373,4 +373,9 @@
     <string name="subscription_convert_title">Convert to %1$s</string>
     <string name="subscription_convert_confirm">Convert %1$d profiles in %2$s to %3$s and add the converted copies to the same subscription?</string>
     <string name="subscription_convert_done">Converted %1$d profiles, failed %2$d for %3$s</string>
+    <string name="subscription_conversion_title">Convert %1$s</string>
+    <string name="subscription_conversion_hint">The target core is validated with its real native configuration. Full provider-based documents are expanded before cross-core conversion. Converted profiles are stored locally so normal subscription updates cannot delete them.</string>
+    <string name="subscription_conversion_busy">Another subscription operation is already running.</string>
+    <string name="subscription_conversion_progress">Converting with %1$s…</string>
+    <string name="subscription_conversion_result">%1$s conversion: %2$d added or updated, %3$d failed</string>
 </resources>

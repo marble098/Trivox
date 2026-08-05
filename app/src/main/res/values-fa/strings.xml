@@ -373,4 +373,9 @@
     <string name="subscription_convert_title">تبدیل به %1$s</string>
     <string name="subscription_convert_confirm">تعداد %1$d کانفیگ از %2$s به %3$s تبدیل و نسخه‌های تبدیل‌شده به همان ساب اضافه شود؟</string>
     <string name="subscription_convert_done">%1$d کانفیگ تبدیل شد، %2$d ناموفق برای %3$s</string>
+    <string name="subscription_conversion_title">تبدیل %1$s</string>
+    <string name="subscription_conversion_hint">کانفیگ native واقعی هسته مقصد اعتبارسنجی می‌شود. برای سندهای provider-based ابتدا providerها باز می‌شوند. خروجی‌ها محلی ذخیره می‌شوند تا آپدیت عادی ساب آن‌ها را حذف نکند.</string>
+    <string name="subscription_conversion_busy">یک عملیات دیگر روی اشتراک‌ها در حال اجرا است.</string>
+    <string name="subscription_conversion_progress">در حال تبدیل با %1$s…</string>
+    <string name="subscription_conversion_result">تبدیل %1$s: تعداد %2$d افزوده یا به‌روزرسانی شد و %3$d مورد ناموفق بود</string>
 </resources>

@@ -3,127 +3,139 @@ package com.trivox.client.config
 import com.trivox.client.data.ConfigProfile
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.URLDecoder
-import java.nio.charset.StandardCharsets
 import java.util.Locale
 import java.util.UUID
 
+/**
+ * Parses native Mihomo YAML and sing-box JSON without feeding YAML internals to
+ * the URI/Xray parser. Complete runtime documents remain complete; provider
+ * lists can be expanded separately for cross-core conversion.
+ */
 object NativeConfigImporter {
+    fun nativeInstallSubscriptionUrl(input: String): String? =
+        NativeProfileDocument.remoteProfileUrl(input)
 
-    fun nativeInstallSubscriptionUrl(input: String): String? {
-        val text = input.trim().removePrefix("\uFEFF")
-        val lower = text.lowercase(Locale.ROOT)
-        if (!(lower.startsWith("clash://") || lower.startsWith("clashmeta://") || lower.startsWith("mihomo://") || lower.startsWith("sing-box://"))) {
-            return null
-        }
-        val query = text.substringAfter('?', "")
-        if (query.isBlank()) return null
-        val pairs = query.split('&').mapNotNull { part ->
-            val index = part.indexOf('=')
-            if (index <= 0) null else part.substring(0, index) to urlDecode(part.substring(index + 1))
-        }.toMap()
-        return (pairs["url"] ?: pairs["link"] ?: pairs["subscription"] ?: pairs["sub"] ?: pairs["config_url"])
-            ?.trim()
-            ?.takeIf { it.startsWith("https://", ignoreCase = true) || it.startsWith("http://", ignoreCase = true) }
-    }
     fun parseTextOrNull(input: String): List<ConfigProfile>? {
         val text = input.trim().removePrefix("\uFEFF")
         if (text.isBlank()) return emptyList()
-        decodeNativeInstallUrl(text)?.let { decoded ->
-            parseTextOrNull(decoded)?.let { return it }
+        NativeProfileDocument.embeddedContent(text)?.let { embedded ->
+            return parseTextOrNull(embedded)
         }
-        return when {
-            text.startsWith("{") -> parseJsonNative(text)
-            looksLikeMihomoYaml(text) -> parseMihomoYaml(text)
-            else -> null
+        NativeProfileDocument.parseExactDocumentOrNull(text)?.let { return listOf(it) }
+
+        if (text.startsWith("{")) {
+            val root = runCatching { JSONObject(text) }.getOrNull() ?: return null
+            if (root.has("type") && root.has("server")) {
+                return singBoxOutboundToProfile(root)?.let(::listOf)
+            }
+            if (root.has("proxies")) {
+                return parseMihomoJson(root).takeIf { it.isNotEmpty() }
+            }
+            return null
         }
+
+        if (!looksLikeMihomoYaml(text)) return null
+        val profiles = parseMihomoYamlProfiles(text)
+        return profiles.takeIf { it.isNotEmpty() }
+    }
+
+    /** Returns individual portable proxies even when the input is a full document. */
+    fun convertibleProfiles(input: String): List<ConfigProfile> {
+        val text = input.trim().removePrefix("\uFEFF")
+        if (text.isBlank()) return emptyList()
+        NativeProfileDocument.embeddedContent(text)?.let { return convertibleProfiles(it) }
+        if (text.startsWith("{")) {
+            val root = runCatching { JSONObject(text) }.getOrNull() ?: return emptyList()
+            if (root.has("outbounds")) {
+                return NativeProfileDocument.singBoxOutboundItems(text)
+                    .mapNotNull(::singBoxOutboundToProfile)
+            }
+            if (root.has("type") && root.has("server")) {
+                return listOfNotNull(singBoxOutboundToProfile(root))
+            }
+            return parseMihomoJson(root)
+        }
+        return parseMihomoYamlProfiles(text)
     }
 
     private fun looksLikeMihomoYaml(text: String): Boolean =
-        text.contains("proxies:") ||
-            text.contains("proxy-providers:") ||
-            (Regex("(?m)^\\s*-").containsMatchIn(text) && text.contains("type:") && text.contains("server:"))
+        Regex("(?m)^\\s*(proxies|proxy-providers|proxy-groups|rules|dns|tun|mixed-port|socks-port)\\s*:")
+            .containsMatchIn(text)
 
-    private fun decodeNativeInstallUrl(text: String): String? {
-        val lower = text.lowercase(Locale.ROOT)
-        if (!(lower.startsWith("clash://") || lower.startsWith("clashmeta://") || lower.startsWith("mihomo://") || lower.startsWith("sing-box://"))) {
-            return null
-        }
-        val query = text.substringAfter('?', "")
-        if (query.isBlank()) return null
-        val pairs = query.split('&').mapNotNull { part ->
-            val index = part.indexOf('=')
-            if (index <= 0) null else part.substring(0, index) to urlDecode(part.substring(index + 1))
-        }.toMap()
-        return pairs["config"]?.takeIf { it.startsWith("{") || it.contains("proxies:") }
-            ?: pairs["content"]?.takeIf { it.startsWith("{") || it.contains("proxies:") }
-            ?: pairs["data"]?.takeIf { it.startsWith("{") || it.contains("proxies:") }
-    }
+    private fun parseMihomoYamlProfiles(text: String): List<ConfigProfile> =
+        NativeProfileDocument.directProxyItems(text).mapNotNull(::mihomoProxyToProfile)
 
-    private fun parseJsonNative(text: String): List<ConfigProfile>? = runCatching {
-        val root = JSONObject(text)
-        when {
-            root.has("outbounds") -> parseSingBoxJson(root)
-            root.has("proxies") -> parseMihomoJson(root)
-            root.has("type") && root.has("server") -> singBoxOutboundToProfile(root)?.let(::listOf)
-            else -> null
-        }
-    }.getOrNull()
-
-    private fun parseSingBoxJson(root: JSONObject): List<ConfigProfile>? {
-        val outs = root.optJSONArray("outbounds") ?: return null
-        val result = mutableListOf<ConfigProfile>()
-        for (i in 0 until outs.length()) {
-            val out = outs.optJSONObject(i) ?: continue
-            val type = out.optString("type", "").lowercase(Locale.ROOT)
-            if (type in setOf("direct", "block", "dns", "selector", "urltest")) continue
-            singBoxOutboundToProfile(out)?.let(result::add)
-        }
-        return result.takeIf { it.isNotEmpty() }
-    }
-
-    private fun parseMihomoJson(root: JSONObject): List<ConfigProfile>? {
-        val proxies = root.optJSONArray("proxies") ?: return null
-        val result = mutableListOf<ConfigProfile>()
-        for (i in 0 until proxies.length()) {
-            val proxy = proxies.optJSONObject(i) ?: continue
-            mihomoProxyToProfile(jsonToStringMap(proxy))?.let(result::add)
-        }
-        return result.takeIf { it.isNotEmpty() }
+    private fun parseMihomoJson(root: JSONObject): List<ConfigProfile> {
+        val proxies = root.optJSONArray("proxies") ?: return emptyList()
+        return (0 until proxies.length()).mapNotNull(proxies::optJSONObject)
+            .mapNotNull { mihomoProxyToProfile(jsonObjectToMap(it)) }
     }
 
     private fun singBoxOutboundToProfile(out: JSONObject): ConfigProfile? {
-        val type = out.optString("type", "").lowercase(Locale.ROOT)
-        val server = out.optString("server", "")
-        val port = out.optInt("server_port", 0)
-        if (server.isBlank() || port <= 0) return null
-        val protocol = when (type) {
-            "ss" -> "shadowsocks"
-            "shadowsocks" -> "shadowsocks"
-            else -> type
-        }
+        val type = out.optString("type").lowercase(Locale.ROOT)
+        if (type in NON_PROXY_TYPES) return null
+        val server = out.optString("server").trim()
+        val port = out.optInt("server_port", out.optInt("port", 0))
+        if (server.isBlank() || port !in 1..65535) return null
+
+        val protocol = canonicalProtocol(type)
         val xray = JSONObject().put("tag", "proxy").put("protocol", protocol)
         val settings = JSONObject()
         when (protocol) {
             "vless", "vmess" -> {
-                val user = JSONObject().put("id", out.optString("uuid", ""))
+                val user = JSONObject().put("id", out.optString("uuid"))
                 if (protocol == "vless") user.put("encryption", "none")
                 if (protocol == "vmess") {
                     user.put("security", out.optString("security", "auto"))
                     user.put("alterId", out.optInt("alter_id", 0))
                 }
-                out.optString("flow", "").takeIf(String::isNotBlank)?.let { user.put("flow", it) }
-                settings.put("vnext", JSONArray().put(JSONObject().put("address", server).put("port", port).put("users", JSONArray().put(user))))
+                out.optString("flow").takeIf(String::isNotBlank)?.let { user.put("flow", it) }
+                settings.put(
+                    "vnext",
+                    JSONArray().put(
+                        JSONObject()
+                            .put("address", server)
+                            .put("port", port)
+                            .put("users", JSONArray().put(user))
+                    )
+                )
             }
-            "trojan" -> settings.put("servers", JSONArray().put(JSONObject().put("address", server).put("port", port).put("password", out.optString("password", ""))))
-            "shadowsocks" -> settings.put("servers", JSONArray().put(JSONObject().put("address", server).put("port", port).put("method", out.optString("method", "")).put("password", out.optString("password", ""))))
+            "trojan" -> settings.put(
+                "servers",
+                JSONArray().put(
+                    JSONObject().put("address", server).put("port", port)
+                        .put("password", out.optString("password"))
+                )
+            )
+            "shadowsocks" -> settings.put(
+                "servers",
+                JSONArray().put(
+                    JSONObject().put("address", server).put("port", port)
+                        .put("method", out.optString("method"))
+                        .put("password", out.optString("password"))
+                )
+            )
+            "socks" -> settings.put(
+                "servers",
+                JSONArray().put(
+                    JSONObject().put("address", server).put("port", port)
+                        .put("users", credentialUsers(out.optString("username"), out.optString("password")))
+                )
+            )
+            "http" -> settings.put(
+                "servers",
+                JSONArray().put(
+                    JSONObject().put("address", server).put("port", port)
+                        .put("users", credentialUsers(out.optString("username"), out.optString("password")))
+                )
+            )
             else -> return null
         }
         xray.put("settings", settings)
         xray.put("streamSettings", singBoxStreamSettings(out, server))
         return ConfigProfile(
             id = UUID.randomUUID().toString(),
-            name = out.optString("tag", "$server:$port"),
+            name = out.optString("tag").ifBlank { "$server:$port" },
             protocol = protocol,
             server = server,
             port = port,
@@ -135,172 +147,245 @@ object NativeConfigImporter {
     }
 
     private fun singBoxStreamSettings(out: JSONObject, server: String): JSONObject {
-        val stream = JSONObject().put("network", transportName(out.optJSONObject("transport")))
-        out.optJSONObject("tls")?.let { tls ->
-            val isReality = tls.optJSONObject("reality")?.optBoolean("enabled") == true
-            stream.put("security", if (isReality) "reality" else "tls")
-            val tlsSettings = JSONObject()
-            tls.optString("server_name", server).takeIf(String::isNotBlank)?.let { tlsSettings.put("serverName", it) }
-            tls.optJSONObject("utls")?.optString("fingerprint", "")?.takeIf(String::isNotBlank)?.let { tlsSettings.put("fingerprint", it) }
-            tls.optJSONObject("reality")?.let { r ->
-                r.optString("public_key", "").takeIf(String::isNotBlank)?.let { tlsSettings.put("publicKey", it) }
-                r.optString("short_id", "").takeIf(String::isNotBlank)?.let { tlsSettings.put("shortId", it) }
+        val transport = out.optJSONObject("transport")
+        val network = normalizeNetwork(transport?.optString("type") ?: "tcp")
+        val stream = JSONObject().put("network", network)
+        when (network) {
+            "ws" -> stream.put(
+                "wsSettings",
+                JSONObject().apply {
+                    transport?.optString("path")?.takeIf(String::isNotBlank)?.let { put("path", it) }
+                    transport?.optJSONObject("headers")?.let { put("headers", it) }
+                }
+            )
+            "grpc" -> stream.put(
+                "grpcSettings",
+                JSONObject().apply {
+                    transport?.optString("service_name")?.takeIf(String::isNotBlank)
+                        ?.let { put("serviceName", it) }
+                }
+            )
+            "httpupgrade" -> stream.put(
+                "httpupgradeSettings",
+                JSONObject().apply {
+                    transport?.optString("path")?.takeIf(String::isNotBlank)?.let { put("path", it) }
+                    transport?.optJSONObject("headers")?.optString("Host")?.takeIf(String::isNotBlank)
+                        ?.let { put("host", it) }
+                }
+            )
+            "http", "h2", "xhttp" -> stream.put(
+                if (network == "xhttp") "xhttpSettings" else "httpSettings",
+                JSONObject().apply {
+                    transport?.optString("path")?.takeIf(String::isNotBlank)?.let { put("path", it) }
+                    transport?.optJSONObject("headers")?.optString("Host")?.takeIf(String::isNotBlank)
+                        ?.let { put("host", JSONArray().put(it)) }
+                }
+            )
+        }
+
+        out.optJSONObject("tls")?.takeIf { it.optBoolean("enabled", true) }?.let { tls ->
+            val reality = tls.optJSONObject("reality")?.takeIf { it.optBoolean("enabled", true) }
+            stream.put("security", if (reality != null) "reality" else "tls")
+            val settings = JSONObject()
+                .put("serverName", tls.optString("server_name", server))
+            tls.optBoolean("insecure", false).let { settings.put("allowInsecure", it) }
+            tls.optJSONArray("alpn")?.let { settings.put("alpn", it) }
+            tls.optJSONObject("utls")?.optString("fingerprint")?.takeIf(String::isNotBlank)
+                ?.let { settings.put("fingerprint", it) }
+            reality?.let {
+                it.optString("public_key").takeIf(String::isNotBlank)
+                    ?.let { value -> settings.put("publicKey", value) }
+                it.optString("short_id").takeIf(String::isNotBlank)
+                    ?.let { value -> settings.put("shortId", value) }
             }
-            stream.put(if (isReality) "realitySettings" else "tlsSettings", tlsSettings)
+            stream.put(if (reality != null) "realitySettings" else "tlsSettings", settings)
         }
         return stream
     }
 
-    private fun transportName(transport: JSONObject?): String = when (transport?.optString("type", "tcp")?.lowercase(Locale.ROOT) ?: "tcp") {
-        "ws", "websocket" -> "ws"
-        "grpc" -> "grpc"
-        "httpupgrade" -> "httpupgrade"
-        "http" -> "http"
-        "h2" -> "h2"
-        "xhttp", "splithttp" -> "xhttp"
-        else -> "tcp"
-    }
+    private fun mihomoProxyToProfile(map: Map<String, Any?>): ConfigProfile? {
+        val type = text(map["type"]).lowercase(Locale.ROOT)
+        val server = text(map["server"]).trim()
+        val port = int(map["port"]) ?: return null
+        if (type.isBlank() || server.isBlank() || port !in 1..65535) return null
 
-    private fun parseMihomoYaml(text: String): List<ConfigProfile>? {
-        val proxies = mutableListOf<MutableMap<String, String>>()
-        var inProxies = false
-        var current: MutableMap<String, String>? = null
-        text.lineSequence().forEach { rawLine ->
-            val line = rawLine.trimEnd()
-            val trimmed = line.trim()
-            if (trimmed.isBlank() || trimmed.startsWith("#")) return@forEach
-            if (trimmed == "proxies:") {
-                inProxies = true
-                return@forEach
-            }
-            if (!inProxies && (trimmed.startsWith("- {") || (trimmed.startsWith("-") && trimmed.contains("type:") && trimmed.contains("server:")))) {
-                inProxies = true
-            }
-            if (!inProxies) return@forEach
-            if (trimmed.endsWith(":") && !trimmed.startsWith("-")) {
-                inProxies = false
-                current = null
-                return@forEach
-            }
-            if (trimmed.startsWith("- {") && trimmed.endsWith("}")) {
-                proxies += parseInlineYamlMap(trimmed.removePrefix("- ")).toMutableMap()
-                current = null
-                return@forEach
-            }
-            if (trimmed.startsWith("- ")) {
-                current = linkedMapOf<String, String>().also { proxies += it }
-                parseYamlPair(trimmed.removePrefix("- "))?.let { (k, v) -> current?.put(k, v) }
-            } else {
-                parseYamlPair(trimmed)?.let { (k, v) -> current?.put(k, v) }
-            }
-        }
-        val profiles = proxies.mapNotNull { mihomoProxyToProfile(it) }
-        return profiles.takeIf { it.isNotEmpty() }
-    }
-
-    private fun parseInlineYamlMap(value: String): Map<String, String> {
-        val body = value.trim().removePrefix("{").removeSuffix("}")
-        val map = linkedMapOf<String, String>()
-        body.splitRespectingQuotes(',').forEach { item ->
-            parseYamlPair(item.trim())?.let { (k, v) -> map[k] = v }
-        }
-        return map
-    }
-
-    private fun parseYamlPair(value: String): Pair<String, String>? {
-        val idx = value.indexOf(':')
-        if (idx <= 0) return null
-        val key = value.substring(0, idx).trim()
-        var v = value.substring(idx + 1).trim()
-        if ((v.startsWith("'") && v.endsWith("'")) || (v.startsWith("\"") && v.endsWith("\""))) {
-            v = v.substring(1, v.length - 1)
-        }
-        return key to v
-    }
-
-    private fun mihomoProxyToProfile(map: Map<String, String>): ConfigProfile? {
-        val type = map["type"]?.lowercase(Locale.ROOT) ?: return null
-        val server = map["server"].orEmpty()
-        val port = map["port"]?.toIntOrNull() ?: return null
-        if (server.isBlank()) return null
-        val protocol = if (type == "ss") "shadowsocks" else type
+        val protocol = canonicalProtocol(type)
         val xray = JSONObject().put("tag", "proxy").put("protocol", protocol)
         val settings = JSONObject()
         when (protocol) {
             "vless", "vmess" -> {
-                val user = JSONObject().put("id", map["uuid"].orEmpty())
-                if (protocol == "vless") user.put("encryption", map["encryption"] ?: "none")
+                val user = JSONObject().put("id", text(map["uuid"]))
+                if (protocol == "vless") user.put("encryption", text(map["encryption"]).ifBlank { "none" })
                 if (protocol == "vmess") {
-                    user.put("security", map["cipher"] ?: "auto")
-                    user.put("alterId", map["alterId"]?.toIntOrNull() ?: 0)
+                    user.put("security", text(map["cipher"]).ifBlank { "auto" })
+                    user.put("alterId", int(map["alterId"] ?: map["alter-id"]) ?: 0)
                 }
-                map["flow"]?.takeIf(String::isNotBlank)?.let { user.put("flow", it) }
-                settings.put("vnext", JSONArray().put(JSONObject().put("address", server).put("port", port).put("users", JSONArray().put(user))))
+                text(map["flow"]).takeIf(String::isNotBlank)?.let { user.put("flow", it) }
+                settings.put(
+                    "vnext",
+                    JSONArray().put(
+                        JSONObject().put("address", server).put("port", port)
+                            .put("users", JSONArray().put(user))
+                    )
+                )
             }
-            "trojan" -> settings.put("servers", JSONArray().put(JSONObject().put("address", server).put("port", port).put("password", map["password"].orEmpty())))
-            "shadowsocks" -> settings.put("servers", JSONArray().put(JSONObject().put("address", server).put("port", port).put("method", map["cipher"].orEmpty()).put("password", map["password"].orEmpty())))
+            "trojan" -> settings.put(
+                "servers",
+                JSONArray().put(
+                    JSONObject().put("address", server).put("port", port)
+                        .put("password", text(map["password"]))
+                )
+            )
+            "shadowsocks" -> settings.put(
+                "servers",
+                JSONArray().put(
+                    JSONObject().put("address", server).put("port", port)
+                        .put("method", text(map["cipher"] ?: map["method"]))
+                        .put("password", text(map["password"]))
+                )
+            )
+            "socks", "http" -> settings.put(
+                "servers",
+                JSONArray().put(
+                    JSONObject().put("address", server).put("port", port)
+                        .put("users", credentialUsers(text(map["username"]), text(map["password"])))
+                )
+            )
             else -> return null
         }
         xray.put("settings", settings)
-        xray.put("streamSettings", mihomoStreamSettings(map))
-        val name = map["name"]?.takeIf(String::isNotBlank) ?: "$server:$port"
+        xray.put("streamSettings", mihomoStreamSettings(map, server))
+        val rawJson = JSONObject().also { target -> map.forEach { (key, value) -> target.put(key, jsonValue(value)) } }
         return ConfigProfile(
             id = UUID.randomUUID().toString(),
-            name = name,
+            name = text(map["name"]).ifBlank { "$server:$port" },
             protocol = protocol,
             server = server,
             port = port,
-            raw = map.toString(),
+            raw = rawJson.toString(),
             outboundJson = xray.toString(),
             probeServer = server,
             probePort = port
         )
     }
 
-    private fun mihomoStreamSettings(map: Map<String, String>): JSONObject {
-        val network = map["network"] ?: "tcp"
+    private fun mihomoStreamSettings(map: Map<String, Any?>, server: String): JSONObject {
+        val network = normalizeNetwork(text(map["network"]))
         val stream = JSONObject().put("network", network)
-        if (map["tls"] == "true" || map["reality-opts"].orEmpty().isNotBlank()) {
-            stream.put("security", if (map["reality-opts"].orEmpty().isNotBlank()) "reality" else "tls")
+        val ws = mapValue(map["ws-opts"])
+        val grpc = mapValue(map["grpc-opts"])
+        val h2 = mapValue(map["h2-opts"])
+        val httpUpgrade = mapValue(map["http-upgrade-opts"] ?: map["httpupgrade-opts"])
+        when (network) {
+            "ws" -> {
+                val headers = mapValue(ws["headers"] ?: map["ws-headers"])
+                stream.put(
+                    "wsSettings",
+                    JSONObject().apply {
+                        val path = text(ws["path"] ?: map["ws-path"])
+                        if (path.isNotBlank()) put("path", path)
+                        if (headers.isNotEmpty()) put("headers", mapToJson(headers))
+                    }
+                )
+            }
+            "grpc" -> stream.put(
+                "grpcSettings",
+                JSONObject().apply {
+                    text(grpc["grpc-service-name"] ?: grpc["service-name"] ?: map["grpc-service-name"])
+                        .takeIf(String::isNotBlank)?.let { put("serviceName", it) }
+                }
+            )
+            "httpupgrade" -> stream.put(
+                "httpupgradeSettings",
+                JSONObject().apply {
+                    text(httpUpgrade["path"] ?: map["http-upgrade-path"])
+                        .takeIf(String::isNotBlank)?.let { put("path", it) }
+                    val headers = mapValue(httpUpgrade["headers"])
+                    text(headers["Host"] ?: headers["host"] ?: map["host"])
+                        .takeIf(String::isNotBlank)?.let { put("host", it) }
+                }
+            )
+            "http", "h2" -> stream.put(
+                "httpSettings",
+                JSONObject().apply {
+                    val path = text(h2["path"] ?: map["http-path"])
+                    if (path.isNotBlank()) put("path", path)
+                    val host = firstText(h2["host"], map["host"], map["servername"], map["sni"])
+                    if (host.isNotBlank()) put("host", JSONArray().put(host))
+                }
+            )
+        }
+
+        val reality = mapValue(map["reality-opts"])
+        val tlsEnabled = bool(map["tls"]) == true || reality.isNotEmpty()
+        if (tlsEnabled) {
+            stream.put("security", if (reality.isNotEmpty()) "reality" else "tls")
             val tls = JSONObject()
-            map["servername"]?.takeIf(String::isNotBlank)?.let { tls.put("serverName", it) }
-            map["client-fingerprint"]?.takeIf(String::isNotBlank)?.let { tls.put("fingerprint", it) }
-            stream.put(if (stream.optString("security") == "reality") "realitySettings" else "tlsSettings", tls)
+            firstText(map["servername"], map["sni"], server)
+                .takeIf(String::isNotBlank)?.let { tls.put("serverName", it) }
+            bool(map["skip-cert-verify"])?.let { tls.put("allowInsecure", it) }
+            firstText(map["client-fingerprint"], map["fingerprint"])
+                .takeIf(String::isNotBlank)?.let { tls.put("fingerprint", it) }
+            listValue(map["alpn"]).takeIf { it.isNotEmpty() }
+                ?.let { tls.put("alpn", JSONArray(it.map(::text))) }
+            if (reality.isNotEmpty()) {
+                firstText(reality["public-key"], reality["public_key"])
+                    .takeIf(String::isNotBlank)?.let { tls.put("publicKey", it) }
+                firstText(reality["short-id"], reality["short_id"])
+                    .takeIf(String::isNotBlank)?.let { tls.put("shortId", it) }
+            }
+            stream.put(if (reality.isNotEmpty()) "realitySettings" else "tlsSettings", tls)
         }
         return stream
     }
 
-    private fun jsonToStringMap(obj: JSONObject): Map<String, String> {
-        val result = linkedMapOf<String, String>()
-        obj.keys().forEach { key -> result[key] = obj.opt(key)?.toString().orEmpty() }
-        return result
+    private fun canonicalProtocol(type: String): String = when (type.lowercase(Locale.ROOT)) {
+        "ss", "shadowsocks" -> "shadowsocks"
+        "socks5" -> "socks"
+        "https" -> "http"
+        else -> type.lowercase(Locale.ROOT)
     }
 
-    private fun String.splitRespectingQuotes(delimiter: Char): List<String> {
-        val out = mutableListOf<String>()
-        val sb = StringBuilder()
-        var quote: Char? = null
-        forEach { ch ->
-            when {
-                quote != null -> {
-                    sb.append(ch)
-                    if (ch == quote) quote = null
-                }
-                ch == '\'' || ch == '"' -> {
-                    quote = ch
-                    sb.append(ch)
-                }
-                ch == delimiter -> {
-                    out += sb.toString()
-                    sb.setLength(0)
-                }
-                else -> sb.append(ch)
-            }
-        }
-        out += sb.toString()
-        return out
+    private fun normalizeNetwork(value: String): String = when (value.trim().lowercase(Locale.ROOT)) {
+        "", "none", "raw", "tcp" -> "tcp"
+        "websocket" -> "ws"
+        "http-upgrade", "http_upgrade" -> "httpupgrade"
+        "splithttp" -> "xhttp"
+        else -> value.trim().lowercase(Locale.ROOT)
     }
 
-    private fun urlDecode(value: String): String =
-        URLDecoder.decode(value, StandardCharsets.UTF_8.name())
+    private fun credentialUsers(username: String, password: String): JSONArray =
+        if (username.isBlank() && password.isBlank()) JSONArray()
+        else JSONArray().put(JSONObject().put("user", username).put("pass", password))
+
+    private fun jsonObjectToMap(value: JSONObject): Map<String, Any?> =
+        value.keys().asSequence().associateWith { key -> jsonToKotlin(value.opt(key)) }
+
+    private fun jsonToKotlin(value: Any?): Any? = when (value) {
+        null, JSONObject.NULL -> null
+        is JSONObject -> jsonObjectToMap(value)
+        is JSONArray -> (0 until value.length()).map { jsonToKotlin(value.opt(it)) }
+        else -> value
+    }
+
+    private fun jsonValue(value: Any?): Any? = when (value) {
+        null -> JSONObject.NULL
+        is Map<*, *> -> mapToJson(value.entries.associate { it.key.toString() to it.value })
+        is Iterable<*> -> JSONArray(value.map(::jsonValue))
+        else -> value
+    }
+
+    private fun mapToJson(map: Map<String, Any?>): JSONObject =
+        JSONObject().also { json -> map.forEach { (key, value) -> json.put(key, jsonValue(value)) } }
+
+    private fun mapValue(value: Any?): Map<String, Any?> = MiniYaml.stringMap(value)
+    private fun listValue(value: Any?): List<Any?> = MiniYaml.list(value)
+    private fun text(value: Any?): String = MiniYaml.string(value)
+    private fun int(value: Any?): Int? = MiniYaml.int(value)
+    private fun bool(value: Any?): Boolean? = MiniYaml.bool(value)
+    private fun firstText(vararg values: Any?): String = values.map(::text).firstOrNull(String::isNotBlank).orEmpty()
+
+    private val NON_PROXY_TYPES = setOf(
+        "direct", "block", "dns", "selector", "urltest", "url-test", "fallback"
+    )
 }
