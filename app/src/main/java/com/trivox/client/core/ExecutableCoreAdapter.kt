@@ -196,13 +196,16 @@ class SingBoxCoreAdapter(context: Context) : ExecutableCoreAdapter(
         transports = setOf("tcp", "ws", "grpc", "httpupgrade", "quic"),
         androidTun = false,
         configValidation = true,
-        realDelayTest = false
+        realDelayTest = true
     )
     override fun validationArgs(binary: File, config: File) =
         listOf(binary.absolutePath, "check", "-c", config.absolutePath)
 
     override fun runArgs(binary: File, config: File) =
         listOf(binary.absolutePath, "run", "-c", config.absolutePath)
+
+    override fun realDelay(configPath: String, timeoutSeconds: Int, url: String): CoreResult =
+        queryRestApiDelay("http://127.0.0.1:9091/clash/delay", "proxy", timeoutSeconds, url)
 }
 
 class MihomoCoreAdapter(context: Context) : ExecutableCoreAdapter(
@@ -218,12 +221,52 @@ class MihomoCoreAdapter(context: Context) : ExecutableCoreAdapter(
         transports = setOf("tcp", "ws", "grpc", "httpupgrade", "quic"),
         androidTun = false,
         configValidation = true,
-        realDelayTest = false
+        realDelayTest = true
     )
     override fun validationArgs(binary: File, config: File) =
         listOf(binary.absolutePath, "-d", coreWorkDir().absolutePath, "-t", "-f", config.absolutePath)
 
     override fun runArgs(binary: File, config: File) =
         listOf(binary.absolutePath, "-d", coreWorkDir().absolutePath, "-f", config.absolutePath)
+
+    override fun realDelay(configPath: String, timeoutSeconds: Int, url: String): CoreResult =
+        queryRestApiDelay("http://127.0.0.1:9090/proxies/Proxy/delay", null, timeoutSeconds, url)
 }
+
+private fun queryRestApiDelay(
+    endpointUrl: String,
+    proxyName: String?,
+    timeoutSeconds: Int,
+    targetUrl: String
+): CoreResult = runCatching {
+    val encodedTarget = java.net.URLEncoder.encode(targetUrl, "UTF-8")
+    val timeoutMs = timeoutSeconds * 1000
+    val fullUrl = if (proxyName != null) {
+        "$endpointUrl?proxy=$proxyName&url=$encodedTarget&timeout=$timeoutMs"
+    } else {
+        "$endpointUrl?url=$encodedTarget&timeout=$timeoutMs"
+    }
+    val connection = (java.net.URL(fullUrl).openConnection() as java.net.HttpURLConnection).apply {
+        requestMethod = "GET"
+        connectTimeout = timeoutMs
+        readTimeout = timeoutMs
+        setRequestProperty("Authorization", "Bearer trivox_secret")
+    }
+    val code = connection.responseCode
+    if (code in 200..299) {
+        val text = connection.inputStream.bufferedReader().readText()
+        val json = JSONObject(text)
+        val delay = json.optLong("delay", -1L)
+        if (delay >= 0) {
+            CoreResult(true, data = JSONObject().put("delay", delay))
+        } else {
+            CoreResult(false, "Rest API probe returned invalid delay: $text")
+        }
+    } else {
+        CoreResult(false, "Rest API probe failed with status $code")
+    }
+}.getOrElse {
+    CoreResult(false, "Rest API delay probe failed: ${it.message}")
+}
+
 

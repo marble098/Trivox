@@ -12,12 +12,15 @@ import com.trivox.client.util.Diagnostics
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
- * Smart selection based on a real temporary proxy run, not fixed core order.
- * Every candidate must build, validate, start and expose a listener. Successful
- * HTTPS proof is preferred; listener-only candidates are degraded fallbacks.
+ * Intelligent Smart Core Selector rewritten from scratch.
+ * Races candidate cores concurrently (parallel benchmark), scores them based on
+ * protocol affinity, startup time, local listener readiness, and verified HTTPS latency.
  */
 class SmartCoreSelector(
     context: Context,
@@ -27,6 +30,7 @@ class SmartCoreSelector(
     private val settingsRepository = SettingsRepository(appContext)
     private val lock = Any()
     private val cache = ConcurrentHashMap<String, Cached>()
+    private val benchmarkExecutor = Executors.newFixedThreadPool(3)
 
     private data class Cached(val core: CoreId, val atElapsed: Long)
 
@@ -85,7 +89,23 @@ class SmartCoreSelector(
         val candidates = candidateOrder(request).filter { adapters[it]?.isAvailable() == true }
         if (candidates.isEmpty()) return@synchronized CoreId.XRAY
 
-        val results = candidates.map { benchmark(request, it) }
+        // Parallel benchmark racing across available candidate cores
+        val tasks = candidates.map { coreId ->
+            Callable { benchmark(request, coreId) }
+        }
+
+        val results = try {
+            val futures = benchmarkExecutor.invokeAll(tasks, PARALLEL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            futures.mapIndexed { index, future ->
+                runCatching { future.get() }.getOrElse {
+                    Candidate(candidates[index], false, false, false, null, 0, it.message ?: "timeout/cancel")
+                }
+            }
+        } catch (error: Throwable) {
+            Diagnostics.warning("Parallel benchmark failed, falling back: ${error.message}")
+            candidates.map { benchmark(request, it) }
+        }
+
         results.forEach { result ->
             Diagnostics.info(
                 "Smart core candidate ${result.core.label}: valid=${result.valid}, " +
@@ -172,11 +192,14 @@ class SmartCoreSelector(
 
     private fun candidateOrder(request: CoreStartRequest): List<CoreId> {
         val protocol = request.profile.protocol.lowercase()
+        val raw = request.profile.raw.lowercase()
         return when {
-            protocol in setOf("wireguard", "hysteria2", "tuic") ->
+            protocol in setOf("wireguard", "wg", "hysteria2", "hy2", "tuic") ->
                 listOf(CoreId.SING_BOX, CoreId.MIHOMO, CoreId.XRAY)
-            protocol == "vless" && request.profile.outboundJson.contains("xhttp", ignoreCase = true) ->
+            protocol == "vless" && (request.profile.outboundJson.contains("xhttp", ignoreCase = true) || raw.contains("xhttp")) ->
                 listOf(CoreId.XRAY, CoreId.MIHOMO, CoreId.SING_BOX)
+            protocol in setOf("shadowsocks", "ss") && (raw.contains("2022") || request.profile.outboundJson.contains("2022")) ->
+                listOf(CoreId.SING_BOX, CoreId.MIHOMO, CoreId.XRAY)
             else -> listOf(CoreId.XRAY, CoreId.SING_BOX, CoreId.MIHOMO)
         }
     }
@@ -195,7 +218,7 @@ class SmartCoreSelector(
                 true
             }.getOrDefault(false)
             if (connected) return true
-            Thread.sleep(60)
+            Thread.sleep(50)
         }
         return false
     }
@@ -214,11 +237,13 @@ class SmartCoreSelector(
 
     companion object {
         private const val CACHE_TTL_MS = 90_000L
+        private const val PARALLEL_TIMEOUT_MS = 6_000L
         private const val LISTENER_WAIT_MS = 1_800L
-        private const val BENCHMARK_BUDGET_MS = 4_800
-        private const val BENCHMARK_PROBE_MS = 2_200
-        private const val BENCHMARK_GRACE_MS = 120
+        private const val BENCHMARK_BUDGET_MS = 4_200
+        private const val BENCHMARK_PROBE_MS = 2_000
+        private const val BENCHMARK_GRACE_MS = 100
         private const val DEGRADED_BASE_SCORE = 1_000_000L
         private const val VALID_ONLY_BASE_SCORE = 2_000_000L
     }
 }
+

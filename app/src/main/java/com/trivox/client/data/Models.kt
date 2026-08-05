@@ -301,6 +301,7 @@ data class AppSettings(
     var coreId: CoreId = CoreId.XRAY,
     var smartCoreSelection: Boolean = false,
     var lastSmartCoreId: CoreId = CoreId.XRAY,
+    var preferredTestCore: CoreId = CoreId.XRAY,
     var socksPort: Int = DEFAULT_MIXED_PORT,
     var httpPort: Int = DEFAULT_MIXED_PORT,
     var mtu: Int = 1500,
@@ -387,6 +388,7 @@ data class AppSettings(
         .put("coreId", coreId.name)
         .put("smartCoreSelection", smartCoreSelection)
         .put("lastSmartCoreId", lastSmartCoreId.name)
+        .put("preferredTestCore", preferredTestCore.name)
         .put("socksPort", socksPort)
         .put("httpPort", socksPort)
         .put("mtu", mtu)
@@ -466,6 +468,7 @@ data class AppSettings(
                 coreId = CoreId.fromStored(json.optString("coreId")),
                 smartCoreSelection = json.optBoolean("smartCoreSelection", false),
                 lastSmartCoreId = CoreId.fromStored(json.optString("lastSmartCoreId")),
+                preferredTestCore = CoreId.fromStored(json.optString("preferredTestCore")),
                 socksPort = json.optInt("socksPort", DEFAULT_MIXED_PORT),
                 httpPort = json.optInt("httpPort", DEFAULT_MIXED_PORT),
                 mtu = json.optInt("mtu", 1500),

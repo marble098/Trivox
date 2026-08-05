@@ -244,6 +244,15 @@ val outbound = profile.outboundJson.trim()
         singBoxTransport(stream)?.let { out.put("transport", it) }
         return JSONObject()
             .put("log", JSONObject().put("level", "warn").put("disabled", false))
+            .put(
+                "experimental",
+                JSONObject().put(
+                    "clash_api",
+                    JSONObject()
+                        .put("external_controller", "127.0.0.1:9091")
+                        .put("secret", "trivox_secret")
+                )
+            )
             .put("inbounds", JSONArray().put(JSONObject().put("type", "mixed").put("tag", "mixed-in").put("listen", "127.0.0.1").put("listen_port", mixedPort)))
             .put("outbounds", JSONArray().put(out))
             .put("route", JSONObject().put("final", "proxy"))
@@ -252,7 +261,21 @@ val outbound = profile.outboundJson.trim()
     private fun buildMihomoYaml(profile: ConfigProfile, mixedPort: Int): String {
         val root = linkedMapOf<String, Any?>(
             "mixed-port" to mixedPort,
+            "external-controller" to "127.0.0.1:9090",
+            "secret" to "trivox_secret",
+            "unified-delay" to true,
+            "tcp-concurrent" to true,
+            "find-process" to false,
             "allow-lan" to false,
+            "mode" to "rule",
+            "log-level" to "warning",
+            "ipv6" to false,
+            "proxies" to listOf(mihomoProxy(profile, "proxy")),
+            "proxy-groups" to listOf(linkedMapOf<String, Any?>("name" to "Proxy", "type" to "select", "proxies" to listOf("proxy"))),
+            "rules" to listOf("MATCH,Proxy")
+        )
+        return yaml(root)
+    }
             "mode" to "rule",
             "log-level" to "warning",
             "ipv6" to false,
