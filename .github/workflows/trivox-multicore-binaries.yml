@@ -38,6 +38,9 @@ jobs:
         run: |
           grep -n '@+id/quickCoreButton' app/src/main/res/layout/activity_main.xml
 
+      - name: Reapply deep debug normalization
+        run: python3 tools/apply-deep-debug-fix.py
+
       - name: Run Trivox static doctor
         run: python3 tools/trivox_repo_doctor.py
 

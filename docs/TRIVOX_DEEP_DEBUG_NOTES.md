@@ -26,3 +26,7 @@
    - `Starting real outbound core for VPN: sing-box`
    - `Starting Xray Android TUN bridge for sing-box`
    - `Native VPN bridge proof passed`
+
+## v4 workflow normalization
+
+GitHub Actions runs the older `tools/patch-trivox-multicore.py` before the deep debug doctor. That legacy patch may reinsert quick-core setup lines. v4 updates `tools/fix-quick-core-button.py` and re-runs `tools/apply-deep-debug-fix.py` immediately before the doctor so the runner checks normalized code, not the transient legacy-patched state.

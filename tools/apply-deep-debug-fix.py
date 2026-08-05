@@ -322,18 +322,26 @@ def patch_workflow():
         return
     s = read(path)
 
+    normalize_step = """      - name: Reapply deep debug normalization
+        run: python3 tools/apply-deep-debug-fix.py
+
+"""
+    doctor_step = """      - name: Run Trivox static doctor
+        run: python3 tools/trivox_repo_doctor.py
+
+"""
+
     if "Run Trivox static doctor" not in s:
         anchor = """      - name: Verify quick core layout id
         run: |
           grep -n '@+id/quickCoreButton' app/src/main/res/layout/activity_main.xml
 
 """
-        insert = """      - name: Run Trivox static doctor
-        run: python3 tools/trivox_repo_doctor.py
-
-"""
+        insert = normalize_step + doctor_step
         if anchor in s:
             s = s.replace(anchor, anchor + insert, 1)
+    elif "Reapply deep debug normalization" not in s:
+        s = s.replace(doctor_step, normalize_step + doctor_step, 1)
 
     if "Compile Kotlin early" not in s:
         anchor = """      - uses: gradle/actions/setup-gradle@v4
