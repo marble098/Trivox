@@ -499,6 +499,9 @@ class MainActivity : ThemedActivity() {
 
 
 
+
+
+
         findViewById<Button>(R.id.quickCoreButton).setOnClickListener { showCorePicker() }
         renderCoreButton()
 
