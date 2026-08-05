@@ -33,6 +33,9 @@ object ConfigParser {
         }
         val text = input.trim().removePrefix("\uFEFF")
         if (text.isBlank()) return emptyList()
+        NativeConfigImporter.parseTextOrNull(text)?.let { native ->
+            if (native.isNotEmpty()) return native
+        }
         if (looksLikeWireGuardQuickConfig(text)) {
             return listOf(parseWireGuardQuickConfig(text))
         }

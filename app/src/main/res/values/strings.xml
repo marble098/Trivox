@@ -366,4 +366,11 @@
     <string name="smart_core_selection_summary">When connecting, Trivox performs a light readiness check across prepared cores and stores the best choice.</string>
     <string name="core_manual_badge">Core: %1$s</string>
     <string name="core_smart_badge">Smart: %1$s</string>
+    <string name="convert">Convert</string>
+    <string name="subscription_convert_xray">Convert this subscription to Xray profiles</string>
+    <string name="subscription_convert_singbox">Convert this subscription to sing-box profiles</string>
+    <string name="subscription_convert_mihomo">Convert this subscription to mihomo profiles</string>
+    <string name="subscription_convert_title">Convert to %1$s</string>
+    <string name="subscription_convert_confirm">Convert %1$d profiles in %2$s to %3$s and add the converted copies to the same subscription?</string>
+    <string name="subscription_convert_done">Converted %1$d profiles, failed %2$d for %3$s</string>
 </resources>

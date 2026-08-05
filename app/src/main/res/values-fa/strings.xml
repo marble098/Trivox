@@ -366,4 +366,11 @@
     <string name="smart_core_selection_summary">هنگام اتصال، Trivox بین هسته‌های آماده تست سبک انجام می‌دهد و بهترین گزینه را ذخیره می‌کند.</string>
     <string name="core_manual_badge">هسته: %1$s</string>
     <string name="core_smart_badge">هوشمند: %1$s</string>
+    <string name="convert">تبدیل</string>
+    <string name="subscription_convert_xray">تبدیل این ساب به پروفایل‌های Xray</string>
+    <string name="subscription_convert_singbox">تبدیل این ساب به پروفایل‌های sing-box</string>
+    <string name="subscription_convert_mihomo">تبدیل این ساب به پروفایل‌های mihomo</string>
+    <string name="subscription_convert_title">تبدیل به %1$s</string>
+    <string name="subscription_convert_confirm">تعداد %1$d کانفیگ از %2$s به %3$s تبدیل و نسخه‌های تبدیل‌شده به همان ساب اضافه شود؟</string>
+    <string name="subscription_convert_done">%1$d کانفیگ تبدیل شد، %2$d ناموفق برای %3$s</string>
 </resources>

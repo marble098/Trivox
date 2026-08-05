@@ -172,7 +172,8 @@ class CoreManager(context: Context) {
         val xrayLog = File(Diagnostics.xrayErrorLogPath())
         val logMark = XrayProbeLogInspector.mark(xrayLog)
         stopAllAdapters()
-        val started = selectedAdapter().start(json, protect)
+        stopAllAdapters()
+        val started = adapterForRequest(request).start(json, protect)
         if (!started.success) return started
 
         if (isCancelled()) {
@@ -307,58 +308,56 @@ class CoreManager(context: Context) {
         SettingsRepository(appContext).save(settings)
     }
 
+    private fun resolveCoreForRequest(request: CoreStartRequest): CoreId {
+        val settings = SettingsRepository(appContext).load()
+        if (request.mode == com.trivox.client.data.ConnectionMode.VPN) {
+            if (settings.lastSmartCoreId != CoreId.XRAY) {
+                settings.lastSmartCoreId = CoreId.XRAY
+                SettingsRepository(appContext).save(settings)
+            }
+            return CoreId.XRAY
+        }
+        return if (settings.smartCoreSelection) smartSelect(request) else settings.coreId
+    }
+
     fun smartSelect(request: CoreStartRequest): CoreId {
         val settings = SettingsRepository(appContext).load()
         if (!settings.smartCoreSelection) return settings.coreId
 
-        val order = if (request.mode == com.trivox.client.data.ConnectionMode.VPN) {
-            listOf(CoreId.XRAY)
-        } else {
-            listOf(CoreId.MIHOMO, CoreId.SING_BOX, CoreId.XRAY)
+        if (request.mode == com.trivox.client.data.ConnectionMode.VPN) {
+            settings.lastSmartCoreId = CoreId.XRAY
+            SettingsRepository(appContext).save(settings)
+            Diagnostics.info("Smart core selected: XRAY for Android VPN mode")
+            return CoreId.XRAY
         }
 
-        val available = order.filter { adapters[it]?.isAvailable() == true }
-            .ifEmpty { listOf(CoreId.XRAY) }
-
+        val order = listOf(CoreId.MIHOMO, CoreId.SING_BOX, CoreId.XRAY)
+        val available = order.filter { adapters[it]?.isAvailable() == true }.ifEmpty { listOf(CoreId.XRAY) }
         val diagnostics = StringBuilder()
 
         available.forEach { coreId ->
             val adapter = adapters[coreId] ?: return@forEach
-            val json = runCatching {
-                CoreConfigTranslator.build(request, coreId)
-            }.getOrElse {
-                diagnostics.append(coreId.name)
-                    .append(": build failed: ")
-                    .append(it.message ?: "unknown")
-                    .append("\n")
+            val json = runCatching { CoreConfigTranslator.build(request, coreId) }.getOrElse {
+                diagnostics.append(coreId.name).append(": build failed: ").append(it.message ?: "unknown").append("
+")
                 return@forEach
             }
-
-            val validation = runCatching {
-                adapter.validate(json)
-            }.getOrElse {
+            val validation = runCatching { adapter.validate(json) }.getOrElse {
                 CoreResult(false, it.message ?: "validation crashed")
             }
-
             if (validation.success) {
                 settings.lastSmartCoreId = coreId
                 SettingsRepository(appContext).save(settings)
                 Diagnostics.info("Smart core selected: " + coreId.name)
                 return coreId
             }
-
-            diagnostics.append(coreId.name)
-                .append(": ")
-                .append(validation.error)
-                .append("\n")
+            diagnostics.append(coreId.name).append(": ").append(validation.error).append("
+")
         }
 
         settings.lastSmartCoreId = CoreId.XRAY
         SettingsRepository(appContext).save(settings)
-        Diagnostics.warning(
-            "Smart core fallback to XRAY. Candidates failed: " +
-                diagnostics.toString().trim()
-        )
+        Diagnostics.warning("Smart core fallback to XRAY. Candidates failed: " + diagnostics.toString().trim())
         return CoreId.XRAY
     }
 

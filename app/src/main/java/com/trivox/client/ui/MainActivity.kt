@@ -42,6 +42,7 @@ import com.trivox.client.config.OpenSshProfileCodec
 import com.trivox.client.config.XrayConfigBuilder
 import com.trivox.client.core.ConnectionRuntime
 import com.trivox.client.core.CoreManager
+import com.trivox.client.core.CoreConversionManager
 import com.trivox.client.data.AppSettings
 import com.trivox.client.data.ConfigProfile
 import com.trivox.client.data.ConfigRepository
@@ -1260,6 +1261,9 @@ class MainActivity : ThemedActivity() {
         val labels = arrayOf(
             getString(R.string.subscription_open_settings),
             getString(R.string.subscription_export_links),
+            getString(R.string.subscription_convert_xray),
+            getString(R.string.subscription_convert_singbox),
+            getString(R.string.subscription_convert_mihomo),
             getString(R.string.subscription_delete_all_profiles),
             getString(R.string.subscription_delete_without_tcp),
             getString(R.string.subscription_delete_without_real),
@@ -1272,12 +1276,15 @@ class MainActivity : ThemedActivity() {
                 when (which) {
                     0 -> openSubscriptionManager(sourceId = subscriptionId)
                     1 -> exportSubscriptionLinks(source, profiles)
-                    2 -> confirmSubscriptionProfileCleanup(
+                    2 -> confirmConvertSubscription(source, profiles, CoreId.XRAY)
+                    3 -> confirmConvertSubscription(source, profiles, CoreId.SING_BOX)
+                    4 -> confirmConvertSubscription(source, profiles, CoreId.MIHOMO)
+                    5 -> confirmSubscriptionProfileCleanup(
                         source = source,
                         profiles = profiles,
                         title = labels[which]
                     ) { true }
-                    3 -> confirmSubscriptionProfileCleanup(
+                    6 -> confirmSubscriptionProfileCleanup(
                         source = source,
                         profiles = profiles,
                         title = labels[which]
@@ -1285,7 +1292,7 @@ class MainActivity : ThemedActivity() {
                         it.tcpTestStatus != TestStatus.ALIVE ||
                             it.tcpLatencyMs == null
                     }
-                    4 -> confirmSubscriptionProfileCleanup(
+                    7 -> confirmSubscriptionProfileCleanup(
                         source = source,
                         profiles = profiles,
                         title = labels[which]
@@ -1293,7 +1300,7 @@ class MainActivity : ThemedActivity() {
                         it.realTestStatus != TestStatus.ALIVE ||
                             it.realLatencyMs == null
                     }
-                    5 -> confirmSubscriptionProfileCleanup(
+                    8 -> confirmSubscriptionProfileCleanup(
                         source = source,
                         profiles = profiles,
                         title = labels[which]
@@ -1306,6 +1313,41 @@ class MainActivity : ThemedActivity() {
             .show()
     }
 
+
+
+    private fun confirmConvertSubscription(
+        source: SubscriptionSource,
+        profiles: List<ConfigProfile>,
+        target: CoreId
+    ) {
+        if (profiles.isEmpty()) {
+            toast(getString(R.string.subscription_cleanup_none))
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.subscription_convert_title, target.label))
+            .setMessage(getString(R.string.subscription_convert_confirm, profiles.size, source.name, target.label))
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.convert) { _, _ ->
+                storageWorker.execute {
+                    val summary = CoreConversionManager(this).convertSubscription(source, profiles, target)
+                    runOnUiThread {
+                        subscriptionTabsSignature = ""
+                        renderSubscriptionTabs(force = true)
+                        refresh()
+                        toast(
+                            getString(
+                                R.string.subscription_convert_done,
+                                summary.added,
+                                summary.failed,
+                                target.label
+                            )
+                        )
+                    }
+                }
+            }
+            .show()
+    }
 
     private fun exportSubscriptionLinks(
         source: SubscriptionSource,
