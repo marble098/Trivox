@@ -13,7 +13,7 @@ import org.junit.Test
 
 class XrayConfigBuilderV8ReliabilityTest {
     @Test
-    fun builtInDnsTrafficIsRoutedThroughSelectedOutbound() {
+    fun trivoxDefaultDnsTrafficUsesLocalBootstrapAndDirectRoute() {
         val root = JSONObject(
             XrayConfigBuilder.build(
                 profile = vlessProfile(),
@@ -26,6 +26,7 @@ class XrayConfigBuilderV8ReliabilityTest {
         )
 
         assertEquals("dns-in", root.getJSONObject("dns").getString("tag"))
+        assertTrue(root.getJSONObject("dns").getJSONArray("servers").getString(0).startsWith("https+local://"))
         assertTrue(
             root.getJSONObject("routing")
                 .getJSONArray("rules")
@@ -34,7 +35,7 @@ class XrayConfigBuilderV8ReliabilityTest {
                     it.optJSONArray("inboundTag")
                         ?.strings()
                         ?.contains("dns-in") == true &&
-                        it.optString("outboundTag") == "proxy"
+                        it.optString("outboundTag") == "direct"
                 }
         )
     }
