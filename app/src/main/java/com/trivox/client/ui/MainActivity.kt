@@ -483,9 +483,12 @@ class MainActivity : ThemedActivity() {
                 settingsRepository.save(settings)
             }
 
+
+
+
+
         findViewById<Button>(R.id.quickCoreButton).setOnClickListener { showCorePicker() }
         renderCoreButton()
-
 
         findViewById<EditText>(R.id.searchInput)
             .addTextChangedListener(
