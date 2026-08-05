@@ -486,8 +486,6 @@ class MainActivity : ThemedActivity() {
         findViewById<Button>(R.id.quickCoreButton).setOnClickListener { showCorePicker() }
         renderCoreButton()
 
-        findViewById<Button>(R.id.quickCoreButton).setOnClickListener { showCorePicker() }
-        renderCoreButton()
 
         findViewById<EditText>(R.id.searchInput)
             .addTextChangedListener(
@@ -1695,13 +1693,16 @@ class MainActivity : ThemedActivity() {
                 filePicker.launch(
                     arrayOf(
                         "text/plain",
+                        "text/yaml",
+                        "text/x-yaml",
+                        "application/yaml",
+                        "application/x-yaml",
                         "application/json",
                         "application/octet-stream",
-                        "text/x-yaml",
-                        "text/yaml",
-                        "application/x-yaml",
-                        "application/yaml",
-                        "application/x-wireguard-profile"
+                        "application/x-clash-config",
+                        "application/x-mihomo-config",
+                        "application/x-sing-box-config",
+                        "application/x-wireguard-profile",
                     )
                 )
             }

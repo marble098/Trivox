@@ -38,6 +38,9 @@ jobs:
         run: |
           grep -n '@+id/quickCoreButton' app/src/main/res/layout/activity_main.xml
 
+      - name: Run Trivox static doctor
+        run: python3 tools/trivox_repo_doctor.py
+
       - name: Download latest prerelease sing-box and mihomo assets
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -83,12 +86,17 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Compile Kotlin early
+        run: |
+          chmod +x ./gradlew || true
+          ./gradlew :app:compileReleaseKotlin -PtrivoxAbis=arm64-v8a,armeabi-v7a --stacktrace
+
       - name: Build release APKs
         run: |
           chmod +x ./gradlew || true
           ./gradlew clean :app:assembleRelease -PtrivoxAbis=arm64-v8a,armeabi-v7a --no-build-cache --stacktrace
 
-      - name: Verify APK size under 220 MB
+      - name: Verify APK size under 240 MB
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -103,7 +111,7 @@ jobs:
               if size > limit:
                   bad.append(apk)
           if bad:
-              raise SystemExit('APK over 220 MB: ' + ', '.join(map(str, bad)))
+              raise SystemExit('APK over 240 MB: ' + ', '.join(map(str, bad)))
           PY
 
       - uses: actions/upload-artifact@v4

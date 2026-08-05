@@ -263,7 +263,7 @@ class CoreManager(context: Context) {
             return cancelledStart()
         }
 
-        val health = verifyLiveRoute(request, logMark, isCancelled)
+        val health = verifyLiveRoute(plan, request, logMark, isCancelled)
         if (isCancelled() || health.errorCategory == "cancelled") {
             stopAfterRejectedStart()
             return cancelledStart()
@@ -272,7 +272,11 @@ class CoreManager(context: Context) {
 
         stopAfterRejectedStart()
         val category = health.errorCategory?.takeIf(String::isNotBlank)?.let { " ($it)" }.orEmpty()
-        val route = if (request.mode == ConnectionMode.VPN) "Android VPN route" else "local proxy route"
+        val route = when {
+            plan.needsXrayBridge -> "native local proxy before Android VPN bridge"
+            request.mode == ConnectionMode.VPN -> "Android VPN route"
+            else -> "local proxy route"
+        }
         val protocol = request.profile.protocol.uppercase()
         val engine = plan.activeCore.label
         return CoreResult(
@@ -283,10 +287,14 @@ class CoreManager(context: Context) {
     }
 
     private fun verifyLiveRoute(
+        plan: StartPlan,
         request: CoreStartRequest,
         logMark: XrayProbeLogInspector.Mark,
         isCancelled: () -> Boolean
     ): com.trivox.client.data.PingResult {
+        if (plan.needsXrayBridge) {
+            return verifyNativeBridgeRoute(plan, request, logMark, isCancelled)
+        }
         val wireGuard = request.profile.protocol.equals("wireguard", ignoreCase = true)
         val adaptive = request.settings.adaptiveHandshake
         val budgetMs = when {
@@ -318,6 +326,65 @@ class CoreManager(context: Context) {
             }
         )
     }
+
+    private fun verifyNativeBridgeRoute(
+        plan: StartPlan,
+        request: CoreStartRequest,
+        logMark: XrayProbeLogInspector.Mark,
+        isCancelled: () -> Boolean
+    ): com.trivox.client.data.PingResult {
+        Diagnostics.info(
+            "Native VPN bridge proof: checking " + plan.activeCore.label +
+                " local mixed proxy before accepting Android TUN bridge"
+        )
+
+        val proxySettings = request.settings.copy().also {
+            it.mode = ConnectionMode.PROXY
+            it.localProxyInVpn = false
+        }
+
+        val result = TunnelHealthVerifier.measure(
+            settings = proxySettings,
+            mode = ConnectionMode.PROXY,
+            attempts = request.settings.testAttempts.coerceIn(2, 3),
+            budgetMs = NATIVE_BRIDGE_VERIFY_BUDGET_MS,
+            perProbeTimeoutMs = NATIVE_BRIDGE_PROBE_TIMEOUT_MS,
+            initialDelayMs = NATIVE_BRIDGE_GRACE_MS,
+            isCancelled = isCancelled,
+            hardFailure = {
+                XrayProbeLogInspector.classifySince(logMark)
+                    ?.takeIf(::isImmediateBridgeFailure)
+            }
+        )
+
+        if (result.success) {
+            Diagnostics.info(
+                "Native VPN bridge proof passed: " + plan.activeCore.label +
+                    " accepted verified HTTPS through 127.0.0.1:" +
+                    request.settings.socksPort +
+                    "; Xray owns Android TUN only as packet bridge"
+            )
+            return result.copy(
+                resolvedIp = "vpn-bridge:" + plan.activeCore.label,
+                errorCategory = null
+            )
+        }
+
+        Diagnostics.warning(
+            "Native VPN bridge proof failed for " + plan.activeCore.label +
+                ": " + (result.errorCategory ?: "unknown")
+        )
+        return result.copy(
+            resolvedIp = "vpn-bridge:" + plan.activeCore.label
+        )
+    }
+
+    private fun isImmediateBridgeFailure(category: String): Boolean =
+        category in setOf(
+            "invalid_xray_config",
+            "connection_refused",
+            "authentication_failed"
+        )
 
     private fun isImmediateTransportFailure(category: String): Boolean =
         category in setOf(
@@ -357,6 +424,31 @@ class CoreManager(context: Context) {
 
     fun validateWith(coreId: CoreId, configJson: String): CoreResult =
         (adapters[coreId] ?: adapters.getValue(CoreId.XRAY)).validate(configJson)
+
+    fun requiresSelfBypassForVpn(
+        profile: ConfigProfile,
+        settings: com.trivox.client.data.AppSettings
+    ): Boolean {
+        val selected = if (settings.smartCoreSelection) {
+            smartSelect(
+                CoreStartRequest(
+                    profile = profile,
+                    settings = settings,
+                    mode = ConnectionMode.PROXY,
+                    tunFd = null
+                )
+            )
+        } else {
+            settings.coreId
+        }
+        val bypass = selected != CoreId.XRAY
+        Diagnostics.info(
+            "VPN self-bypass decision: selectedRuntime=" + selected.label +
+                ", bypassTrivoxApp=" + bypass +
+                ", smart=" + settings.smartCoreSelection
+        )
+        return bypass
+    }
 
     fun switchCore(coreId: CoreId) {
         val settings = SettingsRepository(appContext).load()

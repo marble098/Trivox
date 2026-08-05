@@ -356,8 +356,11 @@ class TrivoxVpnService : VpnService() {
         )
 
         val selectedRuntimeNeedsBypass =
-            settings.smartCoreSelection ||
-                settings.coreId != CoreId.XRAY
+            core.requiresSelfBypassForVpn(profile, settings)
+        Diagnostics.info(
+            "VPN builder self-bypass decision for runtime sockets: " +
+                selectedRuntimeNeedsBypass
+        )
 
         if (selectedRuntimeNeedsBypass) {
             if (settings.appRoutingMode == AppRoutingMode.ALLOW_SELECTED) {
@@ -402,6 +405,11 @@ class TrivoxVpnService : VpnService() {
             return
         }
 
+        Diagnostics.info(
+            "Establishing Android VPN interface; ipv6=" + settings.ipv6 +
+                ", mtu=" + settings.mtu +
+                ", appRouting=" + settings.appRoutingMode.name
+        )
         tun = builder.establish()
 
         if (tun == null) {
