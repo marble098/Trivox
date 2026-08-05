@@ -707,7 +707,8 @@ object XrayConfigBuilder {
     ): JSONObject {
         val dnsRouteTag = when {
             settings.dnsMode == DnsMode.SYSTEM ||
-                settings.dnsMode == DnsMode.DIRECT -> "direct"
+                settings.dnsMode == DnsMode.DIRECT ||
+                settings.dnsMode == DnsMode.TRIVOX_DEFAULT -> "direct"
             mode == ConnectionMode.PROXY &&
                 settings.dnsMode != DnsMode.THROUGH_PROXY &&
                 settings.dnsMode != DnsMode.IMPORTED -> "direct"
