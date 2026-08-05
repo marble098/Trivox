@@ -18,6 +18,7 @@ import com.trivox.client.data.AppRoutingMode
 import com.trivox.client.data.ConfigRepository
 import com.trivox.client.data.ConnectionMode
 import com.trivox.client.data.ConnectionState
+import com.trivox.client.data.CoreId
 import com.trivox.client.data.DnsMode
 import com.trivox.client.data.SettingsRepository
 import com.trivox.client.config.OpenSshProfileCodec
@@ -353,6 +354,25 @@ class TrivoxVpnService : VpnService() {
             settings.appRoutingMode,
             settings.routedPackages
         )
+
+        val selectedRuntimeNeedsBypass =
+            settings.smartCoreSelection ||
+                settings.coreId != CoreId.XRAY
+
+        if (selectedRuntimeNeedsBypass) {
+            if (settings.appRoutingMode == AppRoutingMode.ALLOW_SELECTED) {
+                if (packageName in settings.routedPackages) {
+                    fail("Trivox must not be routed through its own VPN when sing-box or mihomo runtime is selected")
+                    return
+                }
+            } else {
+                runCatching { builder.addDisallowedApplication(packageName) }
+                    .onFailure {
+                        fail("Unable to exclude Trivox runtime sockets from their own VPN: " + it.message)
+                        return
+                    }
+            }
+        }
 
         if (OpenSshProfileCodec.isOpenSsh(profile)) {
             if (settings.appRoutingMode == AppRoutingMode.ALLOW_SELECTED) {

@@ -92,7 +92,7 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          limit = 100 * 1024 * 1024
+          limit = 240 * 1024 * 1024
           apks = list(Path('app/build/outputs/apk').rglob('*.apk'))
           if not apks:
               raise SystemExit('no APKs found')

@@ -22,7 +22,7 @@ object ConfigParser {
         "vless", "vmess", "trojan", "ss", "shadowsocks",
         "socks", "socks5", "http", "https",
         "hy2", "hysteria2", "hysteria",
-        "wg", "wireguard", "ssh", "openssh", "nordwhisper"
+        "wg", "wireguard", "ssh", "openssh", "nordwhisper", "sing-box", "mihomo", "clashmeta", "clash"
     )
 
     fun parseText(input: String): List<ConfigProfile> {
@@ -116,6 +116,9 @@ object ConfigParser {
             "wg", "wireguard" -> parseWireGuardUri(raw)
             "ssh", "openssh" -> OpenSshProfileCodec.parse(raw)
             "nordwhisper" -> NordWhisperCompatibility.reject(raw)
+            "clash", "clashmeta", "mihomo", "sing-box" ->
+                NativeConfigImporter.parseTextOrNull(raw)?.firstOrNull()
+                    ?: throw ConfigParseException("Native subscription installer link detected. Paste the fetched YAML/JSON content or add its decoded URL as a URL subscription.")
             else -> throw ConfigParseException("Unsupported config scheme")
         }
     }

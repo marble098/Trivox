@@ -486,39 +486,6 @@ class MainActivity : ThemedActivity() {
         findViewById<Button>(R.id.quickCoreButton).setOnClickListener { showCorePicker() }
         renderCoreButton()
 
-        findViewById<Button>(R.id.quickCoreButton).setOnClickListener { showCorePicker() }
-        renderCoreButton()
-
-        findViewById<Button>(R.id.quickCoreButton).setOnClickListener { showCorePicker() }
-        renderCoreButton()
-
-        findViewById<Button>(R.id.quickCoreButton).setOnClickListener { showCorePicker() }
-        renderCoreButton()
-
-        findViewById<Button>(R.id.quickCoreButton).setOnClickListener { showCorePicker() }
-        renderCoreButton()
-
-        findViewById<Button>(R.id.quickCoreButton).setOnClickListener { showCorePicker() }
-        renderCoreButton()
-
-        findViewById<Button>(R.id.quickCoreButton).setOnClickListener { showCorePicker() }
-        renderCoreButton()
-
-        findViewById<Button>(R.id.quickCoreButton).setOnClickListener { showCorePicker() }
-        renderCoreButton()
-
-        findViewById<Button>(R.id.quickCoreButton).setOnClickListener { showCorePicker() }
-        renderCoreButton()
-
-        findViewById<Button>(R.id.quickCoreButton).setOnClickListener { showCorePicker() }
-        renderCoreButton()
-
-        findViewById<Button>(R.id.quickCoreButton).setOnClickListener { showCorePicker() }
-        renderCoreButton()
-
-        findViewById<Button>(R.id.quickCoreButton).setOnClickListener { showCorePicker() }
-        renderCoreButton()
-
         findViewById<EditText>(R.id.searchInput)
             .addTextChangedListener(
                 object : TextWatcher {
@@ -1727,6 +1694,10 @@ class MainActivity : ThemedActivity() {
                         "text/plain",
                         "application/json",
                         "application/octet-stream",
+                        "text/x-yaml",
+                        "text/yaml",
+                        "application/x-yaml",
+                        "application/yaml",
                         "application/x-wireguard-profile"
                     )
                 )
@@ -1793,15 +1764,21 @@ class MainActivity : ThemedActivity() {
                 uri?.fragment == null &&
                 uri?.port == -1 &&
                 !single.contains('\n')
+        val nativeSubscriptionUrl =
+            com.trivox.client.config.NativeConfigImporter
+                .nativeInstallSubscriptionUrl(single)
+        val importSubscriptionUrl =
+            nativeSubscriptionUrl ?: if (subscription) single else null
 
         worker.execute {
             runCatching {
-                if (subscription) {
+                if (importSubscriptionUrl != null) {
+                    val sourceUri = runCatching { URI(importSubscriptionUrl) }.getOrNull()
                     val source = SubscriptionSource(
-                        name = uri?.host ?: "Subscription",
-                        url = single
+                        name = sourceUri?.host ?: "Native subscription",
+                        url = importSubscriptionUrl
                     )
-                    val result = SubscriptionManager().fetch(single)
+                    val result = SubscriptionManager().fetch(importSubscriptionUrl)
                     val profiles = result.profiles.map { profile ->
                         OpenSshProfileCodec.secureForStorage(this, profile).copy(
                             subscriptionId = source.id,
