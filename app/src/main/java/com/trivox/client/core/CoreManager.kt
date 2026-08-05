@@ -172,7 +172,6 @@ class CoreManager(context: Context) {
         val xrayLog = File(Diagnostics.xrayErrorLogPath())
         val logMark = XrayProbeLogInspector.mark(xrayLog)
         stopAllAdapters()
-        stopAllAdapters()
         val started = adapterForRequest(request).start(json, protect)
         if (!started.success) return started
 
@@ -298,6 +297,12 @@ class CoreManager(context: Context) {
         return CoreResult(ok, error)
     }
 
+    fun validateWith(coreId: CoreId, configJson: String): CoreResult =
+        (adapters[coreId] ?: adapters.getValue(CoreId.XRAY)).validate(configJson)
+
+    private fun adapterForRequest(request: CoreStartRequest): CoreAdapter =
+        adapters[resolveCoreForRequest(request)] ?: adapters.getValue(CoreId.XRAY)
+
     private fun buildJson(request: CoreStartRequest): String =
         CoreConfigTranslator.build(request, selectedCoreId())
 
@@ -338,8 +343,7 @@ class CoreManager(context: Context) {
         available.forEach { coreId ->
             val adapter = adapters[coreId] ?: return@forEach
             val json = runCatching { CoreConfigTranslator.build(request, coreId) }.getOrElse {
-                diagnostics.append(coreId.name).append(": build failed: ").append(it.message ?: "unknown").append("
-")
+                diagnostics.append(coreId.name).append(": build failed: ").append(it.message ?: "unknown").append("\\n")
                 return@forEach
             }
             val validation = runCatching { adapter.validate(json) }.getOrElse {
@@ -351,8 +355,7 @@ class CoreManager(context: Context) {
                 Diagnostics.info("Smart core selected: " + coreId.name)
                 return coreId
             }
-            diagnostics.append(coreId.name).append(": ").append(validation.error).append("
-")
+            diagnostics.append(coreId.name).append(": ").append(validation.error).append("\\n")
         }
 
         settings.lastSmartCoreId = CoreId.XRAY
