@@ -1,5 +1,6 @@
 package com.trivox.client.core
 
+import com.trivox.client.config.NativeConfigImporter
 import com.trivox.client.config.XrayConfigBuilder
 import com.trivox.client.data.ConfigProfile
 import com.trivox.client.data.CoreId
@@ -9,7 +10,7 @@ import org.json.JSONObject
 object CoreConfigTranslator {
     fun build(request: CoreStartRequest, coreId: CoreId): String = when (coreId) {
         CoreId.XRAY -> XrayConfigBuilder.build(
-            profile = request.profile,
+            profile = xrayProfileFor(request.profile),
             settings = request.settings,
             mode = request.mode,
             tunFd = request.tunFd,
@@ -20,13 +21,34 @@ object CoreConfigTranslator {
     }
 
     fun buildNativeProfile(profile: ConfigProfile, coreId: CoreId, mixedPort: Int): String = when (coreId) {
-        CoreId.XRAY -> profile.outboundJson
+        CoreId.XRAY -> xrayOutboundFor(profile)
         CoreId.SING_BOX -> buildSingBox(profile, mixedPort).toString(2)
         CoreId.MIHOMO -> buildMihomoYaml(profile, mixedPort)
     }
 
+    fun xrayOutboundFor(profile: ConfigProfile): String = xrayProfileFor(profile).outboundJson
+
+    private fun xrayProfileFor(profile: ConfigProfile): ConfigProfile {
+        val outbound = profile.outboundJson.trim()
+        if (outbound.startsWith("{") && runCatching { JSONObject(outbound).has("protocol") }.getOrDefault(false)) {
+            return profile
+        }
+        val repaired = NativeConfigImporter.parseTextOrNull(profile.raw)?.firstOrNull()
+            ?: NativeConfigImporter.parseTextOrNull(outbound)?.firstOrNull()
+        return repaired?.let {
+            profile.copy(
+                protocol = it.protocol,
+                server = it.server,
+                port = it.port,
+                outboundJson = it.outboundJson,
+                probeServer = it.probeServer,
+                probePort = it.probePort
+            )
+        } ?: profile
+    }
+
     private fun outbound(profile: ConfigProfile): JSONObject =
-        runCatching { JSONObject(profile.outboundJson) }.getOrElse { JSONObject() }
+        JSONObject(xrayProfileFor(profile).outboundJson)
 
     private fun firstUser(settings: JSONObject): JSONObject? =
         settings.optJSONArray("vnext")?.optJSONObject(0)?.optJSONArray("users")?.optJSONObject(0)
@@ -79,7 +101,12 @@ object CoreConfigTranslator {
         realitySource(stream)?.let { reality ->
             val opts = JSONObject().put("enabled", true)
             val pbk = firstNonBlank(reality.optString("publicKey", ""), reality.optString("public_key", ""))
-            val sid = firstNonBlank(reality.optString("shortId", ""), reality.optString("short_id", ""), reality.optJSONArray("shortIds")?.optString(0), reality.optJSONArray("short_ids")?.optString(0))
+            val sid = firstNonBlank(
+                reality.optString("shortId", ""),
+                reality.optString("short_id", ""),
+                reality.optJSONArray("shortIds")?.optString(0),
+                reality.optJSONArray("short_ids")?.optString(0)
+            )
             if (pbk.isNotBlank()) opts.put("public_key", pbk)
             if (sid.isNotBlank()) opts.put("short_id", sid)
             tls.put("reality", opts)
@@ -112,11 +139,18 @@ object CoreConfigTranslator {
                 }
             }
             "http", "h2", "xhttp", "splithttp" -> {
-                val xhttp = stream.optJSONObject("xhttpSettings") ?: stream.optJSONObject("splithttpSettings") ?: stream.optJSONObject("httpSettings") ?: JSONObject()
+                val xhttp = stream.optJSONObject("xhttpSettings")
+                    ?: stream.optJSONObject("splithttpSettings")
+                    ?: stream.optJSONObject("httpSettings")
+                    ?: JSONObject()
                 JSONObject().put("type", "http").apply {
                     val path = xhttp.optJSONArray("path")?.optString(0) ?: xhttp.optString("path", "")
                     if (path.isNotBlank()) put("path", path)
-                    val host = firstNonBlank(xhttp.optJSONArray("host")?.optString(0), xhttp.optString("host", ""), xhttp.optJSONObject("headers")?.optString("Host", ""))
+                    val host = firstNonBlank(
+                        xhttp.optJSONArray("host")?.optString(0),
+                        xhttp.optString("host", ""),
+                        xhttp.optJSONObject("headers")?.optString("Host", "")
+                    )
                     if (host.isNotBlank()) put("headers", JSONObject().put("Host", host))
                 }
             }
@@ -131,7 +165,12 @@ object CoreConfigTranslator {
         val stream = ob.optJSONObject("streamSettings") ?: JSONObject()
         val server = endpointAddress(settings, profile.probeServer.ifBlank { profile.server })
         val port = endpointPort(settings, profile.probePort.takeIf { it > 0 } ?: profile.port)
-        val out = JSONObject().put("type", if (type == "ss") "shadowsocks" else type).put("tag", "proxy").put("server", server).put("server_port", port)
+        val out = JSONObject()
+            .put("type", if (type == "ss") "shadowsocks" else type)
+            .put("tag", "proxy")
+            .put("server", server)
+            .put("server_port", port)
+
         when (type) {
             "vless", "vmess" -> {
                 val user = firstUser(settings)
@@ -160,20 +199,34 @@ object CoreConfigTranslator {
         }
         singBoxTransport(stream)?.let { out.put("transport", it) }
         return JSONObject()
-            .put("log", JSONObject().put("level", "warn"))
+            .put("log", JSONObject().put("level", "warn").put("disabled", false))
             .put("inbounds", JSONArray().put(JSONObject().put("type", "mixed").put("tag", "mixed-in").put("listen", "127.0.0.1").put("listen_port", mixedPort)))
-            .put("outbounds", JSONArray().put(out).put(JSONObject().put("type", "direct").put("tag", "direct")))
+            .put("outbounds", JSONArray().put(out))
             .put("route", JSONObject().put("final", "proxy"))
     }
 
-    private fun mihomoProxy(profile: ConfigProfile): LinkedHashMap<String, Any?> {
+    private fun buildMihomoYaml(profile: ConfigProfile, mixedPort: Int): String {
+        val root = linkedMapOf<String, Any?>(
+            "mixed-port" to mixedPort,
+            "allow-lan" to false,
+            "mode" to "rule",
+            "log-level" to "warning",
+            "ipv6" to false,
+            "proxies" to listOf(mihomoProxy(profile, "proxy")),
+            "proxy-groups" to listOf(linkedMapOf<String, Any?>("name" to "Proxy", "type" to "select", "proxies" to listOf("proxy"))),
+            "rules" to listOf("MATCH,Proxy")
+        )
+        return yaml(root)
+    }
+
+    private fun mihomoProxy(profile: ConfigProfile, name: String): LinkedHashMap<String, Any?> {
         val ob = outbound(profile)
         val type = ob.optString("protocol", profile.protocol).lowercase()
         val settings = ob.optJSONObject("settings") ?: JSONObject()
         val stream = ob.optJSONObject("streamSettings") ?: JSONObject()
         val server = endpointAddress(settings, profile.probeServer.ifBlank { profile.server })
         val port = endpointPort(settings, profile.probePort.takeIf { it > 0 } ?: profile.port)
-        val proxy = linkedMapOf<String, Any?>("name" to "proxy", "type" to if (type == "shadowsocks") "ss" else type, "server" to server, "port" to port, "udp" to true)
+        val proxy = linkedMapOf<String, Any?>("name" to name, "type" to if (type == "shadowsocks") "ss" else type, "server" to server, "port" to port, "udp" to true)
         when (type) {
             "vless", "vmess" -> {
                 val user = firstUser(settings)
@@ -207,23 +260,30 @@ object CoreConfigTranslator {
     private fun mihomoTls(proxy: LinkedHashMap<String, Any?>, stream: JSONObject) {
         proxy["tls"] = tlsLikeEnabled(stream)
         val source = tlsSource(stream)
-        firstNonBlank(source.optString("serverName", ""), source.optString("server_name", ""), source.optString("sni", "")).takeIf(String::isNotBlank)?.let { proxy["servername"] = it }
-        firstNonBlank(source.optString("fingerprint", ""), source.optString("clientFingerprint", "")).takeIf(String::isNotBlank)?.let {
-            proxy["client-fingerprint"] = it
-            proxy["fingerprint"] = it
-        }
+        firstNonBlank(source.optString("serverName", ""), source.optString("server_name", ""), source.optString("sni", ""))
+            .takeIf(String::isNotBlank)?.let { proxy["servername"] = it }
+        firstNonBlank(source.optString("fingerprint", ""), source.optString("clientFingerprint", ""))
+            .takeIf(String::isNotBlank)?.let {
+                proxy["client-fingerprint"] = it
+                proxy["fingerprint"] = it
+            }
         if (source.has("allowInsecure")) proxy["skip-cert-verify"] = source.optBoolean("allowInsecure", false)
         realitySource(stream)?.let { reality ->
             val opts = linkedMapOf<String, Any?>()
-            firstNonBlank(reality.optString("publicKey", ""), reality.optString("public_key", "")).takeIf(String::isNotBlank)?.let { opts["public-key"] = it }
-            firstNonBlank(reality.optString("shortId", ""), reality.optString("short_id", ""), reality.optJSONArray("shortIds")?.optString(0), reality.optJSONArray("short_ids")?.optString(0)).takeIf(String::isNotBlank)?.let { opts["short-id"] = it }
-            proxy["reality-opts"] = opts
+            firstNonBlank(reality.optString("publicKey", ""), reality.optString("public_key", ""))
+                .takeIf(String::isNotBlank)?.let { opts["public-key"] = it }
+            firstNonBlank(reality.optString("shortId", ""), reality.optString("short_id", ""), reality.optJSONArray("shortIds")?.optString(0), reality.optJSONArray("short_ids")?.optString(0))
+                .takeIf(String::isNotBlank)?.let { opts["short-id"] = it }
+            if (opts.isNotEmpty()) proxy["reality-opts"] = opts
         }
     }
 
     private fun mihomoTransport(proxy: LinkedHashMap<String, Any?>, stream: JSONObject, protocol: String) {
         val network = streamNetwork(stream)
-        if (network.isBlank() || network == "tcp" || network == "raw") { proxy["network"] = "tcp"; return }
+        if (network.isBlank() || network == "tcp" || network == "raw") {
+            proxy["network"] = "tcp"
+            return
+        }
         when (network) {
             "ws", "websocket" -> {
                 val ws = stream.optJSONObject("wsSettings") ?: JSONObject()
@@ -264,56 +324,71 @@ object CoreConfigTranslator {
                 proxy["network"] = "xhttp"
                 val opts = linkedMapOf<String, Any?>()
                 xhttp.optString("path", "").takeIf(String::isNotBlank)?.let { opts["path"] = it }
-                firstNonBlank(xhttp.optString("host", ""), xhttp.optJSONObject("headers")?.optString("Host", "")).takeIf(String::isNotBlank)?.let { opts["host"] = it }
+                firstNonBlank(xhttp.optString("host", ""), xhttp.optJSONObject("headers")?.optString("Host", ""))
+                    .takeIf(String::isNotBlank)?.let { opts["host"] = it }
                 xhttp.optString("mode", "").takeIf(String::isNotBlank)?.let { opts["mode"] = it }
                 xhttp.optJSONObject("headers")?.takeIf { it.length() > 0 }?.let { opts["headers"] = jsonToMap(it) }
                 if (opts.isNotEmpty()) proxy["xhttp-opts"] = opts
             }
-            else -> throw IllegalArgumentException("Unsupported mihomo transport: $network")
+            else -> throw IllegalArgumentException("Unsupported transport for mihomo: $network")
         }
     }
 
-    private fun buildMihomoYaml(profile: ConfigProfile, mixedPort: Int): String {
-        val proxy = mihomoProxy(profile)
-        val root = linkedMapOf<String, Any?>(
-            "mixed-port" to mixedPort,
-            "allow-lan" to false,
-            "mode" to "rule",
-            "log-level" to "warning",
-            "proxies" to listOf(proxy),
-            "proxy-groups" to listOf(linkedMapOf("name" to "Proxy", "type" to "select", "proxies" to listOf("proxy"))),
-            "rules" to listOf("MATCH,Proxy")
-        )
-        return yaml(root)
-    }
-
-    private fun jsonToMap(json: JSONObject): LinkedHashMap<String, Any?> {
+    private fun jsonToMap(obj: JSONObject): LinkedHashMap<String, Any?> {
         val map = linkedMapOf<String, Any?>()
-        json.keys().forEach { key -> map[key] = json.opt(key).toYamlValue() }
+        obj.keys().forEach { key -> map[key] = obj.opt(key)?.toString().orEmpty() }
         return map
     }
 
-    private fun Any?.toYamlValue(): Any? = when (this) {
-        null, JSONObject.NULL -> null
-        is JSONObject -> jsonToMap(this)
-        is JSONArray -> (0 until length()).map { opt(it).toYamlValue() }
-        else -> this
+    private fun yaml(map: Map<String, Any?>): String = buildString {
+        appendYamlMap(this, map, 0)
     }
 
-    private fun yaml(value: Any?, indent: Int = 0): String {
+    private fun appendYamlMap(sb: StringBuilder, map: Map<String, Any?>, indent: Int) {
+        map.forEach { (key, value) -> appendYamlEntry(sb, key, value, indent) }
+    }
+
+    private fun appendYamlEntry(sb: StringBuilder, key: String, value: Any?, indent: Int) {
         val pad = " ".repeat(indent)
-        return when (value) {
-            is Map<*, *> -> value.entries.joinToString("") { (k, v) ->
-                if (v is Map<*, *> || v is List<*>) "$pad$k:\n${yaml(v, indent + 2)}" else "$pad$k: ${scalar(v)}\n"
+        when (value) {
+            is Map<*, *> -> {
+                sb.append(pad).append(key).append(":\n")
+                @Suppress("UNCHECKED_CAST")
+                appendYamlMap(sb, value as Map<String, Any?>, indent + 2)
             }
-            is List<*> -> value.joinToString("") { item ->
-                if (item is Map<*, *>) "$pad-\n${yaml(item, indent + 2)}" else "$pad- ${scalar(item)}\n"
+            is List<*> -> {
+                sb.append(pad).append(key).append(":\n")
+                appendYamlList(sb, value, indent + 2)
             }
-            else -> "$pad${scalar(value)}\n"
+            else -> sb.append(pad).append(key).append(": ").append(yamlScalar(value)).append('\n')
         }
     }
 
-    private fun scalar(value: Any?): String = when (value) {
+    private fun appendYamlList(sb: StringBuilder, list: List<*>, indent: Int) {
+        val pad = " ".repeat(indent)
+        list.forEach { item ->
+            when (item) {
+                is Map<*, *> -> {
+                    sb.append(pad).append("- ")
+                    val entries = item.entries.toList()
+                    if (entries.isEmpty()) {
+                        sb.append("{}\n")
+                    } else {
+                        val first = entries.first()
+                        sb.append(first.key).append(": ").append(yamlScalar(first.value)).append('\n')
+                        entries.drop(1).forEach { (key, value) -> appendYamlEntry(sb, key.toString(), value, indent + 2) }
+                    }
+                }
+                is List<*> -> {
+                    sb.append(pad).append("-\n")
+                    appendYamlList(sb, item, indent + 2)
+                }
+                else -> sb.append(pad).append("- ").append(yamlScalar(item)).append('\n')
+            }
+        }
+    }
+
+    private fun yamlScalar(value: Any?): String = when (value) {
         null -> "null"
         is Boolean, is Number -> value.toString()
         else -> "'" + value.toString().replace("'", "''") + "'"

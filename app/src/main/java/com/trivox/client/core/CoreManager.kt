@@ -1,7 +1,6 @@
 package com.trivox.client.core
 
 import android.content.Context
-import com.trivox.client.config.XrayConfigBuilder
 import com.trivox.client.data.ConnectionMode
 import com.trivox.client.data.ConnectionState
 import com.trivox.client.data.CoreId
@@ -27,8 +26,7 @@ object ConnectionRuntime {
     )
 
     private val snapshot = AtomicReference(Snapshot())
-    private val listeners =
-        CopyOnWriteArrayList<WeakReference<(Snapshot) -> Unit>>()
+    private val listeners = CopyOnWriteArrayList<WeakReference<(Snapshot) -> Unit>>()
     private val sessionCounter = AtomicLong(0)
 
     fun current(): Snapshot = snapshot.get()
@@ -39,10 +37,7 @@ object ConnectionRuntime {
         notifyListeners(value)
     }
 
-    fun updateSession(
-        sessionId: Long,
-        transform: (Snapshot) -> Snapshot
-    ): Boolean {
+    fun updateSession(sessionId: Long, transform: (Snapshot) -> Snapshot): Boolean {
         while (true) {
             val current = snapshot.get()
             if (current.sessionId != sessionId || sessionId == 0L) return false
@@ -56,13 +51,21 @@ object ConnectionRuntime {
 
     fun addListener(listener: (Snapshot) -> Unit) {
         pruneListeners()
-        if (listeners.none { it.get() === listener }) {
-            listeners += WeakReference(listener)
+        if (listeners.none { it.get() === listener }) listeners += WeakReference(listener)
+        runCatching { listener(snapshot.get()) }.onFailure {
+            Diagnostics.warning("Connection listener failed: " + it.message)
         }
-        runCatching { listener(snapshot.get()) }
-            .onFailure {
-                Diagnostics.warning("Connection listener failed: " + it.message)
-            }
+    }
+
+    fun removeListener(listener: (Snapshot) -> Unit) {
+        listeners.forEach { reference ->
+            val current = reference.get()
+            if (current == null || current === listener) listeners.remove(reference)
+        }
+    }
+
+    private fun pruneListeners() {
+        listeners.forEach { reference -> if (reference.get() == null) listeners.remove(reference) }
     }
 
     private fun notifyListeners(value: Snapshot) {
@@ -71,28 +74,10 @@ object ConnectionRuntime {
             if (listener == null) {
                 listeners.remove(reference)
             } else {
-                runCatching { listener(value) }
-                    .onFailure {
-                        Diagnostics.warning(
-                            "Connection listener failed: " + it.message
-                        )
-                    }
+                runCatching { listener(value) }.onFailure {
+                    Diagnostics.warning("Connection listener failed: " + it.message)
+                }
             }
-        }
-    }
-
-    fun removeListener(listener: (Snapshot) -> Unit) {
-        listeners.forEach { reference ->
-            val current = reference.get()
-            if (current == null || current === listener) {
-                listeners.remove(reference)
-            }
-        }
-    }
-
-    private fun pruneListeners() {
-        listeners.forEach { reference ->
-            if (reference.get() == null) listeners.remove(reference)
         }
     }
 }
@@ -104,33 +89,29 @@ class CoreManager(context: Context) {
         CoreId.SING_BOX to SingBoxCoreAdapter(appContext),
         CoreId.MIHOMO to MihomoCoreAdapter(appContext)
     )
+    private val lastPreparedCore = AtomicReference(CoreId.XRAY)
 
     val adapter: CoreAdapter
-        get() = selectedAdapter()
+        get() = adapters[currentSettingsCore()] ?: adapters.getValue(CoreId.XRAY)
 
-    private fun selectedCoreId(): CoreId = SettingsRepository(appContext).load().let {
+    private fun currentSettingsCore(): CoreId = SettingsRepository(appContext).load().let {
         if (it.smartCoreSelection) it.lastSmartCoreId else it.coreId
     }
 
-    private fun selectedAdapter(): CoreAdapter = adapters[selectedCoreId()] ?: adapters.getValue(CoreId.XRAY)
-
-    fun prepare(request: CoreStartRequest): Pair<String?, CoreResult> =
-        runCatching {
-            val settings = SettingsRepository(appContext).load()
-            if (settings.smartCoreSelection) smartSelect(request)
-            val coreId = selectedCoreId()
-            val adapter = adapters[coreId] ?: adapters.getValue(CoreId.XRAY)
-            val json = CoreConfigTranslator.build(request, coreId)
-            val validation = adapter.validate(json)
-            if (!validation.success) null to validation
-            else json to CoreResult(true)
-        }.getOrElse {
-            Diagnostics.recordThrowable("Core config preparation", it)
-            null to CoreResult(
-                false,
-                "Config generation failed: " + it.message
-            )
+    fun prepare(request: CoreStartRequest): Pair<String?, CoreResult> = runCatching {
+        val coreId = resolveCoreForRequest(request)
+        val json = CoreConfigTranslator.build(request, coreId)
+        val validation = validateWith(coreId, json)
+        if (!validation.success) {
+            null to validation
+        } else {
+            lastPreparedCore.set(coreId)
+            json to CoreResult(true)
         }
+    }.getOrElse {
+        Diagnostics.recordThrowable("Core config preparation", it)
+        null to CoreResult(false, "Config generation failed: " + (it.message ?: "unknown"))
+    }
 
     fun start(
         request: CoreStartRequest,
@@ -139,7 +120,7 @@ class CoreManager(context: Context) {
     ): CoreResult {
         val (json, prepared) = prepare(request)
         if (!prepared.success || json == null) return prepared
-        return startPrepared(json, request, protect, isCancelled)
+        return startPrepared(lastPreparedCore.get(), json, request, protect, isCancelled)
     }
 
     fun startValidated(
@@ -147,21 +128,16 @@ class CoreManager(context: Context) {
         protect: ((Int) -> Boolean)? = null,
         isCancelled: () -> Boolean = { false }
     ): CoreResult {
-        val json = runCatching {
-            val settings = SettingsRepository(appContext).load()
-            if (settings.smartCoreSelection) smartSelect(request)
-            buildJson(request)
-        }.getOrElse {
+        val coreId = resolveCoreForRequest(request)
+        val json = runCatching { CoreConfigTranslator.build(request, coreId) }.getOrElse {
             Diagnostics.recordThrowable("Validated core start", it)
-            return CoreResult(
-                false,
-                "Config generation failed: " + it.message
-            )
+            return CoreResult(false, "Config generation failed: " + (it.message ?: "unknown"))
         }
-        return startPrepared(json, request, protect, isCancelled)
+        return startPrepared(coreId, json, request, protect, isCancelled)
     }
 
     private fun startPrepared(
+        coreId: CoreId,
         json: String,
         request: CoreStartRequest,
         protect: ((Int) -> Boolean)?,
@@ -172,7 +148,7 @@ class CoreManager(context: Context) {
         val xrayLog = File(Diagnostics.xrayErrorLogPath())
         val logMark = XrayProbeLogInspector.mark(xrayLog)
         stopAllAdapters()
-        val started = adapterForRequest(request).start(json, protect)
+        val started = (adapters[coreId] ?: adapters.getValue(CoreId.XRAY)).start(json, protect)
         if (!started.success) return started
 
         if (isCancelled()) {
@@ -180,17 +156,7 @@ class CoreManager(context: Context) {
             return cancelledStart()
         }
 
-        /*
-         * Native process startup is not a connection result. TCP ping only proves
-         * endpoint reachability, and libXray Real Delay validates an isolated
-         * proxy-mode path. Before the service exposes CONNECTED, verify the live
-         * route selected by the user: Android VPN for VPN mode, localhost mixed
-         * listener for proxy mode.
-         */
-        val wireGuard = request.profile.protocol.equals(
-            "wireguard",
-            ignoreCase = true
-        )
+        val wireGuard = request.profile.protocol.equals("wireguard", ignoreCase = true)
         val adaptive = request.settings.adaptiveHandshake
         val budgetMs = if (wireGuard) {
             request.settings.wireGuardHandshakeTimeoutMs
@@ -214,17 +180,14 @@ class CoreManager(context: Context) {
             initialDelayMs = when {
                 wireGuard && adaptive -> WIREGUARD_ADAPTIVE_GRACE_MS
                 wireGuard -> WIREGUARD_CONSERVATIVE_GRACE_MS
-                request.mode == ConnectionMode.VPN && adaptive ->
-                    VPN_ADAPTIVE_GRACE_MS
-                request.mode == ConnectionMode.VPN ->
-                    VPN_CONSERVATIVE_GRACE_MS
+                request.mode == ConnectionMode.VPN && adaptive -> VPN_ADAPTIVE_GRACE_MS
+                request.mode == ConnectionMode.VPN -> VPN_CONSERVATIVE_GRACE_MS
                 adaptive -> PROXY_ADAPTIVE_GRACE_MS
                 else -> PROXY_CONSERVATIVE_GRACE_MS
             },
             isCancelled = isCancelled,
             hardFailure = {
-                XrayProbeLogInspector.classifySince(logMark)
-                    ?.takeIf(::isImmediateTransportFailure)
+                XrayProbeLogInspector.classifySince(logMark)?.takeIf(::isImmediateTransportFailure)
             }
         )
 
@@ -235,50 +198,35 @@ class CoreManager(context: Context) {
         if (health.success) return started
 
         stopAfterRejectedStart()
-
-        val category = health.errorCategory
-            ?.takeIf(String::isNotBlank)
-            ?.let { " ($it)" }
-            .orEmpty()
-        val route = if (request.mode == ConnectionMode.VPN) {
-            "Android VPN route"
-        } else {
-            "local proxy route"
-        }
+        val category = health.errorCategory?.takeIf(String::isNotBlank)?.let { " ($it)" }.orEmpty()
+        val route = if (request.mode == ConnectionMode.VPN) "Android VPN route" else "local proxy route"
         val protocol = request.profile.protocol.uppercase()
-        val error =
-            "$protocol core started, but no verified HTTPS traffic crossed the " +
-                "$route$category. TCP/Real Delay results are ranking tests and " +
-                "cannot guarantee that the live route is usable."
-        return CoreResult(false, error)
+        return CoreResult(
+            false,
+            "$protocol core started, but no verified HTTPS traffic crossed the $route$category. TCP/Real Delay results are ranking tests and cannot guarantee that the live route is usable."
+        )
     }
 
-    private fun isImmediateTransportFailure(category: String): Boolean =
-        category in setOf(
-            "reality_mismatch",
-            "websocket_handshake",
-            "authentication_failed",
-            "tls_certificate",
-            "invalid_xray_config",
-            "connection_refused"
-        )
+    private fun isImmediateTransportFailure(category: String): Boolean = category in setOf(
+        "reality_mismatch",
+        "websocket_handshake",
+        "authentication_failed",
+        "tls_certificate",
+        "invalid_xray_config",
+        "connection_refused"
+    )
 
     private fun stopAfterRejectedStart() {
-        runCatching { stopAllAdapters() }
-            .onFailure {
-                Diagnostics.warning(
-                    "Core cleanup after rejected startup failed: " + it.message
-                )
-            }
+        runCatching { stopAllAdapters() }.onFailure {
+            Diagnostics.warning("Core cleanup after rejected startup failed: " + it.message)
+        }
     }
 
-    private fun cancelledStart(): CoreResult =
-        CoreResult(false, "Connection start cancelled")
+    private fun cancelledStart(): CoreResult = CoreResult(false, "Connection start cancelled")
 
-    fun isRunning(): Boolean = selectedAdapter().state()
-        .data
-        ?.optJSONObject("data")
-        ?.optBoolean("running") == true
+    fun isRunning(): Boolean = adapters.values.any { adapter ->
+        adapter.state().data?.optJSONObject("data")?.optBoolean("running") == true
+    }
 
     fun stop(): CoreResult = stopAllAdapters()
 
@@ -300,26 +248,22 @@ class CoreManager(context: Context) {
     fun validateWith(coreId: CoreId, configJson: String): CoreResult =
         (adapters[coreId] ?: adapters.getValue(CoreId.XRAY)).validate(configJson)
 
-    private fun adapterForRequest(request: CoreStartRequest): CoreAdapter =
-        adapters[resolveCoreForRequest(request)] ?: adapters.getValue(CoreId.XRAY)
-
-    private fun buildJson(request: CoreStartRequest): String =
-        CoreConfigTranslator.build(request, selectedCoreId())
-
     fun switchCore(coreId: CoreId) {
         val settings = SettingsRepository(appContext).load()
         settings.coreId = coreId
         settings.smartCoreSelection = false
+        settings.lastSmartCoreId = coreId
         SettingsRepository(appContext).save(settings)
     }
 
     private fun resolveCoreForRequest(request: CoreStartRequest): CoreId {
         val settings = SettingsRepository(appContext).load()
-        if (request.mode == com.trivox.client.data.ConnectionMode.VPN) {
-            if (settings.lastSmartCoreId != CoreId.XRAY) {
-                settings.lastSmartCoreId = CoreId.XRAY
-                SettingsRepository(appContext).save(settings)
+        if (request.mode == ConnectionMode.VPN) {
+            if (settings.coreId != CoreId.XRAY || settings.lastSmartCoreId != CoreId.XRAY) {
+                Diagnostics.warning("Android VPN mode currently uses Xray runtime; non-Xray converted profiles are translated back to Xray-compatible outbound for VPN.")
             }
+            settings.lastSmartCoreId = CoreId.XRAY
+            SettingsRepository(appContext).save(settings)
             return CoreId.XRAY
         }
         return if (settings.smartCoreSelection) smartSelect(request) else settings.coreId
@@ -329,7 +273,7 @@ class CoreManager(context: Context) {
         val settings = SettingsRepository(appContext).load()
         if (!settings.smartCoreSelection) return settings.coreId
 
-        if (request.mode == com.trivox.client.data.ConnectionMode.VPN) {
+        if (request.mode == ConnectionMode.VPN) {
             settings.lastSmartCoreId = CoreId.XRAY
             SettingsRepository(appContext).save(settings)
             Diagnostics.info("Smart core selected: XRAY for Android VPN mode")
@@ -337,13 +281,13 @@ class CoreManager(context: Context) {
         }
 
         val order = listOf(CoreId.MIHOMO, CoreId.SING_BOX, CoreId.XRAY)
-        val available = order.filter { adapters[it]?.isAvailable() == true }.ifEmpty { listOf(CoreId.XRAY) }
+        val candidates = order.filter { adapters[it]?.isAvailable() == true }.ifEmpty { listOf(CoreId.XRAY) }
         val diagnostics = StringBuilder()
 
-        available.forEach { coreId ->
+        candidates.forEach { coreId ->
             val adapter = adapters[coreId] ?: return@forEach
             val json = runCatching { CoreConfigTranslator.build(request, coreId) }.getOrElse {
-                diagnostics.append(coreId.name).append(": build failed: ").append(it.message ?: "unknown").append("\\n")
+                diagnostics.append(coreId.name).append(": build failed: ").append(it.message ?: "unknown").append("\n")
                 return@forEach
             }
             val validation = runCatching { adapter.validate(json) }.getOrElse {
@@ -355,7 +299,7 @@ class CoreManager(context: Context) {
                 Diagnostics.info("Smart core selected: " + coreId.name)
                 return coreId
             }
-            diagnostics.append(coreId.name).append(": ").append(validation.error).append("\\n")
+            diagnostics.append(coreId.name).append(": ").append(validation.error).append("\n")
         }
 
         settings.lastSmartCoreId = CoreId.XRAY

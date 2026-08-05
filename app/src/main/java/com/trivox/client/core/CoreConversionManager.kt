@@ -7,6 +7,7 @@ import com.trivox.client.data.ConnectionMode
 import com.trivox.client.data.CoreId
 import com.trivox.client.data.SettingsRepository
 import com.trivox.client.data.SubscriptionSource
+import com.trivox.client.data.TestStatus
 import com.trivox.client.util.Diagnostics
 import java.util.UUID
 
@@ -24,7 +25,11 @@ class CoreConversionManager(context: Context) {
         val firstError: String = ""
     )
 
-    fun convertProfile(profile: ConfigProfile, target: CoreId, subscriptionId: String? = profile.subscriptionId): Result<ConfigProfile> = runCatching {
+    fun convertProfile(
+        profile: ConfigProfile,
+        target: CoreId,
+        subscriptionId: String? = profile.subscriptionId
+    ): Result<ConfigProfile> = runCatching {
         val settings = settingsRepository.load().copy().also {
             it.coreId = target
             it.smartCoreSelection = false
@@ -34,19 +39,31 @@ class CoreConversionManager(context: Context) {
         val native = CoreConfigTranslator.buildNativeProfile(profile, target, settings.socksPort)
         val runtime = CoreConfigTranslator.build(request, target)
         val validation = coreManager.validateWith(target, runtime)
-        if (!validation.success) error(validation.error.ifBlank { "${target.label} rejected converted config" })
+        if (!validation.success) {
+            error(validation.error.ifBlank { "${target.label} rejected converted config" })
+        }
         profile.copy(
             id = UUID.randomUUID().toString(),
             name = profile.name.withCoreSuffix(target),
             raw = native,
-            outboundJson = profile.outboundJson,
+            outboundJson = CoreConfigTranslator.xrayOutboundFor(profile),
             subscriptionId = subscriptionId,
             latencyMs = null,
             latencyJitterMs = null,
             latencySuccessRatio = 0.0,
+            latencyMethod = "",
+            testStatus = TestStatus.UNTESTED,
             lastTestAt = 0L,
             tcpLatencyMs = null,
+            tcpLatencyJitterMs = null,
+            tcpSuccessRatio = 0.0,
+            tcpTestStatus = TestStatus.UNTESTED,
+            tcpLastTestAt = 0L,
             realLatencyMs = null,
+            realLatencyJitterMs = null,
+            realSuccessRatio = 0.0,
+            realTestStatus = TestStatus.UNTESTED,
+            realLastTestAt = 0L,
             exitIp = "",
             exitCountry = "",
             exitCountryCode = "",
@@ -59,7 +76,11 @@ class CoreConversionManager(context: Context) {
     fun convertAndSave(profile: ConfigProfile, target: CoreId): Result<ConfigProfile> =
         convertProfile(profile, target).onSuccess { repository.save(it) }
 
-    fun convertSubscription(source: SubscriptionSource, profiles: List<ConfigProfile>, target: CoreId): ConversionSummary {
+    fun convertSubscription(
+        source: SubscriptionSource,
+        profiles: List<ConfigProfile>,
+        target: CoreId
+    ): ConversionSummary {
         var added = 0
         var failed = 0
         var firstError = ""
@@ -70,8 +91,9 @@ class CoreConversionManager(context: Context) {
                 added += 1
             } else {
                 failed += 1
-                if (firstError.isBlank()) firstError = result.exceptionOrNull()?.message.orEmpty()
-                Diagnostics.warning("Subscription conversion failed for ${profile.name}: ${result.exceptionOrNull()?.message}")
+                val error = result.exceptionOrNull()?.message.orEmpty()
+                if (firstError.isBlank()) firstError = error
+                Diagnostics.warning("Subscription conversion failed for ${profile.name}: $error")
             }
         }
         return ConversionSummary(target, profiles.size, added, failed, firstError)
@@ -79,7 +101,10 @@ class CoreConversionManager(context: Context) {
 
     private fun String.withCoreSuffix(coreId: CoreId): String {
         val suffix = "[${coreId.label}]"
-        val cleaned = replace(Regex("\\s*\\[(Xray|sing-box|mihomo)]\\s*$", RegexOption.IGNORE_CASE), "").trim()
+        val cleaned = replace(
+            Regex("\\s*\\[(Xray|sing-box|mihomo)]\\s*$", RegexOption.IGNORE_CASE),
+            ""
+        ).trim()
         return "$cleaned $suffix"
     }
 }

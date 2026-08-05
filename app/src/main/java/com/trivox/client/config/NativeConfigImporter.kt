@@ -12,7 +12,7 @@ object NativeConfigImporter {
         if (text.isBlank()) return emptyList()
         return when {
             text.startsWith("{") -> parseSingBoxJsonOrNull(text)
-            text.contains("proxies:") || text.contains("proxy-providers:") -> parseMihomoYaml(text)
+            text.contains("proxies:") || text.contains("proxy-providers:") || text.startsWith("mixed-port:") -> parseMihomoYaml(text)
             else -> null
         }
     }
@@ -25,12 +25,12 @@ object NativeConfigImporter {
             val out = outs.optJSONObject(i) ?: continue
             val type = out.optString("type", "").lowercase(Locale.ROOT)
             if (type in setOf("direct", "block", "dns", "selector", "urltest")) continue
-            singBoxOutboundToProfile(out)?.let(result::add)
+            singBoxOutboundToProfile(out, text)?.let(result::add)
         }
         result.takeIf { it.isNotEmpty() }
     }.getOrNull()
 
-    private fun singBoxOutboundToProfile(out: JSONObject): ConfigProfile? {
+    private fun singBoxOutboundToProfile(out: JSONObject, rawText: String): ConfigProfile? {
         val type = out.optString("type", "").lowercase(Locale.ROOT)
         val server = out.optString("server", "")
         val port = out.optInt("server_port", 0)
@@ -60,24 +60,31 @@ object NativeConfigImporter {
             val tlsSettings = JSONObject()
             tls.optString("server_name", "").takeIf(String::isNotBlank)?.let { tlsSettings.put("serverName", it) }
             tls.optJSONObject("reality")?.let { r ->
-                tlsSettings.put("publicKey", r.optString("public_key", ""))
-                tlsSettings.put("shortId", r.optString("short_id", ""))
+                r.optString("public_key", "").takeIf(String::isNotBlank)?.let { tlsSettings.put("publicKey", it) }
+                r.optString("short_id", "").takeIf(String::isNotBlank)?.let { tlsSettings.put("shortId", it) }
             }
             stream.put(if (stream.optString("security") == "reality") "realitySettings" else "tlsSettings", tlsSettings)
         }
         xray.put("streamSettings", stream)
-        return ConfigProfile(name = out.optString("tag", "$server:$port"), protocol = protocol, server = server, port = port, raw = out.toString(), outboundJson = xray.toString())
+        return ConfigProfile(
+            id = UUID.randomUUID().toString(),
+            name = out.optString("tag", "$server:$port"),
+            protocol = protocol,
+            server = server,
+            port = port,
+            raw = rawText,
+            outboundJson = xray.toString(),
+            probeServer = server,
+            probePort = port
+        )
     }
 
-    private fun transportName(transport: JSONObject?): String {
-        val type = transport?.optString("type", "tcp")?.lowercase(Locale.ROOT) ?: "tcp"
-        return when (type) {
-            "ws", "websocket" -> "ws"
-            "grpc" -> "grpc"
-            "httpupgrade" -> "httpupgrade"
-            "http" -> "http"
-            else -> "tcp"
-        }
+    private fun transportName(transport: JSONObject?): String = when (transport?.optString("type", "tcp")?.lowercase(Locale.ROOT) ?: "tcp") {
+        "ws", "websocket" -> "ws"
+        "grpc" -> "grpc"
+        "httpupgrade" -> "httpupgrade"
+        "http" -> "http"
+        else -> "tcp"
     }
 
     private fun parseMihomoYaml(text: String): List<ConfigProfile>? {
@@ -87,10 +94,13 @@ object NativeConfigImporter {
         text.lineSequence().forEach { rawLine ->
             val line = rawLine.trimEnd()
             val trimmed = line.trim()
-            if (trimmed == "proxies:") { inProxies = true; return@forEach }
+            if (trimmed == "proxies:") {
+                inProxies = true
+                return@forEach
+            }
             if (!inProxies) return@forEach
-            if (trimmed.endsWith(":") && !trimmed.startsWith("-")) {
-                if (trimmed != "proxies:") inProxies = false
+            if (trimmed.endsWith(":") && !trimmed.startsWith("-") && !trimmed.contains(": ")) {
+                inProxies = false
                 return@forEach
             }
             if (trimmed.startsWith("- ")) {
@@ -100,7 +110,7 @@ object NativeConfigImporter {
                 parseYamlPair(trimmed)?.let { (k, v) -> current?.put(k, v) }
             }
         }
-        val profiles = proxies.mapNotNull { mihomoProxyToProfile(it) }
+        val profiles = proxies.mapNotNull { mihomoProxyToProfile(it, text) }
         return profiles.takeIf { it.isNotEmpty() }
     }
 
@@ -110,10 +120,11 @@ object NativeConfigImporter {
         val key = value.substring(0, idx).trim()
         var v = value.substring(idx + 1).trim()
         if ((v.startsWith("'") && v.endsWith("'")) || (v.startsWith("\"") && v.endsWith("\""))) v = v.substring(1, v.length - 1)
+        v = v.replace("''", "'")
         return key to v
     }
 
-    private fun mihomoProxyToProfile(map: Map<String, String>): ConfigProfile? {
+    private fun mihomoProxyToProfile(map: Map<String, String>, rawText: String): ConfigProfile? {
         val type = map["type"]?.lowercase(Locale.ROOT) ?: return null
         val server = map["server"].orEmpty()
         val port = map["port"]?.toIntOrNull() ?: return null
@@ -146,6 +157,16 @@ object NativeConfigImporter {
         }
         xray.put("streamSettings", stream)
         val name = map["name"]?.takeIf(String::isNotBlank) ?: "$server:$port"
-        return ConfigProfile(id = UUID.randomUUID().toString(), name = name, protocol = protocol, server = server, port = port, raw = map.toString(), outboundJson = xray.toString())
+        return ConfigProfile(
+            id = UUID.randomUUID().toString(),
+            name = name,
+            protocol = protocol,
+            server = server,
+            port = port,
+            raw = rawText,
+            outboundJson = xray.toString(),
+            probeServer = server,
+            probePort = port
+        )
     }
 }
