@@ -1,6 +1,7 @@
 package com.trivox.client.core
 
 import android.content.Context
+import com.trivox.client.config.NativeProfileDocument
 import com.trivox.client.config.XrayConfigBuilder
 import com.trivox.client.data.ConfigProfile
 import com.trivox.client.data.ConnectionMode
@@ -14,6 +15,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.lang.ref.WeakReference
+import java.net.InetSocketAddress
+import java.net.Socket
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -246,6 +249,17 @@ class CoreManager(context: Context) {
                 return cancelledStart()
             }
 
+            waitForLocalMixedProxy(
+                port = request.settings.socksPort,
+                isCancelled = isCancelled
+            )?.let { error ->
+                stopAfterRejectedStart()
+                return CoreResult(
+                    false,
+                    plan.activeCore.label + " started, but its localhost mixed proxy was not ready before Android VPN bridge: " + error
+                )
+            }
+
             Diagnostics.info("Starting Xray Android TUN bridge for " + plan.activeCore.label)
             val bridge = adapters.getValue(CoreId.XRAY).start(plan.vpnBridgeConfig ?: return CoreResult(false, "Missing Xray VPN bridge config"), protect)
             if (!bridge.success) {
@@ -286,6 +300,36 @@ class CoreManager(context: Context) {
             "$protocol config started with $engine, but no verified HTTPS traffic crossed the $route$category. " +
                 "TCP/Real Delay results are ranking tests and cannot guarantee that the live route is usable."
         )
+    }
+
+    private fun waitForLocalMixedProxy(
+        port: Int,
+        isCancelled: () -> Boolean
+    ): String? {
+        val deadline = System.currentTimeMillis() + NATIVE_LOCAL_LISTENER_BUDGET_MS
+        var lastError = "not attempted"
+        while (System.currentTimeMillis() < deadline) {
+            if (isCancelled()) return "cancelled"
+            try {
+                Socket().use { socket ->
+                    socket.connect(
+                        InetSocketAddress("127.0.0.1", port),
+                        NATIVE_LOCAL_CONNECT_TIMEOUT_MS
+                    )
+                }
+                Diagnostics.info("Native local mixed proxy is ready on 127.0.0.1:$port")
+                return null
+            } catch (error: Throwable) {
+                lastError = error.javaClass.simpleName + ": " + (error.message ?: "not ready")
+                try {
+                    Thread.sleep(NATIVE_LOCAL_RETRY_DELAY_MS)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return "interrupted"
+                }
+            }
+        }
+        return lastError
     }
 
     private fun verifyLiveRoute(
@@ -355,7 +399,7 @@ class CoreManager(context: Context) {
             isCancelled = isCancelled,
             hardFailure = {
                 XrayProbeLogInspector.classifySince(logMark)
-                    ?.takeIf(::isImmediateBridgeFailure)
+                    ?.takeIf { it == "invalid_xray_config" }
             }
         )
 
@@ -382,11 +426,7 @@ class CoreManager(context: Context) {
     }
 
     private fun isImmediateBridgeFailure(category: String): Boolean =
-        category in setOf(
-            "invalid_xray_config",
-            "connection_refused",
-            "authentication_failed"
-        )
+        category == "invalid_xray_config"
 
     private fun isImmediateTransportFailure(category: String): Boolean =
         category in setOf(
@@ -431,7 +471,7 @@ class CoreManager(context: Context) {
         profile: ConfigProfile,
         settings: com.trivox.client.data.AppSettings
     ): Boolean {
-        val selected = if (settings.smartCoreSelection) {
+        val selected = NativeProfileDocument.affinity(profile) ?: if (settings.smartCoreSelection) {
             smartSelect(
                 CoreStartRequest(
                     profile = profile,
@@ -462,12 +502,18 @@ class CoreManager(context: Context) {
     }
 
     private fun resolveCoreForRequest(request: CoreStartRequest): CoreId {
+        NativeProfileDocument.affinity(request.profile)?.let { return it }
         val settings = SettingsRepository(appContext).load()
         return if (settings.smartCoreSelection) smartSelect(request) else settings.coreId
     }
 
-    fun smartSelect(request: CoreStartRequest): CoreId =
-        smartCoreSelector.select(request)
+    fun smartSelect(request: CoreStartRequest): CoreId {
+        NativeProfileDocument.affinity(request.profile)?.let { required ->
+            Diagnostics.info("Smart core native affinity: " + required.label)
+            return required
+        }
+        return smartCoreSelector.select(request)
+    }
 
     private fun buildPlanForCandidate(request: CoreStartRequest, coreId: CoreId): StartPlan {
         val adapter = adapters[coreId] ?: adapters.getValue(CoreId.XRAY)
@@ -488,9 +534,12 @@ class CoreManager(context: Context) {
         private const val GENERAL_CONSERVATIVE_VERIFY_BUDGET_MS = 11_000
         private const val GENERAL_ADAPTIVE_PROBE_TIMEOUT_MS = 2_800
         private const val GENERAL_CONSERVATIVE_PROBE_TIMEOUT_MS = 4_500
-        private const val NATIVE_BRIDGE_VERIFY_BUDGET_MS = 18_000
+        private const val NATIVE_BRIDGE_VERIFY_BUDGET_MS = 22_000
         private const val NATIVE_BRIDGE_PROBE_TIMEOUT_MS = 4_800
-        private const val NATIVE_BRIDGE_GRACE_MS = 1_000
+        private const val NATIVE_BRIDGE_GRACE_MS = 1_500
+        private const val NATIVE_LOCAL_LISTENER_BUDGET_MS = 6_500
+        private const val NATIVE_LOCAL_CONNECT_TIMEOUT_MS = 420
+        private const val NATIVE_LOCAL_RETRY_DELAY_MS = 140L
         private const val PROXY_ADAPTIVE_GRACE_MS = 40
         private const val PROXY_CONSERVATIVE_GRACE_MS = 120
         private const val VPN_ADAPTIVE_GRACE_MS = 90

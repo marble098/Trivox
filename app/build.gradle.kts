@@ -220,6 +220,10 @@ android {
         viewBinding = false
     }
 
+    androidResources {
+        noCompress += setOf("dat", "db", "mmdb", "metadb")
+    }
+
     packaging {
         jniLibs {
             useLegacyPackaging = true

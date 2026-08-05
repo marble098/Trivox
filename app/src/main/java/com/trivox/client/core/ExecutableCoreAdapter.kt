@@ -62,7 +62,7 @@ abstract class ExecutableCoreAdapter(
         val args = runArgs(binary, config)
         return runCatching {
             val process = processBuilder(args).start()
-            Thread.sleep(320)
+            Thread.sleep(CORE_START_GRACE_MS)
             if (!process.isAlive && process.exitValue() != 0) {
                 val out = process.inputStream.bufferedReader().readText().trim()
                 CoreResult(false, out.ifBlank { "$displayName exited during startup" })
@@ -106,16 +106,18 @@ abstract class ExecutableCoreAdapter(
         File(coreWorkDir(), "home").apply { mkdirs() }
 
     private fun processBuilder(args: List<String>): ProcessBuilder {
+        val work = coreWorkDir()
         val home = configHomeDir()
+        CoreSupportFiles.install(context, work, home)
         val builder = ProcessBuilder(args)
-            .directory(coreWorkDir())
+            .directory(work)
             .redirectErrorStream(true)
 
+        val tmp = File(work, "tmp").apply { mkdirs() }
         builder.environment()["HOME"] = home.absolutePath
         builder.environment()["XDG_CONFIG_HOME"] = home.absolutePath
-        builder.environment()["MIHOMO_HOME"] = home.absolutePath
-        builder.environment()["CLASH_HOME"] = home.absolutePath
-        builder.environment()["TMPDIR"] = File(coreWorkDir(), "tmp").apply { mkdirs() }.absolutePath
+        builder.environment()["TMPDIR"] = tmp.absolutePath
+        CoreSupportFiles.applyEnvironment(builder.environment(), work, home)
 
         return builder
     }
@@ -167,6 +169,10 @@ abstract class ExecutableCoreAdapter(
 
     private fun missing(): CoreResult =
         CoreResult(false, "$displayName binary is missing, compressed, or not executable. Rebuild APK with native ELF jniLibs.")
+
+    companion object {
+        private const val CORE_START_GRACE_MS = 650L
+    }
 }
 
 class SingBoxCoreAdapter(context: Context) : ExecutableCoreAdapter(

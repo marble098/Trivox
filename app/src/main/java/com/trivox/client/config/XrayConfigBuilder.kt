@@ -583,9 +583,10 @@ object XrayConfigBuilder {
 
         DnsMode.DIRECT -> smartDns(localSecureDns(), settings)
 
-        DnsMode.THROUGH_PROXY,
-        DnsMode.TRIVOX_DEFAULT ->
+        DnsMode.THROUGH_PROXY ->
             smartDns(remoteSecureDns(profile), settings)
+
+        DnsMode.TRIVOX_DEFAULT -> smartDns(localSecureDns(), settings)
     }
 
     private fun importedDns(

@@ -235,7 +235,10 @@ object NativeProfileDocument {
         val output = mutableListOf(
             "mixed-port: $mixedPort",
             "allow-lan: false",
-            "bind-address: '127.0.0.1'"
+            "bind-address: '127.0.0.1'",
+            "unified-delay: true",
+            "tcp-concurrent: true",
+            "find-process-mode: off"
         )
         output += filtered
         return output.joinToString("\n").trim() + "\n"
