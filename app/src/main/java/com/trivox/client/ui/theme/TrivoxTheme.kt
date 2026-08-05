@@ -2,8 +2,8 @@ package com.trivox.client.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.DarkColorScheme
-import androidx.compose.material3.LightColorScheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -25,7 +25,7 @@ val ErrorRed = Color(0xFFFF5252)
 val TextPrimaryDark = Color(0xFFF0F4F8)
 val TextSecondaryDark = Color(0xFF94A3B8)
 
-private val DarkColorScheme = DarkColorScheme(
+private val DarkColorScheme = darkColorScheme(
     primary = CyberCyan,
     onPrimary = DeepNavy,
     primaryContainer = ElectricBlue,
@@ -42,7 +42,7 @@ private val DarkColorScheme = DarkColorScheme(
     onError = Color.White
 )
 
-private val LightColorScheme = LightColorScheme(
+private val LightColorScheme = lightColorScheme(
     primary = ElectricBlue,
     onPrimary = Color.White,
     primaryContainer = Color(0xFFE3F2FD),

@@ -276,15 +276,6 @@ val outbound = profile.outboundJson.trim()
         )
         return yaml(root)
     }
-            "mode" to "rule",
-            "log-level" to "warning",
-            "ipv6" to false,
-            "proxies" to listOf(mihomoProxy(profile, "proxy")),
-            "proxy-groups" to listOf(linkedMapOf<String, Any?>("name" to "Proxy", "type" to "select", "proxies" to listOf("proxy"))),
-            "rules" to listOf("MATCH,Proxy")
-        )
-        return yaml(root)
-    }
 
     private fun mihomoProxy(profile: ConfigProfile, name: String): LinkedHashMap<String, Any?> {
         val ob = outbound(profile)
