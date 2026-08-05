@@ -507,13 +507,8 @@ class CoreManager(context: Context) {
         return if (settings.smartCoreSelection) smartSelect(request) else settings.coreId
     }
 
-    fun smartSelect(request: CoreStartRequest): CoreId {
-        NativeProfileDocument.affinity(request.profile)?.let { required ->
-            Diagnostics.info("Smart core native affinity: " + required.label)
-            return required
-        }
-        return smartCoreSelector.select(request)
-    }
+    fun smartSelect(request: CoreStartRequest): CoreId =
+        smartCoreSelector.select(request)
 
     private fun buildPlanForCandidate(request: CoreStartRequest, coreId: CoreId): StartPlan {
         val adapter = adapters[coreId] ?: adapters.getValue(CoreId.XRAY)
@@ -534,9 +529,9 @@ class CoreManager(context: Context) {
         private const val GENERAL_CONSERVATIVE_VERIFY_BUDGET_MS = 11_000
         private const val GENERAL_ADAPTIVE_PROBE_TIMEOUT_MS = 2_800
         private const val GENERAL_CONSERVATIVE_PROBE_TIMEOUT_MS = 4_500
-        private const val NATIVE_BRIDGE_VERIFY_BUDGET_MS = 22_000
+        private const val NATIVE_BRIDGE_VERIFY_BUDGET_MS = 18_000
         private const val NATIVE_BRIDGE_PROBE_TIMEOUT_MS = 4_800
-        private const val NATIVE_BRIDGE_GRACE_MS = 1_500
+        private const val NATIVE_BRIDGE_GRACE_MS = 1_000
         private const val NATIVE_LOCAL_LISTENER_BUDGET_MS = 6_500
         private const val NATIVE_LOCAL_CONNECT_TIMEOUT_MS = 420
         private const val NATIVE_LOCAL_RETRY_DELAY_MS = 140L
