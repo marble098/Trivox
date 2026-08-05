@@ -284,7 +284,7 @@ class CoreManager(context: Context) {
 
     private fun verifyLiveRoute(
         request: CoreStartRequest,
-        logMark: Long,
+        logMark: XrayProbeLogInspector.Mark,
         isCancelled: () -> Boolean
     ): com.trivox.client.data.PingResult {
         val wireGuard = request.profile.protocol.equals("wireguard", ignoreCase = true)
