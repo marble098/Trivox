@@ -1,3 +1,9 @@
+import org.gradle.api.DefaultTask
+import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.TaskAction
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -6,9 +12,23 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+abstract class VerifyXrayAarTask : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val aarFile: RegularFileProperty
+
+    @TaskAction
+    fun verify() {
+        val aar = aarFile.get().asFile
+        check(aar.isFile && aar.length() > 0L) {
+            "Missing app/libs/libXray.aar. The cloud workflow must prepare Xray 26.7.28 before building."
+        }
+    }
+}
+
 val supportedAbis = listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
 val requestedAbis = providers.gradleProperty("trivoxAbis")
-    .orElse("arm64-v8a,armeabi-v7a,x86_64")
+    .orElse("arm64-v8a,armeabi-v7a,x86,x86_64")
     .get()
     .split(',')
     .map(String::trim)
@@ -111,20 +131,13 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
-    if (file("libs/libXray.aar").isFile) {
-        implementation(files("libs/libXray.aar"))
-    }
+    implementation(files("libs/libXray.aar"))
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20250517")
 }
 
-tasks.register("verifyXrayAar") {
-    doLast {
-        val aar = file("libs/libXray.aar")
-        check(aar.isFile && aar.length() > 0L) {
-            "Missing app/libs/libXray.aar. The cloud workflow must prepare Xray 26.7.28 before building."
-        }
-    }
+tasks.register<VerifyXrayAarTask>("verifyXrayAar") {
+    aarFile.set(layout.projectDirectory.file("libs/libXray.aar"))
 }
 
 tasks.matching { it.name.startsWith("assemble") }.configureEach {
