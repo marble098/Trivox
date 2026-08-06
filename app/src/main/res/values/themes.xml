@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <style name="ThemeOverlay" />
+    <style name="Widget" />
+
     <style name="Theme.Trivox.Base" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">@font/vazirmatn</item>
         <item name="android:windowNoTitle">true</item>
@@ -27,7 +30,7 @@
         <item name="android:windowDisablePreview">true</item>
     </style>
 
-    <style name="ThemeOverlay.Trivox">
+    <style name="ThemeOverlay.Trivox" parent="ThemeOverlay">
         <item name="android:fontFamily">@font/vazirmatn</item>
         <item name="android:textColorPrimary">@color/text_primary</item>
         <item name="android:textColorSecondary">@color/text_secondary</item>
@@ -40,7 +43,7 @@
         <item name="android:fontFamily">@font/vazirmatn_medium</item>
     </style>
 
-    <style name="Widget.Trivox">
+    <style name="Widget.Trivox" parent="Widget">
         <item name="android:fontFamily">@font/vazirmatn_regular</item>
         <item name="android:textColor">@color/text_primary</item>
     </style>
