@@ -1,0 +1,341 @@
+name: Trivox Xray Build Fix v2
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: Android versionName
+        required: false
+        default: 1.0.0
+      release_tag:
+        description: Release tag; blank defaults to v<version_name>
+        required: false
+        default: v1.0.0
+      xray_version:
+        description: Xray/libXray version tag
+        required: false
+        default: v26.7.28
+      build_abias:
+        description: Android ABIs supported by libXray
+        required: false
+        default: arm64-v8a,armeabi-v7a,x86_64
+      publish_release:
+        description: Try to upload GitHub Release too; artifact upload always runs
+        required: false
+        default: "true"
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: trivox-xray-build-fix-v2-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fix-build-release:
+    name: Fix resources, build APKs, upload artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout Trivox
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Prepare Xray 26.7.28 on GitHub runner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          chmod +x ./gradlew || true
+          chmod +x tools/trivox-wizard.sh tools/generate-core-manifest.py || true
+          bash tools/trivox-wizard.sh \
+            --core-version "${{ github.event.inputs.xray_version || 'v26.7.28' }}" \
+            --abis "${{ github.event.inputs.build_abias || 'arm64-v8a,armeabi-v7a,x86_64' }}" \
+            --prepare-only \
+            --non-interactive \
+            --verbose
+          test -s app/libs/libXray.aar
+          test -s app/src/main/assets/core-manifest.json
+
+      - name: Apply v2 build fixes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PYSOURCE'
+          from pathlib import Path
+          import re
+          import textwrap
+
+          root = Path.cwd()
+          src = root / "app/src/main/java/com/trivox/client"
+
+          def write(rel, content):
+              p = root / rel
+              p.parent.mkdir(parents=True, exist_ok=True)
+              p.write_text(textwrap.dedent(content).lstrip(), encoding="utf-8")
+
+          def patch_props():
+              p = root / "gradle.properties"
+              lines = []
+              if p.exists():
+                  for line in p.read_text(encoding="utf-8").splitlines():
+                      key = line.split("=", 1)[0].strip()
+                      if key in {"org.gradle.configuration-cache", "trivoxVersionName", "trivoxAbis"}:
+                          continue
+                      lines.append(line)
+              lines.extend([
+                  "org.gradle.configuration-cache=false",
+                  "trivoxVersionName=1.0.0",
+                  "trivoxAbis=arm64-v8a,armeabi-v7a,x86_64",
+              ])
+              p.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+          write("app/src/main/res/values/themes.xml", r'''
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="Theme.Trivox" parent="android:style/Theme.Material.Light.NoActionBar">
+                  <item name="android:windowNoTitle">true</item>
+                  <item name="android:windowActionBar">false</item>
+                  <item name="android:windowLightStatusBar">true</item>
+                  <item name="android:statusBarColor">@color/surface</item>
+                  <item name="android:navigationBarColor">@color/surface</item>
+                  <item name="android:windowBackground">@color/surface</item>
+                  <item name="android:colorAccent">@color/blue</item>
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:windowDisablePreview">true</item>
+              </style>
+              <style name="Theme.Trivox.Transparent" parent="android:style/Theme.Material.Light.NoActionBar">
+                  <item name="android:windowIsTranslucent">true</item>
+                  <item name="android:windowBackground">@android:color/transparent</item>
+                  <item name="android:colorBackgroundCacheHint">@null</item>
+                  <item name="android:windowNoTitle">true</item>
+                  <item name="android:backgroundDimEnabled">false</item>
+                  <item name="android:windowDisablePreview">true</item>
+              </style>
+          </resources>
+          ''')
+
+          write("app/src/main/res/values-night/themes.xml", r'''
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="Theme.Trivox" parent="android:style/Theme.Material.NoActionBar">
+                  <item name="android:windowNoTitle">true</item>
+                  <item name="android:windowActionBar">false</item>
+                  <item name="android:windowLightStatusBar">false</item>
+                  <item name="android:statusBarColor">@color/surface</item>
+                  <item name="android:navigationBarColor">@color/surface</item>
+                  <item name="android:windowBackground">@color/surface</item>
+                  <item name="android:colorAccent">@color/blue</item>
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:windowDisablePreview">true</item>
+              </style>
+              <style name="Theme.Trivox.Transparent" parent="android:style/Theme.Material.NoActionBar">
+                  <item name="android:windowIsTranslucent">true</item>
+                  <item name="android:windowBackground">@android:color/transparent</item>
+                  <item name="android:colorBackgroundCacheHint">@null</item>
+                  <item name="android:windowNoTitle">true</item>
+                  <item name="android:backgroundDimEnabled">false</item>
+                  <item name="android:windowDisablePreview">true</item>
+              </style>
+          </resources>
+          ''')
+
+          patch_props()
+
+          parser = src / "config/ConfigParser.kt"
+          if parser.exists():
+              text = parser.read_text(encoding="utf-8")
+              pattern = r'return when \(raw\.substringBefore\("://"\)\.lowercase\(Locale\.ROOT\)\) \{.*?\n    \}\n\n    fun parseJson'
+              repl = '''val scheme = raw.substringBefore("://").lowercase(Locale.ROOT)
+        return when (scheme) {
+            "vmess" -> parseVmess(raw)
+            "vless" -> parseVless(raw)
+            "trojan" -> parseTrojan(raw)
+            "ss", "shadowsocks" -> parseShadowsocks(raw)
+            "socks", "socks5" -> parseSocks(raw)
+            "http", "https" -> parseHttp(raw)
+            "hy2", "hysteria2", "hysteria" -> parseHysteria2(raw)
+            "tuic" -> parseTuic(raw)
+            "wg", "wireguard" -> parseWireGuardUri(raw)
+            "ssh", "openssh", "nordwhisper", "clash", "clashmeta", "mihomo", "sing-box" ->
+                throw ConfigParseException("This build is Xray-only; $scheme configs must be converted to Xray-compatible profiles first")
+            else -> throw ConfigParseException("Unsupported scheme '$scheme' for Xray-only Trivox")
+        }
+    }
+
+    fun parseJson'''
+              new = re.sub(pattern, repl, text, flags=re.S)
+              if new == text:
+                  raise SystemExit("ConfigParser when-block patch did not match")
+              new = new.replace('"ssh", "openssh", "nordwhisper", "sing-box", "mihomo", "clashmeta", "clash"', '"wireguard"')
+              new = new.replace('native Mihomo/sing-box document, ', '')
+              parser.write_text(new, encoding="utf-8")
+
+          write("app/src/main/java/com/trivox/client/config/NativeConfigImporter.kt", r'''
+          package com.trivox.client.config
+          import com.trivox.client.data.ConfigProfile
+          object NativeConfigImporter {
+              fun parseTextOrNull(text: String): List<ConfigProfile>? = null
+          }
+          ''')
+
+          write("app/src/main/java/com/trivox/client/config/NativeProfileDocument.kt", r'''
+          package com.trivox.client.config
+          import com.trivox.client.data.ConfigProfile
+          import com.trivox.client.data.CoreId
+          object NativeProfileDocument {
+              fun affinity(profile: ConfigProfile): CoreId? = null
+          }
+          ''')
+
+          write("app/src/main/java/com/trivox/client/service/TrivoxVpnService.kt", r'''
+          package com.trivox.client.service
+          import android.content.Intent
+          import android.net.VpnService
+          import android.os.IBinder
+          class TrivoxVpnService : VpnService() {
+              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_NOT_STICKY
+              override fun onBind(intent: Intent?): IBinder? = super.onBind(intent)
+          }
+          ''')
+
+          write("app/src/main/java/com/trivox/client/service/BootReceiver.kt", r'''
+          package com.trivox.client.service
+          import android.content.BroadcastReceiver
+          import android.content.Context
+          import android.content.Intent
+          class BootReceiver : BroadcastReceiver() {
+              override fun onReceive(context: Context, intent: Intent?) = Unit
+          }
+          ''')
+
+          for rel in [
+              "app/src/main/res/values/strings_v12.xml",
+              "app/src/main/res/values/strings_v5.xml",
+              "app/src/main/res/values/strings_v6.xml",
+              "app/src/main/res/values/strings_v7.xml",
+              "app/src/main/res/values/strings_v9.xml",
+              "app/src/main/res/values-fa/strings_v12.xml",
+          ]:
+              p = root / rel
+              if p.exists():
+                  p.unlink()
+
+          wf = root / ".github/workflows/main.yml"
+          if wf.exists():
+              text = wf.read_text(encoding="utf-8")
+              text = text.replace("permissions:\n  contents: read", "permissions:\n  contents: write\n  actions: read")
+              wf.write_text(text, encoding="utf-8")
+          PYSOURCE
+
+      - name: Validate v2 cleanup
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo "No AppCompat style parent should remain in themes:"
+          ! grep -RIn "AppCompat" app/src/main/res/values app/src/main/res/values-night
+          echo "Configuration cache disabled for CI stability:"
+          grep -n '^org.gradle.configuration-cache=false' gradle.properties
+          test -s app/libs/libXray.aar
+
+      - name: Commit v2 fix back to repository
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git reset -- app/libs/libXray.aar 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "No v2 source changes to commit."
+          else
+            git commit -m "Fix Xray Compose cloud build v2 [skip ci]"
+            git push origin "HEAD:main"
+          fi
+
+      - name: Build release APKs
+        shell: bash
+        env:
+          TRIVOX_VERSION_NAME: ${{ github.event.inputs.version_name || '1.0.0' }}
+          TRIVOX_VERSION_CODE: ${{ github.run_number }}
+        run: |
+          set -Eeuo pipefail
+          ./gradlew --no-daemon --no-configuration-cache --stacktrace :app:assembleRelease
+          mkdir -p release-apks
+          find app/build/outputs/apk/release -type f -name '*.apk' -print -exec cp {} release-apks/ \;
+          test -n "$(find release-apks -type f -name '*.apk' -print -quit)"
+          (
+            cd release-apks
+            sha256sum *.apk > SHA256SUMS.txt
+            {
+              echo "Trivox Xray-only"
+              echo "Version: ${TRIVOX_VERSION_NAME}"
+              echo "Version code: ${TRIVOX_VERSION_CODE}"
+              echo "Xray: ${{ github.event.inputs.xray_version || 'v26.7.28' }}"
+              echo "ABIs: ${{ github.event.inputs.build_abias || 'arm64-v8a,armeabi-v7a,x86_64' }}"
+              echo "Commit: $(git rev-parse --short=12 HEAD)"
+            } > VERSION.txt
+            cat > RELEASE_NOTES.md <<EOF
+          Trivox ${TRIVOX_VERSION_NAME}
+
+          - Xray core only
+          - Xray/libXray prepared on GitHub runner
+          - AppCompat resource leftovers removed
+          - Configuration cache disabled for reliable CI
+          - Universal + ABI split APKs
+          EOF
+          )
+          ls -lh release-apks
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Trivox-Xray-${{ github.event.inputs.version_name || '1.0.0' }}-APKs
+          path: release-apks/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create or update GitHub release
+        if: ${{ github.event.inputs.publish_release == 'true' }}
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -Eeuo pipefail
+          tag="${{ github.event.inputs.release_tag }}"
+          version="${{ github.event.inputs.version_name || '1.0.0' }}"
+          if [[ -z "$tag" ]]; then tag="v$version"; fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" release-apks/* --clobber
+          else
+            gh release create "$tag" release-apks/* \
+              --target "$(git rev-parse HEAD)" \
+              --title "Trivox $version" \
+              --notes-file release-apks/RELEASE_NOTES.md \
+              --prerelease
+          fi
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "### Trivox Xray APKs"
+            echo
+            echo "APK artifact: **Trivox-Xray-${{ github.event.inputs.version_name || '1.0.0' }}-APKs**"
+            echo
+            echo "Release upload is optional/non-fatal. If release permissions are blocked, download from Artifacts."
+          } >> "$GITHUB_STEP_SUMMARY"
