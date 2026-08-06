@@ -23,7 +23,7 @@ object ConfigParser {
         "vless", "vmess", "trojan", "ss", "shadowsocks",
         "socks", "socks5", "http", "https",
         "hy2", "hysteria2", "hysteria", "tuic",
-        "wg", "wireguard", "ssh", "openssh", "nordwhisper", "sing-box", "mihomo", "clashmeta", "clash"
+        "wg", "wireguard", "wireguard"
     )
 
     fun parseText(input: String): List<ConfigProfile> {
@@ -34,9 +34,6 @@ object ConfigParser {
         }
         val text = input.trim().removePrefix("\uFEFF")
         if (text.isBlank()) return emptyList()
-        NativeConfigImporter.parseTextOrNull(text)?.let { native ->
-            if (native.isNotEmpty()) return native
-        }
         if (looksLikeWireGuardQuickConfig(text)) {
             return listOf(parseWireGuardQuickConfig(text))
         }
@@ -51,11 +48,8 @@ object ConfigParser {
             directCandidates
         } else {
             val decoded = decodeBase64OrNull(text) ?: throw ConfigParseException(
-                "Input is neither a supported URI, native Mihomo/sing-box document, Xray JSON, wg-quick, nor Base64 subscription content"
+                "Input is neither a supported URI, Xray JSON, wg-quick, nor Base64 subscription content"
             )
-            NativeConfigImporter.parseTextOrNull(decoded)?.let { native ->
-                if (native.isNotEmpty()) return native
-            }
             if (looksLikeWireGuardQuickConfig(decoded)) {
                 return listOf(parseWireGuardQuickConfig(decoded))
             }
@@ -128,10 +122,6 @@ object ConfigParser {
             "ssh", "openssh" -> OpenSshProfileCodec.parse(raw)
             "nordwhisper" -> NordWhisperCompatibility.reject(raw)
             "clash", "clashmeta", "mihomo", "sing-box" ->
-                NativeConfigImporter.parseTextOrNull(raw)?.firstOrNull()
-                    ?: throw ConfigParseException("Native subscription installer link detected. Paste the fetched YAML/JSON content or add its decoded URL as a URL subscription.")
-            else -> throw ConfigParseException("Unsupported config scheme")
-        }
     }
 
     fun parseJson(raw: String): ConfigProfile {

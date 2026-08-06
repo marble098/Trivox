@@ -1,1 +1,0 @@
-sing-box://import-remote-profile?url=https%3A%2F%2Fexample.com%2Fconfig.json#Example

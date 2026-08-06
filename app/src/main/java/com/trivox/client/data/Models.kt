@@ -7,21 +7,13 @@ import java.util.UUID
 enum class ConnectionMode { PROXY, VPN }
 enum class ConnectionState { DISCONNECTED, PREPARING, CONNECTING, CONNECTED, RECONNECTING, STOPPING, ERROR }
 enum class CoreId {
-    XRAY,
-    SING_BOX,
-    MIHOMO;
+    XRAY;
 
     val label: String
-        get() = when (this) {
-            XRAY -> "Xray"
-            SING_BOX -> "sing-box"
-            MIHOMO -> "mihomo"
-        }
+        get() = "Xray"
 
     companion object {
-        fun fromStored(value: String?): CoreId = entries.firstOrNull {
-            it.name.equals(value, true) || it.label.equals(value, true)
-        } ?: XRAY
+        fun fromStored(value: String?): CoreId = XRAY
     }
 }
 enum class TestStatus { UNTESTED, TESTING, ALIVE, DEAD, ERROR }

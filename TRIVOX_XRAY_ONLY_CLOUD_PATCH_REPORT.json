@@ -1,0 +1,19 @@
+{
+  "versionName": "1.0.0",
+  "xray": "26.7.28",
+  "removed": [
+    "sing-box",
+    "mihomo",
+    "smart core selector",
+    "core switch UI",
+    "legacy XML UI",
+    "unused native jniLibs"
+  ],
+  "build": "GitHub Actions only",
+  "abis": [
+    "universal",
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86_64"
+  ]
+}
