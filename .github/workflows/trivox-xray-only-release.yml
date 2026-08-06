@@ -127,6 +127,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          python3 tools/trivox-self-heal.py --apply
           python3 tools/trivox-xray-only-sanity.py --source-only
 
       - name: Build release APKs

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="adaptive_handshake">هندشیک سریع و بررسی تطبیقی مسیر واقعی</string>
+    <string name="dns_smart_summary_v5">DNS هوشمند، ترافیک پورت ۵۳ VPN را داخل Xray می‌گیرد، از DoH رمزنگاری‌شده مبتنی بر IP با کش و مسیر جایگزین استفاده می‌کند و به DNS سیستم وابسته نیست. حالت‌های مستقیم و سیستم عمداً خارج از تونل‌اند؛ DNS سفارشیِ غیرمحلی از تونل عبور می‌کند.</string>
+    <string name="import_success_detailed">ایمپورت کامل شد • جدید %1$d • بروزشده %2$d • منتقل‌شده %3$d • ردشده %4$d</string>
+    <string name="import_target_local">کانفیگ‌های محلی (نمایش در همه)</string>
+    <string name="import_target_missing">ساب انتخاب‌شده دیگر وجود ندارد. مقصد را دوباره انتخاب کنید.</string>
+    <string name="import_title_target">ایمپورت در %1$s</string>
+    <string name="invalid_live_ping_interval">فاصله پینگ زنده باید بین ۳ تا ۳۰۰ ثانیه باشد.</string>
+    <string name="invalid_network_tuning_v9">یک یا چند مقدار بهینه‌سازی شبکه یا وایرگارد خارج از محدوده مجاز است.</string>
+    <string name="live_ping_auto_disabled">پینگ زنده: حالت خودکار خاموش</string>
+    <string name="live_ping_enabled">پینگ زنده خودکار</string>
+    <string name="live_ping_enabled_summary">فقط هنگام اتصال اجرا می‌شود؛ در حالت خاموش نیز پینگ زنده دستی قابل استفاده است.</string>
+    <string name="live_ping_interval">فاصله پینگ زنده (ثانیه)</string>
+    <string name="live_ping_interval_hint">بین ۳ تا ۳۰۰ ثانیه</string>
+    <string name="local_subscription_label">ساب محلی • بدون لینک</string>
+    <string name="network_buffer_size_kb">بافر محدود شبکه در برنامه (کیبی‌بایت؛ ۸ تا ۲۵۶)</string>
+    <string name="network_tuning_enabled">فعال‌سازی بهینه‌سازی امن شبکه</string>
+    <string name="network_tuning_section">بهینه‌سازی اتصال و شبکه</string>
+    <string name="network_tuning_summary">فقط گزینه‌های مستند و امن سوکت Xray اعمال می‌شوند و مقادیر صریح کانفیگ تغییر نمی‌کنند. اندازه بافر مربوط به خواندن‌های محدود بخش کاتلین است، نه ترافیک بومی libXray.</string>
+    <string name="openssh_runtime_stopped">تونل OpenSSH به‌طور غیرمنتظره متوقف شد.</string>
+    <string name="real_delay_group_size">اندازه گروه سفارشی (۲ تا ۱۶)</string>
+    <string name="real_delay_profile">پروفایل Real Delay</string>
+    <string name="real_delay_profile_accurate">دقیق — بررسی عمیق‌تر</string>
+    <string name="real_delay_profile_balanced">متعادل — پیشنهادشده</string>
+    <string name="real_delay_profile_custom">سفارشی</string>
+    <string name="real_delay_profile_turbo">توربو — سریع‌ترین، یک اثبات قوی</string>
+    <string name="real_delay_required_proofs">تعداد اثبات لازم (۱ تا تعداد مقصد)</string>
+    <string name="real_delay_settings_invalid">تنظیمات سفارشی Real Delay معتبر نیست.</string>
+    <string name="real_delay_start_grace">مکث شروع هسته، میلی‌ثانیه (۰ تا ۱۰۰۰)</string>
+    <string name="real_delay_target_count">تعداد مقصد اثبات سفارشی (۱ تا ۴)</string>
+    <string name="real_delay_timeout">مهلت هر تست سفارشی، میلی‌ثانیه (۱۵۰۰ تا ۱۰۰۰۰)</string>
+    <string name="real_delay_workers">پردازش موازی سفارشی (۱ تا ۶)</string>
+    <string name="sort_position_summary_v5">کانفیگ متصل جایگاه طبیعی خود را در مرتب‌سازی حفظ می‌کند و وضعیت اتصال داخل کارت نمایش داده می‌شود.</string>
+    <string name="tcp_fast_open">درخواست TCP Fast Open در دستگاه‌های سازگار</string>
+    <string name="tcp_keepalive_idle">زمان بیکاری Keep-Alive در TCP (ثانیه؛ صفر یعنی عدم اعمال)</string>
+    <string name="tcp_keepalive_interval">فاصله Keep-Alive در TCP (ثانیه؛ صفر یعنی عدم اعمال)</string>
+    <string name="tcp_user_timeout">مهلت TCP User Timeout (میلی‌ثانیه؛ صفر یعنی عدم اعمال)</string>
+    <string name="wireguard_domain_strategy_v9">راهبرد دامنه وایرگارد</string>
+    <string name="wireguard_handshake_timeout_v9">بودجه بررسی شروع اتصال (میلی‌ثانیه؛ ۵۰۰۰ تا ۶۰۰۰۰)</string>
+    <string name="wireguard_keepalive_v9">Keep-Alive پیش‌فرض Peer (ثانیه؛ صفر یعنی غیرفعال)</string>
+    <string name="wireguard_mtu_v9">سقف MTU وایرگارد (۵۷۶ تا ۹۰۰۰)</string>
+    <string name="wireguard_section_v9">وایرگارد مبتنی بر Xray 26.7.28</string>
+    <string name="wireguard_summary_v9">تنظیمات خروجی وایرگاردِ userspace در Xray را کنترل می‌کند. MTU پایین‌تر و مقادیر صریح واردشده همیشه اولویت دارند. فیلدهای اختصاصی AmneziaWG همچنان به هسته سازگار AmneziaWG نیاز دارند.</string>
+    <string name="wireguard_workers_v9">تعداد Worker وایرگارد (۱ تا ۸)</string>
+</resources>

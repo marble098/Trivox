@@ -63,6 +63,8 @@ android {
         versionName = generatedVersionName
         vectorDrawables.useSupportLibrary = true
         buildConfigField("String", "XRAY_VERSION", "\"26.7.28\"")
+        val trivoxGitSha = providers.environmentVariable("GITHUB_SHA").orElse("local").get().take(12)
+        buildConfigField("String", "GIT_SHA", "\"$trivoxGitSha\"")
     }
 
     buildTypes {

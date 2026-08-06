@@ -4,7 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import androidx.appcompat.app.AlertDialog
+import android.app.AlertDialog
 import com.trivox.client.BuildConfig
 import com.trivox.client.R
 import com.trivox.client.data.SettingsRepository
