@@ -6,77 +6,40 @@ import java.util.UUID
 
 enum class ConnectionMode { PROXY, VPN }
 enum class ConnectionState { DISCONNECTED, PREPARING, CONNECTING, CONNECTED, RECONNECTING, STOPPING, ERROR }
-enum class CoreId {
-    XRAY;
-
-    val label: String
-        get() = "Xray"
-
-    companion object {
-        fun fromStored(value: String?): CoreId = XRAY
-    }
-}
 enum class TestStatus { UNTESTED, TESTING, ALIVE, DEAD, ERROR }
 enum class DnsMode { IMPORTED, TRIVOX_DEFAULT, CUSTOM, SYSTEM, DIRECT, THROUGH_PROXY }
 enum class AppRoutingMode { ALL, ALLOW_SELECTED, BYPASS_SELECTED }
 
 enum class RealDelayProfile {
     TURBO, BALANCED, ACCURATE, CUSTOM;
-
-    companion object {
-        fun fromStored(value: String?): RealDelayProfile =
-            entries.firstOrNull { it.name.equals(value, true) } ?: BALANCED
-    }
+    companion object { fun fromStored(value: String?): RealDelayProfile = entries.firstOrNull { it.name.equals(value, true) } ?: BALANCED }
 }
 
 enum class SubscriptionKind {
-    URL,
-    NORDVPN;
-
-    companion object {
-        fun fromStored(value: String?): SubscriptionKind =
-            entries.firstOrNull { it.name.equals(value, true) } ?: URL
-    }
+    URL, NORDVPN;
+    companion object { fun fromStored(value: String?): SubscriptionKind = entries.firstOrNull { it.name.equals(value, true) } ?: URL }
 }
 
 enum class PingMethod {
-    TCP_CONNECT,
-    XRAY_HTTP;
-
+    TCP_CONNECT, XRAY_HTTP;
     companion object {
-        fun fromStored(
-            value: String?,
-            fallback: PingMethod = XRAY_HTTP
-        ): PingMethod = entries.firstOrNull {
-            it.name.equals(value, true)
-        } ?: fallback
+        fun fromStored(value: String?, fallback: PingMethod = XRAY_HTTP): PingMethod = entries.firstOrNull { it.name.equals(value, true) } ?: fallback
     }
 }
 
 enum class ProfileSortMode {
-    SMART,
-    LOWEST_LATENCY,
-    NAME,
-    LAST_TESTED,
-    GROUP;
-
-    companion object {
-        fun fromStored(value: String?): ProfileSortMode =
-            entries.firstOrNull { it.name.equals(value, true) } ?: SMART
-    }
+    SMART, LOWEST_LATENCY, NAME, LAST_TESTED, GROUP;
+    companion object { fun fromStored(value: String?): ProfileSortMode = entries.firstOrNull { it.name.equals(value, true) } ?: SMART }
 }
 
 enum class ThemeMode {
-    LIGHT,
-    DARK;
-
+    LIGHT, DARK;
     companion object {
-        fun fromStored(value: String?, legacyDark: Boolean): ThemeMode =
-            when (value?.trim()?.uppercase()) {
-                LIGHT.name -> LIGHT
-                DARK.name, "NEON" -> DARK
-                else -> if (legacyDark) DARK else LIGHT
-            }
+        fun fromStored(value: String?, legacyDark: Boolean): ThemeMode = when (value?.trim()?.uppercase()) {
+            LIGHT.name -> LIGHT
+            DARK.name, "NEON" -> DARK
+            else -> if (legacyDark) DARK else LIGHT
+        }
     }
 }
 
@@ -172,24 +135,14 @@ data class ConfigProfile(
 
     companion object {
         fun fromJson(json: JSONObject): ConfigProfile {
-            fun optionalLong(key: String): Long? =
-                if (!json.has(key) || json.isNull(key)) null else json.optLong(key)
-
-            fun storedStatus(key: String, fallback: TestStatus): TestStatus =
-                runCatching { TestStatus.valueOf(json.optString(key)) }
-                    .getOrDefault(fallback)
-                    .let { if (it == TestStatus.TESTING) TestStatus.UNTESTED else it }
-
+            fun optionalLong(key: String): Long? = if (!json.has(key) || json.isNull(key)) null else json.optLong(key)
+            fun storedStatus(key: String, fallback: TestStatus): TestStatus = runCatching { TestStatus.valueOf(json.optString(key)) }.getOrDefault(fallback).let { if (it == TestStatus.TESTING) TestStatus.UNTESTED else it }
             val legacyLatency = optionalLong("latencyMs")
             val legacyJitter = optionalLong("latencyJitterMs")
             val legacyRatio = json.optDouble("latencySuccessRatio", 0.0).coerceIn(0.0, 1.0)
-            val legacyMethod = PingMethod.fromStored(
-                json.optString("latencyMethod"),
-                PingMethod.TCP_CONNECT
-            )
+            val legacyMethod = PingMethod.fromStored(json.optString("latencyMethod"), PingMethod.TCP_CONNECT)
             val legacyStatus = storedStatus("testStatus", TestStatus.UNTESTED)
             val legacyAt = json.optLong("lastTestAt")
-
             return ConfigProfile(
                 id = json.optString("id", UUID.randomUUID().toString()),
                 name = json.optString("name", "Unnamed"),
@@ -211,36 +164,16 @@ data class ConfigProfile(
                 latencyMethod = json.optString("latencyMethod"),
                 testStatus = legacyStatus,
                 lastTestAt = legacyAt,
-                tcpLatencyMs = optionalLong("tcpLatencyMs")
-                    ?: legacyLatency.takeIf { legacyMethod == PingMethod.TCP_CONNECT },
-                tcpLatencyJitterMs = optionalLong("tcpLatencyJitterMs")
-                    ?: legacyJitter.takeIf { legacyMethod == PingMethod.TCP_CONNECT },
-                tcpSuccessRatio = if (json.has("tcpSuccessRatio")) {
-                    json.optDouble("tcpSuccessRatio", 0.0).coerceIn(0.0, 1.0)
-                } else if (legacyMethod == PingMethod.TCP_CONNECT) legacyRatio else 0.0,
-                tcpTestStatus = storedStatus(
-                    "tcpTestStatus",
-                    if (legacyMethod == PingMethod.TCP_CONNECT) legacyStatus else TestStatus.UNTESTED
-                ),
-                tcpLastTestAt = json.optLong(
-                    "tcpLastTestAt",
-                    if (legacyMethod == PingMethod.TCP_CONNECT) legacyAt else 0L
-                ),
-                realLatencyMs = optionalLong("realLatencyMs")
-                    ?: legacyLatency.takeIf { legacyMethod == PingMethod.XRAY_HTTP },
-                realLatencyJitterMs = optionalLong("realLatencyJitterMs")
-                    ?: legacyJitter.takeIf { legacyMethod == PingMethod.XRAY_HTTP },
-                realSuccessRatio = if (json.has("realSuccessRatio")) {
-                    json.optDouble("realSuccessRatio", 0.0).coerceIn(0.0, 1.0)
-                } else if (legacyMethod == PingMethod.XRAY_HTTP) legacyRatio else 0.0,
-                realTestStatus = storedStatus(
-                    "realTestStatus",
-                    if (legacyMethod == PingMethod.XRAY_HTTP) legacyStatus else TestStatus.UNTESTED
-                ),
-                realLastTestAt = json.optLong(
-                    "realLastTestAt",
-                    if (legacyMethod == PingMethod.XRAY_HTTP) legacyAt else 0L
-                ),
+                tcpLatencyMs = optionalLong("tcpLatencyMs") ?: legacyLatency.takeIf { legacyMethod == PingMethod.TCP_CONNECT },
+                tcpLatencyJitterMs = optionalLong("tcpLatencyJitterMs") ?: legacyJitter.takeIf { legacyMethod == PingMethod.TCP_CONNECT },
+                tcpSuccessRatio = if (json.has("tcpSuccessRatio")) json.optDouble("tcpSuccessRatio", 0.0).coerceIn(0.0, 1.0) else if (legacyMethod == PingMethod.TCP_CONNECT) legacyRatio else 0.0,
+                tcpTestStatus = storedStatus("tcpTestStatus", if (legacyMethod == PingMethod.TCP_CONNECT) legacyStatus else TestStatus.UNTESTED),
+                tcpLastTestAt = json.optLong("tcpLastTestAt", if (legacyMethod == PingMethod.TCP_CONNECT) legacyAt else 0L),
+                realLatencyMs = optionalLong("realLatencyMs") ?: legacyLatency.takeIf { legacyMethod == PingMethod.XRAY_HTTP },
+                realLatencyJitterMs = optionalLong("realLatencyJitterMs") ?: legacyJitter.takeIf { legacyMethod == PingMethod.XRAY_HTTP },
+                realSuccessRatio = if (json.has("realSuccessRatio")) json.optDouble("realSuccessRatio", 0.0).coerceIn(0.0, 1.0) else if (legacyMethod == PingMethod.XRAY_HTTP) legacyRatio else 0.0,
+                realTestStatus = storedStatus("realTestStatus", if (legacyMethod == PingMethod.XRAY_HTTP) legacyStatus else TestStatus.UNTESTED),
+                realLastTestAt = json.optLong("realLastTestAt", if (legacyMethod == PingMethod.XRAY_HTTP) legacyAt else 0L),
                 lastSessionMs = json.optLong("lastSessionMs"),
                 cumulativeSessionMs = json.optLong("cumulativeSessionMs"),
                 exitIp = json.optString("exitIp"),
@@ -290,10 +223,6 @@ data class SubscriptionSource(
 
 data class AppSettings(
     var mode: ConnectionMode = ConnectionMode.VPN,
-    var coreId: CoreId = CoreId.XRAY,
-    var smartCoreSelection: Boolean = false,
-    var lastSmartCoreId: CoreId = CoreId.XRAY,
-    var preferredTestCore: CoreId = CoreId.XRAY,
     var socksPort: Int = DEFAULT_MIXED_PORT,
     var httpPort: Int = DEFAULT_MIXED_PORT,
     var mtu: Int = 1500,
@@ -340,9 +269,7 @@ data class AppSettings(
     var wireGuardDomainStrategy: String = DEFAULT_WIREGUARD_DOMAIN_STRATEGY
 ) {
     fun normalize(): AppSettings {
-        if (socksPort == LEGACY_SOCKS_PORT || socksPort !in 1..65535) {
-            socksPort = DEFAULT_MIXED_PORT
-        }
+        if (socksPort == LEGACY_SOCKS_PORT || socksPort !in 1..65535) socksPort = DEFAULT_MIXED_PORT
         httpPort = socksPort
         mtu = mtu.coerceIn(576, 9000)
         testAttempts = testAttempts.coerceIn(2, 5)
@@ -361,26 +288,14 @@ data class AppSettings(
         wireGuardWorkers = wireGuardWorkers.coerceIn(1, 8)
         wireGuardKeepAliveSeconds = wireGuardKeepAliveSeconds.coerceIn(0, 300)
         wireGuardHandshakeTimeoutMs = wireGuardHandshakeTimeoutMs.coerceIn(5_000, 60_000)
-        wireGuardDomainStrategy = wireGuardDomainStrategy
-            .takeIf { it in WIREGUARD_DOMAIN_STRATEGIES }
-            ?: DEFAULT_WIREGUARD_DOMAIN_STRATEGY
-        if (
-            testUrl.isBlank() ||
-            testUrl == LEGACY_TEST_URL ||
-            testUrl == LEGACY_GOOGLE_TEST_URL
-        ) {
-            testUrl = DEFAULT_TEST_URL
-        }
+        wireGuardDomainStrategy = wireGuardDomainStrategy.takeIf { it in WIREGUARD_DOMAIN_STRATEGIES } ?: DEFAULT_WIREGUARD_DOMAIN_STRATEGY
+        if (testUrl.isBlank() || testUrl == LEGACY_TEST_URL || testUrl == LEGACY_GOOGLE_TEST_URL) testUrl = DEFAULT_TEST_URL
         darkMode = themeMode == ThemeMode.DARK
         return this
     }
 
     fun toJson(): JSONObject = JSONObject()
         .put("mode", mode.name)
-        .put("coreId", coreId.name)
-        .put("smartCoreSelection", smartCoreSelection)
-        .put("lastSmartCoreId", lastSmartCoreId.name)
-        .put("preferredTestCore", preferredTestCore.name)
         .put("socksPort", socksPort)
         .put("httpPort", socksPort)
         .put("mtu", mtu)
@@ -430,48 +345,26 @@ data class AppSettings(
         const val DEFAULT_MIXED_PORT = 10202
         const val DEFAULT_TEST_URL = "https://cp.cloudflare.com/generate_204"
         const val DEFAULT_WIREGUARD_DOMAIN_STRATEGY = "ForceIP"
-        val WIREGUARD_DOMAIN_STRATEGIES = listOf(
-            "ForceIP",
-            "ForceIPv4",
-            "ForceIPv6",
-            "ForceIPv4v6",
-            "ForceIPv6v4",
-            "AsIs"
-        )
-
+        val WIREGUARD_DOMAIN_STRATEGIES = listOf("ForceIP", "ForceIPv4", "ForceIPv6", "ForceIPv4v6", "ForceIPv6v4", "AsIs")
         private const val LEGACY_SOCKS_PORT = 10808
         private const val LEGACY_TEST_URL = "https://cp.cloudflare.com/"
         private const val LEGACY_GOOGLE_TEST_URL = "http://www.google.com/gen_204"
 
         fun fromJson(json: JSONObject): AppSettings {
             fun strings(key: String): List<String> = json.optJSONArray(key)?.let { array ->
-                (0 until array.length()).mapNotNull {
-                    array.optString(it).takeIf(String::isNotBlank)
-                }
+                (0 until array.length()).mapNotNull { array.optString(it).takeIf(String::isNotBlank) }
             } ?: emptyList()
-
             val legacyDark = json.optBoolean("darkMode", false)
             val legacyPingMethod = PingMethod.fromStored(json.optString("pingMethod"))
-
             return AppSettings(
-                mode = runCatching {
-                    ConnectionMode.valueOf(json.optString("mode"))
-                }.getOrDefault(ConnectionMode.VPN),
-                coreId = CoreId.fromStored(json.optString("coreId")),
-                smartCoreSelection = json.optBoolean("smartCoreSelection", false),
-                lastSmartCoreId = CoreId.fromStored(json.optString("lastSmartCoreId")),
-                preferredTestCore = CoreId.fromStored(json.optString("preferredTestCore")),
+                mode = runCatching { ConnectionMode.valueOf(json.optString("mode")) }.getOrDefault(ConnectionMode.VPN),
                 socksPort = json.optInt("socksPort", DEFAULT_MIXED_PORT),
                 httpPort = json.optInt("httpPort", DEFAULT_MIXED_PORT),
                 mtu = json.optInt("mtu", 1500),
                 ipv6 = json.optBoolean("ipv6", true),
-                dnsMode = runCatching {
-                    DnsMode.valueOf(json.optString("dnsMode"))
-                }.getOrDefault(DnsMode.TRIVOX_DEFAULT),
+                dnsMode = runCatching { DnsMode.valueOf(json.optString("dnsMode")) }.getOrDefault(DnsMode.TRIVOX_DEFAULT),
                 customDns = strings("customDns"),
-                appRoutingMode = runCatching {
-                    AppRoutingMode.valueOf(json.optString("appRoutingMode"))
-                }.getOrDefault(AppRoutingMode.ALL),
+                appRoutingMode = runCatching { AppRoutingMode.valueOf(json.optString("appRoutingMode")) }.getOrDefault(AppRoutingMode.ALL),
                 routedPackages = strings("routedPackages").toSet(),
                 showSystemApps = json.optBoolean("showSystemApps"),
                 reconnectOnNetworkChange = json.optBoolean("reconnectOnNetworkChange", true),
@@ -479,10 +372,7 @@ data class AppSettings(
                 blocking = json.optBoolean("blocking", true),
                 gridMode = json.optBoolean("gridMode"),
                 pingMethod = legacyPingMethod,
-                livePingMethod = PingMethod.fromStored(
-                    json.optString("livePingMethod"),
-                    legacyPingMethod
-                ),
+                livePingMethod = PingMethod.fromStored(json.optString("livePingMethod"), legacyPingMethod),
                 livePingEnabled = json.optBoolean("livePingEnabled", true),
                 livePingIntervalSeconds = json.optInt("livePingIntervalSeconds", 8),
                 hideIpOnMain = json.optBoolean("hideIpOnMain", false),
@@ -493,9 +383,7 @@ data class AppSettings(
                 autoUpdateCheck = json.optBoolean("autoUpdateCheck", true),
                 testUrl = json.optString("testUrl", DEFAULT_TEST_URL),
                 testAttempts = json.optInt("testAttempts", 3),
-                realDelayProfile = RealDelayProfile.fromStored(
-                    json.optString("realDelayProfile")
-                ),
+                realDelayProfile = RealDelayProfile.fromStored(json.optString("realDelayProfile")),
                 realDelayGroupSize = json.optInt("realDelayGroupSize", 8),
                 realDelayWorkers = json.optInt("realDelayWorkers", 3),
                 realDelayProbeTimeoutMs = json.optInt("realDelayProbeTimeoutMs", 3_600),
@@ -512,14 +400,8 @@ data class AppSettings(
                 wireGuardMtu = json.optInt("wireGuardMtu", 1360),
                 wireGuardWorkers = json.optInt("wireGuardWorkers", 2),
                 wireGuardKeepAliveSeconds = json.optInt("wireGuardKeepAliveSeconds", 25),
-                wireGuardHandshakeTimeoutMs = json.optInt(
-                    "wireGuardHandshakeTimeoutMs",
-                    18_000
-                ),
-                wireGuardDomainStrategy = json.optString(
-                    "wireGuardDomainStrategy",
-                    DEFAULT_WIREGUARD_DOMAIN_STRATEGY
-                )
+                wireGuardHandshakeTimeoutMs = json.optInt("wireGuardHandshakeTimeoutMs", 18_000),
+                wireGuardDomainStrategy = json.optString("wireGuardDomainStrategy", DEFAULT_WIREGUARD_DOMAIN_STRATEGY)
             ).normalize()
         }
     }

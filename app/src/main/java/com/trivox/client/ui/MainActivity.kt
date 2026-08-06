@@ -147,7 +147,7 @@ private fun TrivoxAppScreen(context: Context, initialInput: String) {
                 }) { Text("Stop") }
             }
             Text(
-                text = "Xray core 26.7.28 only · sing-box/mihomo removed",
+                text = "Xray core 26.7.28 only",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.secondary
             )

@@ -69,12 +69,7 @@ class ConnectionService : Service() {
             fail("Selected Xray profile is unavailable")
             return
         }
-        val settings = SettingsRepository(this).load().normalize().also {
-            it.coreId = com.trivox.client.data.CoreId.XRAY
-            it.smartCoreSelection = false
-            it.lastSmartCoreId = com.trivox.client.data.CoreId.XRAY
-            it.preferredTestCore = com.trivox.client.data.CoreId.XRAY
-        }
+        val settings = SettingsRepository(this).load().normalize()
         if (!core.adapter.isAvailable()) {
             fail("Xray 26.7.28 Android core is missing or corrupted")
             return

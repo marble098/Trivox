@@ -1,0 +1,185 @@
+name: Trivox Xray-only APK Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: Android versionName. Use auto after v1.0.0.
+        required: false
+        default: "auto"
+      xray_version:
+        description: Xray/libXray version tag
+        required: false
+        default: "v26.7.28"
+      release_prerelease:
+        description: Mark GitHub Release as prerelease
+        required: false
+        default: "false"
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+    paths:
+      - "app/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - "gradle/wrapper/**"
+      - "tools/trivox-wizard.sh"
+      - "tools/generate-core-manifest.py"
+      - "tools/trivox-xray-only-sanity.py"
+      - ".github/workflows/trivox-xray-only-release.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: trivox-xray-only-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-release:
+    name: Build Xray-only APKs on GitHub runner
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Resolve smart version
+        id: version
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch --tags --force || true
+          INPUT_VERSION="${{ github.event.inputs.version_name || 'auto' }}"
+          if [[ "${GITHUB_REF_TYPE:-}" == "tag" && "${GITHUB_REF_NAME:-}" == v* ]]; then
+            VERSION_NAME="${GITHUB_REF_NAME#v}"
+          elif [[ "$INPUT_VERSION" != "auto" && -n "$INPUT_VERSION" ]]; then
+            VERSION_NAME="${INPUT_VERSION#v}"
+          else
+            latest="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1 || true)"
+            if [[ -z "$latest" ]]; then
+              VERSION_NAME="1.0.0"
+            else
+              raw="${latest#v}"
+              IFS=. read -r major minor patch <<< "$raw"
+              VERSION_NAME="${major}.${minor}.$((patch + 1))"
+            fi
+          fi
+          if [[ ! "$VERSION_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9._-]+)?$ ]]; then
+            echo "Invalid version: $VERSION_NAME" >&2
+            exit 2
+          fi
+          plain="${VERSION_NAME%%[-+]*}"
+          IFS=. read -r major minor patch <<< "$plain"
+          VERSION_CODE=$((major * 10000 + minor * 100 + patch))
+          echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "TRIVOX_VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "TRIVOX_VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+
+      - name: Prepare Xray 26.7.28 Android core
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          chmod +x ./gradlew tools/trivox-wizard.sh tools/generate-core-manifest.py tools/trivox-xray-only-sanity.py || true
+          XRAY_VERSION="${{ github.event.inputs.xray_version || 'v26.7.28' }}"
+          [[ -n "$XRAY_VERSION" ]] || XRAY_VERSION="v26.7.28"
+          bash tools/trivox-wizard.sh \
+            --core-version "$XRAY_VERSION" \
+            --abis "arm64-v8a,armeabi-v7a,x86_64" \
+            --prepare-only \
+            --non-interactive \
+            --verbose
+          test -s app/libs/libXray.aar
+          test -s app/src/main/assets/core-manifest.json
+          detected="$(jar tf app/libs/libXray.aar | awk -F/ '/^jni\/[^/]+\/.*\.so$/ {print $2}' | sort -u | paste -sd, -)"
+          [[ -n "$detected" ]] || detected="arm64-v8a,armeabi-v7a,x86_64"
+          python3 - <<PY
+          from pathlib import Path
+          p=Path('gradle.properties')
+          lines=[x for x in p.read_text().splitlines() if not x.startswith('trivoxAbis=')]
+          lines.append('trivoxAbis=$detected')
+          p.write_text('\n'.join(lines)+'\n')
+          PY
+          echo "Detected libXray ABIs: $detected"
+
+      - name: Verify Xray-only source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 tools/trivox-xray-only-sanity.py --source-only
+
+      - name: Build release APKs
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ./gradlew --no-daemon --stacktrace clean assembleRelease
+
+      - name: Collect release artifacts
+        id: artifacts
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p release-apks
+          version="${{ steps.version.outputs.name }}"
+          shopt -s nullglob
+          for apk in app/build/outputs/apk/release/*.apk; do
+            name="$(basename "$apk")"
+            abi="universal"
+            case "$name" in
+              *arm64-v8a*) abi="arm64-v8a" ;;
+              *armeabi-v7a*) abi="armeabi-v7a" ;;
+              *x86_64*) abi="x86_64" ;;
+              *x86*) abi="x86" ;;
+              *universal*) abi="universal" ;;
+            esac
+            cp "$apk" "release-apks/Trivox-${version}-${abi}-release.apk"
+          done
+          test "$(find release-apks -name '*.apk' | wc -l)" -gt 0
+          (cd release-apks && sha256sum *.apk > SHA256SUMS.txt)
+          ls -lah release-apks
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Trivox-${{ steps.version.outputs.name }}-xray-only-apks
+          path: release-apks/*
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Trivox ${{ steps.version.outputs.name }} Xray-only
+          prerelease: ${{ github.event.inputs.release_prerelease == 'true' }}
+          generate_release_notes: true
+          files: release-apks/*
+          body: |
+            Trivox Xray-only release.
+
+            - App version: ${{ steps.version.outputs.name }}
+            - Xray core: ${{ github.event.inputs.xray_version || 'v26.7.28' }}
+            - Runtime: libXray AAR prepared on GitHub runner
+            - Cores removed from source: sing-box and mihomo
+            - UI: Jetpack Compose + Material 3
+            - APK variants: universal plus every ABI detected in the official libXray Android AAR

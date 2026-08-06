@@ -121,7 +121,7 @@ object ConfigParser {
             "wg", "wireguard" -> parseWireGuardUri(raw)
             "ssh", "openssh" -> OpenSshProfileCodec.parse(raw)
             "nordwhisper" -> NordWhisperCompatibility.reject(raw)
-            "clash", "clashmeta", "mihomo", "sing-box" ->
+            "clash", "clashmeta" ->
     }
 
     fun parseJson(raw: String): ConfigProfile {

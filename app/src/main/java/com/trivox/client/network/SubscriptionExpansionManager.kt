@@ -16,7 +16,6 @@ import javax.net.ssl.HttpsURLConnection
 
 /**
  * Fetches a subscription as a document graph. This is used by cross-core
- * conversion so a full Mihomo config can remain intact while its remote proxy
  * providers are expanded into portable profiles when conversion is requested.
  */
 class SubscriptionExpansionManager {

@@ -1,4 +1,3 @@
-import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -7,15 +6,15 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-val supportedAbis = listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+val supportedAbis = listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
 val requestedAbis = providers.gradleProperty("trivoxAbis")
-    .orElse(supportedAbis.joinToString(","))
+    .orElse("arm64-v8a,armeabi-v7a,x86_64")
     .get()
     .split(',')
     .map(String::trim)
     .filter(supportedAbis::contains)
     .distinct()
-    .ifEmpty { supportedAbis }
+    .ifEmpty { listOf("arm64-v8a", "armeabi-v7a") }
 
 val generatedVersionCode = providers.environmentVariable("TRIVOX_VERSION_CODE")
     .orElse(providers.gradleProperty("trivoxVersionCode"))
@@ -104,8 +103,8 @@ android {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.17.0")
-    implementation("androidx.activity:activity-compose:1.12.0")
-    val composeBom = platform("androidx.compose:compose-bom:2026.05.01")
+    implementation("androidx.activity:activity-compose:1.13.0")
+    val composeBom = platform("androidx.compose:compose-bom:2026.06.00")
     implementation(composeBom)
     androidTestImplementation(composeBom)
     implementation("androidx.compose.ui:ui")

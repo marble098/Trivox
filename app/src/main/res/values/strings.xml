@@ -368,8 +368,6 @@
     <string name="core_smart_badge">Smart: %1$s</string>
     <string name="convert">Convert</string>
     <string name="subscription_convert_xray">Convert this sub to Xray profiles</string>
-    <string name="subscription_convert_singbox">Convert this sub to sing-box profiles</string>
-    <string name="subscription_convert_mihomo">Convert this sub to mihomo profiles</string>
     <string name="subscription_convert_title">Convert to %1$s</string>
     <string name="subscription_convert_confirm">Convert %1$d profiles in %2$s to %3$s and add the converted copies to the same sub?</string>
     <string name="subscription_convert_done">Converted %1$d profiles, failed %2$d for %3$s</string>

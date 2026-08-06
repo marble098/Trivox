@@ -5,7 +5,6 @@ import com.trivox.client.config.XrayConfigBuilder
 import com.trivox.client.data.ConfigProfile
 import com.trivox.client.data.ConnectionMode
 import com.trivox.client.data.ConnectionState
-import com.trivox.client.data.CoreId
 import com.trivox.client.network.TunnelHealthVerifier
 import com.trivox.client.util.Diagnostics
 import java.util.concurrent.CopyOnWriteArrayList
@@ -54,18 +53,16 @@ object ConnectionRuntime {
 }
 
 class CoreManager(context: Context) {
-    private val appContext = context.applicationContext
-    val adapter: CoreAdapter = XrayCoreAdapter(appContext)
+    val adapter: CoreAdapter = XrayCoreAdapter(context.applicationContext)
 
-    fun prepare(request: CoreStartRequest): Pair<String?, CoreResult> =
-        runCatching {
-            val config = buildXrayConfig(request)
-            val validation = adapter.validate(config)
-            if (validation.success) config to CoreResult(true) else null to validation
-        }.getOrElse {
-            Diagnostics.recordThrowable("Xray config preparation", it)
-            null to CoreResult(false, "Xray config generation failed: " + (it.message ?: "unknown"))
-        }
+    fun prepare(request: CoreStartRequest): Pair<String?, CoreResult> = runCatching {
+        val config = buildXrayConfig(request)
+        val validation = adapter.validate(config)
+        if (validation.success) config to CoreResult(true) else null to validation
+    }.getOrElse {
+        Diagnostics.recordThrowable("Xray config preparation", it)
+        null to CoreResult(false, "Xray config generation failed: " + (it.message ?: "unknown"))
+    }
 
     fun start(
         request: CoreStartRequest,
@@ -103,26 +100,16 @@ class CoreManager(context: Context) {
         return started
     }
 
-    fun isRunning(): Boolean =
-        adapter.state().data?.optJSONObject("data")?.optBoolean("running") == true
-
-    fun stop(): CoreResult =
-        runCatching { adapter.stop() }.getOrElse { CoreResult(false, it.message ?: "unknown") }
-
-    fun validateWith(coreId: CoreId, configJson: String): CoreResult = adapter.validate(configJson)
-
+    fun isRunning(): Boolean = adapter.state().data?.optJSONObject("data")?.optBoolean("running") == true
+    fun stop(): CoreResult = runCatching { adapter.stop() }.getOrElse { CoreResult(false, it.message ?: "unknown") }
+    fun validate(configJson: String): CoreResult = adapter.validate(configJson)
     fun requiresSelfBypassForVpn(profile: ConfigProfile, settings: com.trivox.client.data.AppSettings): Boolean = false
 
-    fun switchCore(coreId: CoreId) {}
-
-    fun smartSelect(request: CoreStartRequest): CoreId = CoreId.XRAY
-
-    private fun buildXrayConfig(request: CoreStartRequest): String =
-        XrayConfigBuilder.build(
-            profile = request.profile,
-            settings = request.settings,
-            mode = request.mode,
-            tunFd = request.tunFd,
-            errorLogPath = Diagnostics.xrayErrorLogPath()
-        )
+    private fun buildXrayConfig(request: CoreStartRequest): String = XrayConfigBuilder.build(
+        profile = request.profile,
+        settings = request.settings,
+        mode = request.mode,
+        tunFd = request.tunFd,
+        errorLogPath = Diagnostics.xrayErrorLogPath()
+    )
 }
