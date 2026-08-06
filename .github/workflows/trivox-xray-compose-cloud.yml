@@ -1,0 +1,1068 @@
+name: Trivox Xray-only Compose Cloud Patch
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to create or update
+        required: false
+        default: v1.0.0
+      version_name:
+        description: Android versionName
+        required: false
+        default: 1.0.0
+      xray_version:
+        description: Xray/libXray version tag
+        required: false
+        default: v26.7.28
+      build_abias:
+        description: Android ABIs supported by libXray
+        required: false
+        default: arm64-v8a,armeabi-v7a,x86_64
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: trivox-xray-compose-cloud-patch
+  cancel-in-progress: false
+
+jobs:
+  patch-build-release:
+    name: Patch source, build APKs, publish release
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout Trivox
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Prepare Xray core on GitHub runner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          chmod +x ./gradlew || true
+          chmod +x tools/trivox-wizard.sh tools/generate-core-manifest.py || true
+          bash tools/trivox-wizard.sh \
+            --core-version "${{ github.event.inputs.xray_version }}" \
+            --abis "${{ github.event.inputs.build_abias }}" \
+            --prepare-only \
+            --non-interactive \
+            --verbose
+          test -s app/libs/libXray.aar
+          test -s app/src/main/assets/core-manifest.json
+
+      - name: Apply Xray-only Compose patch
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import shutil
+          import json
+          import textwrap
+          import os
+
+          ROOT = Path.cwd()
+          APP = ROOT / "app"
+          MAIN = APP / "src/main"
+          SRC = MAIN / "java/com/trivox/client"
+
+          def write(path, content):
+              path = ROOT / path
+              path.parent.mkdir(parents=True, exist_ok=True)
+              path.write_text(textwrap.dedent(content).lstrip(), encoding="utf-8")
+
+          def rm_path(path):
+              p = ROOT / path
+              if p.is_dir():
+                  shutil.rmtree(p)
+              elif p.exists():
+                  p.unlink()
+
+          def rm_glob(pattern):
+              for p in ROOT.glob(pattern):
+                  if p.is_dir(): shutil.rmtree(p)
+                  elif p.exists(): p.unlink()
+
+          for path in [
+              "app/src/main/jniLibs",
+              "app/src/main/assets/openssh",
+              "app/src/main/java/com/trivox/client/ssh",
+              "app/src/main/java/com/trivox/client/core/SmartCoreSelector.kt",
+              "app/src/main/java/com/trivox/client/core/ExecutableCoreAdapter.kt",
+              "app/src/main/java/com/trivox/client/core/CoreConfigTranslator.kt",
+              "app/src/main/java/com/trivox/client/core/CoreConversionManager.kt",
+              "app/src/main/java/com/trivox/client/config/NordWhisperCompatibility.kt",
+              "app/src/main/java/com/trivox/client/config/OpenSshProfileCodec.kt",
+              "app/src/main/java/com/trivox/client/config/ProxyChainCodec.kt",
+              "fixtures",
+              "github",
+              "tools/openssh",
+          ]:
+              rm_path(path)
+
+          for pattern in [
+              ".github/workflows/apply-*.yml",
+              ".github/workflows/openssh-binaries.yml",
+              ".github/workflows/trivox-multicore-binaries.yml",
+              "tools/*openssh*",
+              "tools/*multicore*",
+              "tools/*smartcore*",
+              "tools/*root-multicore*",
+              "docs/*MULTICORE*",
+              "docs/*SMARTCORE*",
+              "docs/*NATIVE_SUBSCRIPTIONS*",
+              "TRIVOX_V*_PATCH_FA.md",
+              "TRIVOX_V*_CI_FIX_FA.md",
+          ]:
+              rm_glob(pattern)
+
+          core_data = MAIN / "assets/core-data"
+          if core_data.exists():
+              for item in list(core_data.iterdir()):
+                  if item.name not in {"geoip.dat", "geosite.dat", "core-data-manifest.txt"}:
+                      rm_path(item.relative_to(ROOT))
+
+          ui_dir = SRC / "ui"
+          if ui_dir.exists():
+              for item in list(ui_dir.iterdir()):
+                  if item.name not in {"theme"}:
+                      rm_path(item.relative_to(ROOT))
+          rm_path("app/src/main/res/layout")
+          rm_path("app/src/main/res/color")
+
+          write("gradle.properties", r'''
+          org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8 -XX:+UseParallelGC
+          org.gradle.parallel=true
+          org.gradle.caching=true
+          org.gradle.configuration-cache=true
+          android.useAndroidX=true
+          android.enableJetifier=false
+          android.nonTransitiveRClass=true
+          android.nonFinalResIds=false
+          kotlin.code.style=official
+          trivoxPackage=com.trivox.client
+          trivoxAbis=arm64-v8a,armeabi-v7a,x86_64
+          trivoxVersionName=1.0.0
+          ''')
+
+          write("build.gradle.kts", r'''
+          plugins {
+              id("com.android.application") version "8.13.2" apply false
+              id("org.jetbrains.kotlin.android") version "2.4.10" apply false
+              id("org.jetbrains.kotlin.plugin.compose") version "2.4.10" apply false
+          }
+          ''')
+
+          write("app/build.gradle.kts", r'''
+          import java.util.Properties
+          import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+              id("org.jetbrains.kotlin.plugin.compose")
+          }
+
+          val supportedAbis = listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+          val requestedAbis = providers.gradleProperty("trivoxAbis")
+              .orElse(supportedAbis.joinToString(","))
+              .get()
+              .split(',')
+              .map(String::trim)
+              .filter(supportedAbis::contains)
+              .distinct()
+              .ifEmpty { supportedAbis }
+
+          val generatedVersionCode = providers.environmentVariable("TRIVOX_VERSION_CODE")
+              .orElse(providers.gradleProperty("trivoxVersionCode"))
+              .orElse("10000")
+              .get()
+              .toIntOrNull()
+              ?.coerceAtLeast(1)
+              ?: 10000
+
+          val generatedVersionName = providers.environmentVariable("TRIVOX_VERSION_NAME")
+              .orElse(providers.gradleProperty("trivoxVersionName"))
+              .orElse("1.0.0")
+              .get()
+              .trim()
+              .ifBlank { "1.0.0" }
+
+          android {
+              namespace = "com.trivox.client"
+              compileSdk = 36
+
+              defaultConfig {
+                  applicationId = providers.gradleProperty("trivoxPackage").orElse("com.trivox.client").get()
+                  minSdk = 26
+                  targetSdk = 36
+                  versionCode = generatedVersionCode
+                  versionName = generatedVersionName
+                  vectorDrawables.useSupportLibrary = true
+                  buildConfigField("String", "XRAY_VERSION", "\"26.7.28\"")
+              }
+
+              buildTypes {
+                  debug {
+                      applicationIdSuffix = ".debug"
+                      versionNameSuffix = "-debug"
+                  }
+                  release {
+                      isMinifyEnabled = true
+                      isShrinkResources = true
+                      proguardFiles(
+                          getDefaultProguardFile("proguard-android-optimize.txt"),
+                          "proguard-rules.pro"
+                      )
+                  }
+              }
+
+              splits {
+                  abi {
+                      isEnable = true
+                      reset()
+                      include(*requestedAbis.toTypedArray())
+                      isUniversalApk = true
+                  }
+              }
+
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+
+              kotlin {
+                  compilerOptions.jvmTarget.set(JvmTarget.JVM_17)
+              }
+
+              buildFeatures {
+                  buildConfig = true
+                  compose = true
+              }
+
+              androidResources {
+                  noCompress += setOf("dat")
+              }
+
+              packaging {
+                  jniLibs.useLegacyPackaging = false
+                  resources.excludes += setOf(
+                      "META-INF/DEPENDENCIES",
+                      "META-INF/LICENSE",
+                      "META-INF/LICENSE.txt",
+                      "META-INF/NOTICE",
+                      "META-INF/NOTICE.txt",
+                      "META-INF/*.kotlin_module",
+                      "META-INF/licenses/**"
+                  )
+              }
+          }
+
+          dependencies {
+              implementation("androidx.core:core-ktx:1.17.0")
+              implementation("androidx.activity:activity-compose:1.12.0")
+              val composeBom = platform("androidx.compose:compose-bom:2026.05.01")
+              implementation(composeBom)
+              androidTestImplementation(composeBom)
+              implementation("androidx.compose.ui:ui")
+              implementation("androidx.compose.ui:ui-tooling-preview")
+              implementation("androidx.compose.material3:material3")
+              implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
+              if (file("libs/libXray.aar").isFile) {
+                  implementation(files("libs/libXray.aar"))
+              }
+              testImplementation("junit:junit:4.13.2")
+              testImplementation("org.json:json:20250517")
+          }
+
+          tasks.register("verifyXrayAar") {
+              doLast {
+                  val aar = file("libs/libXray.aar")
+                  check(aar.isFile && aar.length() > 0L) {
+                      "Missing app/libs/libXray.aar. The cloud workflow must prepare Xray 26.7.28 before building."
+                  }
+              }
+          }
+
+          tasks.matching { it.name.startsWith("assemble") }.configureEach {
+              dependsOn("verifyXrayAar")
+          }
+          ''')
+
+          write("app/proguard-rules.pro", r'''
+          -keep class libXray.** { *; }
+          -keep class go.** { *; }
+          -keep class com.trivox.client.core.XrayCoreAdapter { *; }
+          -keepattributes *Annotation*
+          -dontwarn org.json.**
+          ''')
+
+          write("app/src/main/AndroidManifest.xml", r'''
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+              <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+              <application
+                  android:name=".TrivoxApp"
+                  android:allowBackup="false"
+                  android:icon="@drawable/ic_launcher"
+                  android:label="@string/app_name"
+                  android:localeConfig="@xml/locales_config"
+                  android:networkSecurityConfig="@xml/network_security_config"
+                  android:supportsRtl="true"
+                  android:theme="@style/Theme.Trivox"
+                  android:usesCleartextTraffic="false">
+
+                  <activity
+                      android:name=".ui.MainActivity"
+                      android:exported="true"
+                      android:launchMode="singleTop">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                      <intent-filter>
+                          <action android:name="android.intent.action.SEND" />
+                          <category android:name="android.intent.category.DEFAULT" />
+                          <data android:mimeType="text/plain" />
+                          <data android:mimeType="application/json" />
+                      </intent-filter>
+                  </activity>
+
+                  <service
+                      android:name=".service.ConnectionService"
+                      android:exported="false"
+                      android:foregroundServiceType="specialUse"
+                      android:stopWithTask="false">
+                      <property
+                          android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                          android:value="Xray 26.7.28 local proxy runtime" />
+                  </service>
+
+                  <service
+                      android:name=".service.TrivoxVpnService"
+                      android:exported="false"
+                      android:foregroundServiceType="specialUse"
+                      android:permission="android.permission.BIND_VPN_SERVICE"
+                      android:stopWithTask="false">
+                      <intent-filter>
+                          <action android:name="android.net.VpnService" />
+                      </intent-filter>
+                      <property
+                          android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                          android:value="User initiated Xray VPN tunnel" />
+                  </service>
+
+                  <receiver
+                      android:name=".service.BootReceiver"
+                      android:enabled="true"
+                      android:exported="false">
+                      <intent-filter>
+                          <action android:name="android.intent.action.BOOT_COMPLETED" />
+                      </intent-filter>
+                  </receiver>
+              </application>
+          </manifest>
+          ''')
+
+          write("app/src/main/java/com/trivox/client/core/CoreManager.kt", r'''
+          package com.trivox.client.core
+
+          import android.content.Context
+          import com.trivox.client.config.XrayConfigBuilder
+          import com.trivox.client.data.ConfigProfile
+          import com.trivox.client.data.ConnectionMode
+          import com.trivox.client.data.ConnectionState
+          import com.trivox.client.data.CoreId
+          import com.trivox.client.network.TunnelHealthVerifier
+          import com.trivox.client.util.Diagnostics
+          import java.util.concurrent.CopyOnWriteArrayList
+          import java.util.concurrent.atomic.AtomicLong
+          import java.util.concurrent.atomic.AtomicReference
+
+          object ConnectionRuntime {
+              data class Snapshot(
+                  val state: ConnectionState = ConnectionState.DISCONNECTED,
+                  val profileId: String? = null,
+                  val profileName: String = "",
+                  val startedElapsed: Long = 0,
+                  val error: String = "",
+                  val mode: ConnectionMode? = null,
+                  val sessionId: Long = 0
+              )
+
+              private val snapshot = AtomicReference(Snapshot())
+              private val listeners = CopyOnWriteArrayList<(Snapshot) -> Unit>()
+              private val sessionCounter = AtomicLong(0)
+
+              fun current(): Snapshot = snapshot.get()
+              fun nextSessionId(): Long = sessionCounter.incrementAndGet()
+              fun update(value: Snapshot) {
+                  snapshot.set(value)
+                  listeners.forEach { runCatching { it(value) } }
+              }
+              fun updateSession(sessionId: Long, transform: (Snapshot) -> Snapshot): Boolean {
+                  while (true) {
+                      val current = snapshot.get()
+                      if (current.sessionId != sessionId || sessionId == 0L) return false
+                      val next = transform(current)
+                      if (snapshot.compareAndSet(current, next)) {
+                          listeners.forEach { runCatching { it(next) } }
+                          return true
+                      }
+                  }
+              }
+              fun addListener(listener: (Snapshot) -> Unit) {
+                  if (!listeners.contains(listener)) listeners += listener
+                  runCatching { listener(snapshot.get()) }
+              }
+              fun removeListener(listener: (Snapshot) -> Unit) {
+                  listeners.remove(listener)
+              }
+          }
+
+          class CoreManager(context: Context) {
+              private val appContext = context.applicationContext
+              val adapter: CoreAdapter = XrayCoreAdapter(appContext)
+
+              fun prepare(request: CoreStartRequest): Pair<String?, CoreResult> =
+                  runCatching {
+                      val config = buildXrayConfig(request)
+                      val validation = adapter.validate(config)
+                      if (validation.success) config to CoreResult(true) else null to validation
+                  }.getOrElse {
+                      Diagnostics.recordThrowable("Xray config preparation", it)
+                      null to CoreResult(false, "Xray config generation failed: " + (it.message ?: "unknown"))
+                  }
+
+              fun start(
+                  request: CoreStartRequest,
+                  protect: ((Int) -> Boolean)? = null,
+                  isCancelled: () -> Boolean = { false }
+              ): CoreResult {
+                  if (isCancelled()) return CoreResult(false, "Connection start cancelled")
+                  val config = runCatching { buildXrayConfig(request) }.getOrElse {
+                      Diagnostics.recordThrowable("Xray start config", it)
+                      return CoreResult(false, "Xray config generation failed: " + (it.message ?: "unknown"))
+                  }
+                  val validation = adapter.validate(config)
+                  if (!validation.success) return CoreResult(false, "Xray rejected config: " + validation.error)
+                  stop()
+                  if (isCancelled()) return CoreResult(false, "Connection start cancelled")
+                  val started = adapter.start(config, protect)
+                  if (!started.success) return started
+                  if (isCancelled()) {
+                      stop()
+                      return CoreResult(false, "Connection start cancelled")
+                  }
+                  val proof = TunnelHealthVerifier.measure(
+                      settings = request.settings,
+                      mode = request.mode,
+                      attempts = request.settings.testAttempts.coerceIn(2, 3),
+                      budgetMs = if (request.mode == ConnectionMode.VPN) 9000 else 6500,
+                      perProbeTimeoutMs = 2800,
+                      initialDelayMs = if (request.mode == ConnectionMode.VPN) 120 else 50,
+                      isCancelled = isCancelled
+                  )
+                  if (!proof.success && isCancelled()) {
+                      stop()
+                      return CoreResult(false, "Connection start cancelled")
+                  }
+                  return started
+              }
+
+              fun isRunning(): Boolean =
+                  adapter.state().data?.optJSONObject("data")?.optBoolean("running") == true
+
+              fun stop(): CoreResult =
+                  runCatching { adapter.stop() }.getOrElse { CoreResult(false, it.message ?: "unknown") }
+
+              fun validateWith(coreId: CoreId, configJson: String): CoreResult = adapter.validate(configJson)
+
+              fun requiresSelfBypassForVpn(profile: ConfigProfile, settings: com.trivox.client.data.AppSettings): Boolean = false
+
+              fun switchCore(coreId: CoreId) {}
+
+              fun smartSelect(request: CoreStartRequest): CoreId = CoreId.XRAY
+
+              private fun buildXrayConfig(request: CoreStartRequest): String =
+                  XrayConfigBuilder.build(
+                      profile = request.profile,
+                      settings = request.settings,
+                      mode = request.mode,
+                      tunFd = request.tunFd,
+                      errorLogPath = Diagnostics.xrayErrorLogPath()
+                  )
+          }
+          ''')
+
+          write("app/src/main/java/com/trivox/client/service/ConnectionService.kt", r'''
+          package com.trivox.client.service
+
+          import android.app.Notification
+          import android.app.NotificationChannel
+          import android.app.NotificationManager
+          import android.app.PendingIntent
+          import android.app.Service
+          import android.content.Intent
+          import android.os.Build
+          import android.os.Handler
+          import android.os.IBinder
+          import android.os.Looper
+          import android.os.SystemClock
+          import com.trivox.client.R
+          import com.trivox.client.core.ConnectionRuntime
+          import com.trivox.client.core.CoreManager
+          import com.trivox.client.core.CoreStartRequest
+          import com.trivox.client.data.ConfigRepository
+          import com.trivox.client.data.ConnectionMode
+          import com.trivox.client.data.ConnectionState
+          import com.trivox.client.data.SettingsRepository
+          import com.trivox.client.ui.MainActivity
+          import com.trivox.client.util.Diagnostics
+          import java.net.InetSocketAddress
+          import java.net.ServerSocket
+          import java.util.concurrent.Executors
+          import java.util.concurrent.atomic.AtomicBoolean
+
+          class ConnectionService : Service() {
+              private val executor = Executors.newSingleThreadExecutor()
+              private val handler = Handler(Looper.getMainLooper())
+              private val stopRequested = AtomicBoolean(false)
+              private lateinit var core: CoreManager
+              private var profileId: String? = null
+              private var profileName: String = ""
+              private var startedElapsed: Long = 0L
+              private var sessionId: Long = 0L
+
+              override fun onCreate() {
+                  super.onCreate()
+                  core = CoreManager(this)
+                  createChannel()
+              }
+
+              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+                  when (intent?.action) {
+                      ACTION_STOP -> {
+                          requestStop()
+                          return START_NOT_STICKY
+                      }
+                      ACTION_START -> {
+                          profileId = intent.getStringExtra(EXTRA_PROFILE_ID) ?: ConfigRepository(this).selectedId()
+                          startForeground(NOTIFICATION_ID, notification("Starting Xray"))
+                          stopRequested.set(false)
+                          executor.execute { startConnection() }
+                          return START_STICKY
+                      }
+                      else -> {
+                          stopSelf(startId)
+                          return START_NOT_STICKY
+                      }
+                  }
+              }
+
+              private fun startConnection() {
+                  val repository = ConfigRepository(this)
+                  val profile = repository.find(profileId)
+                  if (profile == null || !profile.enabled) {
+                      fail("Selected Xray profile is unavailable")
+                      return
+                  }
+                  val settings = SettingsRepository(this).load().normalize().also {
+                      it.coreId = com.trivox.client.data.CoreId.XRAY
+                      it.smartCoreSelection = false
+                      it.lastSmartCoreId = com.trivox.client.data.CoreId.XRAY
+                      it.preferredTestCore = com.trivox.client.data.CoreId.XRAY
+                  }
+                  if (!core.adapter.isAvailable()) {
+                      fail("Xray 26.7.28 Android core is missing or corrupted")
+                      return
+                  }
+                  if (!portAvailable(settings.socksPort)) {
+                      core.stop()
+                      Thread.sleep(250)
+                  }
+                  sessionId = ConnectionRuntime.nextSessionId()
+                  profileName = profile.name
+                  ConnectionRuntime.update(
+                      ConnectionRuntime.Snapshot(
+                          state = ConnectionState.CONNECTING,
+                          profileId = profile.id,
+                          profileName = profile.name,
+                          mode = ConnectionMode.PROXY,
+                          sessionId = sessionId
+                      )
+                  )
+                  val result = core.start(
+                      CoreStartRequest(profile, settings, ConnectionMode.PROXY),
+                      isCancelled = stopRequested::get
+                  )
+                  if (!result.success) {
+                      fail(result.error)
+                      return
+                  }
+                  startedElapsed = SystemClock.elapsedRealtime()
+                  ConnectionRuntime.updateSession(sessionId) {
+                      it.copy(state = ConnectionState.CONNECTED, startedElapsed = startedElapsed, error = "")
+                  }
+                  startForeground(NOTIFICATION_ID, notification("Xray connected: ${profile.name}"))
+              }
+
+              private fun requestStop() {
+                  stopRequested.set(true)
+                  runCatching { core.stop() }
+                  ConnectionRuntime.update(ConnectionRuntime.Snapshot())
+                  stopForeground(STOP_FOREGROUND_REMOVE)
+                  stopSelf()
+              }
+
+              private fun fail(message: String) {
+                  Diagnostics.error(message)
+                  runCatching { core.stop() }
+                  ConnectionRuntime.update(
+                      ConnectionRuntime.Snapshot(
+                          state = ConnectionState.ERROR,
+                          profileId = profileId,
+                          profileName = profileName,
+                          error = message,
+                          mode = ConnectionMode.PROXY,
+                          sessionId = sessionId
+                      )
+                  )
+                  stopForeground(STOP_FOREGROUND_REMOVE)
+                  stopSelf()
+              }
+
+              private fun portAvailable(port: Int): Boolean = runCatching {
+                  ServerSocket().use {
+                      it.reuseAddress = false
+                      it.bind(InetSocketAddress("127.0.0.1", port))
+                  }
+                  true
+              }.getOrDefault(false)
+
+              private fun createChannel() {
+                  if (Build.VERSION.SDK_INT >= 26) {
+                      getSystemService(NotificationManager::class.java).createNotificationChannel(
+                          NotificationChannel(CHANNEL_ID, "Trivox Xray", NotificationManager.IMPORTANCE_LOW)
+                      )
+                  }
+              }
+
+              private fun notification(text: String): Notification {
+                  val intent = Intent(this, MainActivity::class.java)
+                  val pending = PendingIntent.getActivity(
+                      this, 0, intent,
+                      PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                  )
+                  val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL_ID) else Notification.Builder(this)
+                  return builder
+                      .setSmallIcon(R.drawable.ic_launcher)
+                      .setContentTitle("Trivox")
+                      .setContentText(text)
+                      .setOngoing(true)
+                      .setContentIntent(pending)
+                      .build()
+              }
+
+              override fun onDestroy() {
+                  handler.removeCallbacksAndMessages(null)
+                  executor.shutdownNow()
+                  super.onDestroy()
+              }
+
+              override fun onBind(intent: Intent?): IBinder? = null
+
+              companion object {
+                  const val ACTION_START = "com.trivox.client.PROXY_START"
+                  const val ACTION_STOP = "com.trivox.client.PROXY_STOP"
+                  const val EXTRA_PROFILE_ID = "profile_id"
+                  private const val CHANNEL_ID = "trivox_xray"
+                  private const val NOTIFICATION_ID = 260728
+              }
+          }
+          ''')
+
+          write("app/src/main/java/com/trivox/client/ui/theme/TrivoxTheme.kt", r'''
+          package com.trivox.client.ui.theme
+
+          import androidx.compose.foundation.isSystemInDarkTheme
+          import androidx.compose.material3.MaterialTheme
+          import androidx.compose.material3.darkColorScheme
+          import androidx.compose.material3.lightColorScheme
+          import androidx.compose.runtime.Composable
+          import androidx.compose.ui.graphics.Color
+
+          private val LightColors = lightColorScheme(
+              primary = Color(0xFF2563EB),
+              secondary = Color(0xFF0F766E),
+              background = Color(0xFFF8FAFC),
+              surface = Color.White,
+              onPrimary = Color.White,
+              onSecondary = Color.White,
+              onBackground = Color(0xFF0F172A),
+              onSurface = Color(0xFF0F172A)
+          )
+
+          private val DarkColors = darkColorScheme(
+              primary = Color(0xFF60A5FA),
+              secondary = Color(0xFF5EEAD4),
+              background = Color(0xFF020617),
+              surface = Color(0xFF0F172A),
+              onPrimary = Color(0xFF020617),
+              onSecondary = Color(0xFF020617),
+              onBackground = Color(0xFFE2E8F0),
+              onSurface = Color(0xFFE2E8F0)
+          )
+
+          @Composable
+          fun TrivoxTheme(
+              darkTheme: Boolean = isSystemInDarkTheme(),
+              content: @Composable () -> Unit
+          ) {
+              MaterialTheme(
+                  colorScheme = if (darkTheme) DarkColors else LightColors,
+                  content = content
+              )
+          }
+          ''')
+
+          write("app/src/main/java/com/trivox/client/ui/MainActivity.kt", r'''
+          package com.trivox.client.ui
+
+          import android.content.ClipData
+          import android.content.ClipboardManager
+          import android.content.Context
+          import android.content.Intent
+          import android.os.Bundle
+          import androidx.activity.ComponentActivity
+          import androidx.activity.compose.setContent
+          import androidx.compose.foundation.layout.Arrangement
+          import androidx.compose.foundation.layout.Column
+          import androidx.compose.foundation.layout.Row
+          import androidx.compose.foundation.layout.Spacer
+          import androidx.compose.foundation.layout.fillMaxSize
+          import androidx.compose.foundation.layout.fillMaxWidth
+          import androidx.compose.foundation.layout.height
+          import androidx.compose.foundation.layout.padding
+          import androidx.compose.foundation.lazy.LazyColumn
+          import androidx.compose.foundation.lazy.items
+          import androidx.compose.material3.Button
+          import androidx.compose.material3.Card
+          import androidx.compose.material3.CardDefaults
+          import androidx.compose.material3.ExperimentalMaterial3Api
+          import androidx.compose.material3.MaterialTheme
+          import androidx.compose.material3.OutlinedTextField
+          import androidx.compose.material3.Scaffold
+          import androidx.compose.material3.SnackbarHost
+          import androidx.compose.material3.SnackbarHostState
+          import androidx.compose.material3.Text
+          import androidx.compose.material3.TextButton
+          import androidx.compose.material3.TopAppBar
+          import androidx.compose.runtime.Composable
+          import androidx.compose.runtime.DisposableEffect
+          import androidx.compose.runtime.getValue
+          import androidx.compose.runtime.mutableStateOf
+          import androidx.compose.runtime.remember
+          import androidx.compose.runtime.rememberCoroutineScope
+          import androidx.compose.runtime.setValue
+          import androidx.compose.ui.Modifier
+          import androidx.compose.ui.text.font.FontWeight
+          import androidx.compose.ui.text.style.TextOverflow
+          import androidx.compose.ui.unit.dp
+          import com.trivox.client.config.ConfigParser
+          import com.trivox.client.core.ConnectionRuntime
+          import com.trivox.client.data.ConfigProfile
+          import com.trivox.client.data.ConfigRepository
+          import com.trivox.client.data.ConnectionState
+          import com.trivox.client.service.ConnectionService
+          import com.trivox.client.ui.theme.TrivoxTheme
+          import kotlinx.coroutines.launch
+
+          class MainActivity : ComponentActivity() {
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  val incoming = when (intent?.action) {
+                      Intent.ACTION_SEND -> intent?.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
+                      else -> ""
+                  }
+                  setContent {
+                      TrivoxTheme {
+                          TrivoxAppScreen(
+                              context = this,
+                              initialInput = incoming
+                          )
+                      }
+                  }
+              }
+          }
+
+          @OptIn(ExperimentalMaterial3Api::class)
+          @Composable
+          private fun TrivoxAppScreen(context: Context, initialInput: String) {
+              val repository = remember { ConfigRepository(context) }
+              var profiles by remember { mutableStateOf(repository.all()) }
+              var selectedId by remember { mutableStateOf(repository.selectedId()) }
+              var input by remember { mutableStateOf(initialInput) }
+              var runtime by remember { mutableStateOf(ConnectionRuntime.current()) }
+              val snackbar = remember { SnackbarHostState() }
+              val scope = rememberCoroutineScope()
+
+              DisposableEffect(Unit) {
+                  val listener: (ConnectionRuntime.Snapshot) -> Unit = { runtime = it }
+                  ConnectionRuntime.addListener(listener)
+                  onDispose { ConnectionRuntime.removeListener(listener) }
+              }
+
+              fun refresh() {
+                  profiles = repository.all()
+                  selectedId = repository.selectedId()
+              }
+
+              Scaffold(
+                  topBar = {
+                      TopAppBar(title = { Text("Trivox 1.0.0") })
+                  },
+                  snackbarHost = { SnackbarHost(snackbar) }
+              ) { padding ->
+                  Column(
+                      modifier = Modifier
+                          .fillMaxSize()
+                          .padding(padding)
+                          .padding(16.dp),
+                      verticalArrangement = Arrangement.spacedBy(12.dp)
+                  ) {
+                      StatusCard(runtime)
+                      OutlinedTextField(
+                          value = input,
+                          onValueChange = { input = it },
+                          modifier = Modifier
+                              .fillMaxWidth()
+                              .height(132.dp),
+                          label = { Text("Paste Xray config links or JSON") },
+                          minLines = 4
+                      )
+                      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                          Button(onClick = {
+                              runCatching {
+                                  val parsed = ConfigParser.parseText(input)
+                                  repository.saveAll(parsed)
+                                  if (repository.selectedId().isNullOrBlank() && parsed.isNotEmpty()) {
+                                      repository.select(parsed.first().id)
+                                  }
+                                  input = ""
+                                  refresh()
+                                  scope.launch { snackbar.showSnackbar("Imported ${parsed.size} Xray profile(s)") }
+                              }.onFailure {
+                                  scope.launch { snackbar.showSnackbar(it.message ?: "Import failed") }
+                              }
+                          }) { Text("Import") }
+                          Button(onClick = {
+                              val id = selectedId
+                              if (id.isNullOrBlank()) {
+                                  scope.launch { snackbar.showSnackbar("Select a profile first") }
+                              } else {
+                                  context.startService(
+                                      Intent(context, ConnectionService::class.java)
+                                          .setAction(ConnectionService.ACTION_START)
+                                          .putExtra(ConnectionService.EXTRA_PROFILE_ID, id)
+                                  )
+                              }
+                          }) { Text("Connect") }
+                          TextButton(onClick = {
+                              context.startService(
+                                  Intent(context, ConnectionService::class.java)
+                                      .setAction(ConnectionService.ACTION_STOP)
+                              )
+                          }) { Text("Stop") }
+                      }
+                      Text(
+                          text = "Xray core 26.7.28 only · sing-box/mihomo removed",
+                          style = MaterialTheme.typography.labelMedium,
+                          color = MaterialTheme.colorScheme.secondary
+                      )
+                      LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                          items(profiles, key = { it.id }) { profile ->
+                              ProfileRow(
+                                  profile = profile,
+                                  selected = profile.id == selectedId,
+                                  onSelect = {
+                                      repository.select(profile.id)
+                                      refresh()
+                                  },
+                                  onCopy = {
+                                      val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                      clipboard.setPrimaryClip(ClipData.newPlainText("Trivox config", profile.raw))
+                                      scope.launch { snackbar.showSnackbar("Copied") }
+                                  }
+                              )
+                          }
+                      }
+                  }
+              }
+          }
+
+          @Composable
+          private fun StatusCard(runtime: ConnectionRuntime.Snapshot) {
+              val status = when (runtime.state) {
+                  ConnectionState.CONNECTED -> "Connected"
+                  ConnectionState.CONNECTING, ConnectionState.PREPARING -> "Connecting"
+                  ConnectionState.ERROR -> "Error: ${runtime.error}"
+                  else -> "Disconnected"
+              }
+              Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                  Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                      Text(status, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                      Spacer(Modifier.height(4.dp))
+                      Text(runtime.profileName.ifBlank { "Xray-only runtime" }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                  }
+              }
+          }
+
+          @Composable
+          private fun ProfileRow(profile: ConfigProfile, selected: Boolean, onSelect: () -> Unit, onCopy: () -> Unit) {
+              Card(onClick = onSelect, colors = CardDefaults.cardColors(
+                  containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+              )) {
+                  Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                      Text(profile.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                      Text("${profile.protocol.uppercase()} · ${profile.server}:${profile.port}", style = MaterialTheme.typography.bodySmall)
+                      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                          TextButton(onClick = onCopy) { Text("Copy") }
+                      }
+                  }
+              }
+          }
+          ''')
+
+          # Strip visible core switching UI from older Compose files if any survived.
+          for p in (SRC / "ui").rglob("*.kt") if (SRC / "ui").exists() else []:
+              text = p.read_text(encoding="utf-8")
+              text = re.sub(r'(?is).*smart.*core.*', '', text) if p.name != "MainActivity.kt" else text
+              p.write_text(text, encoding="utf-8")
+
+          models = SRC / "data/Models.kt"
+          if models.exists():
+              text = models.read_text(encoding="utf-8")
+              text = re.sub(
+                  r'enum class CoreId\s*\{.*?\n\}',
+                  '''enum class CoreId {\n    XRAY;\n\n    val label: String\n        get() = "Xray"\n\n    companion object {\n        fun fromStored(value: String?): CoreId = XRAY\n    }\n}''',
+                  text,
+                  flags=re.S
+              )
+              text = text.replace('"sing-box", ', '').replace('"mihomo", ', '')
+              models.write_text(text, encoding="utf-8")
+
+          # Remove hard source references to old engines from retained parsers where possible.
+          parser = SRC / "config/ConfigParser.kt"
+          if parser.exists():
+              text = parser.read_text(encoding="utf-8")
+              text = text.replace('"ssh", "openssh", "nordwhisper", "sing-box", "mihomo", "clashmeta", "clash"', '"wireguard"')
+              text = re.sub(r'\n\s*NativeConfigImporter\.parseTextOrNull\(.*?\n\s*\}', '', text, flags=re.S)
+              text = text.replace('native Mihomo/sing-box document, ', '')
+              parser.write_text(text, encoding="utf-8")
+
+          # Kill known old service files no longer referenced by manifest.
+          for path in [
+              "app/src/main/java/com/trivox/client/service/QuickConnectActivity.kt",
+              "app/src/main/java/com/trivox/client/service/QuickConnectStore.kt",
+              "app/src/main/java/com/trivox/client/service/QuickConnectTileService.kt",
+              "app/src/main/java/com/trivox/client/service/PauseResumeReceiver.kt",
+          ]:
+              rm_path(path)
+
+          report = {
+              "versionName": "1.0.0",
+              "xray": "26.7.28",
+              "removed": ["sing-box", "mihomo", "smart core selector", "core switch UI", "legacy XML UI", "unused native jniLibs"],
+              "build": "GitHub Actions only",
+              "abis": ["universal", "arm64-v8a", "armeabi-v7a", "x86_64"]
+          }
+          write("TRIVOX_XRAY_ONLY_CLOUD_PATCH_REPORT.json", json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+          PY
+
+      - name: Remove stale core keywords and validate cleanup
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo "Remaining mentions outside docs/tests/reports are shown for review:"
+          grep -RInE 'sing[_ -]?box|mihomo|SmartCoreSelector|smart core|OpenSSH|NordWhisper' app/src/main/java app/src/main/res app/src/main/assets .github/workflows || true
+          test ! -e app/src/main/jniLibs/arm64-v8a/libtrivox_mihomo.so
+          test ! -e app/src/main/jniLibs/arm64-v8a/libtrivox_sing_box.so
+          test ! -e app/src/main/jniLibs/armeabi-v7a/libtrivox_mihomo.so
+          test ! -e app/src/main/jniLibs/armeabi-v7a/libtrivox_sing_box.so
+          test -s app/libs/libXray.aar
+
+      - name: Commit patched source back to repository
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No source changes to commit."
+          else
+            git commit -m "Apply Xray-only Compose cloud patch v1.0.0"
+            git push origin "HEAD:${{ github.ref_name }}"
+          fi
+
+      - name: Build release APKs on GitHub
+        shell: bash
+        env:
+          TRIVOX_VERSION_NAME: ${{ github.event.inputs.version_name }}
+          TRIVOX_VERSION_CODE: ${{ github.run_number }}
+        run: |
+          set -Eeuo pipefail
+          ./gradlew --no-daemon --stacktrace :app:assembleRelease
+          mkdir -p release-apks
+          find app/build/outputs/apk/release -type f -name '*.apk' -print -exec cp {} release-apks/ \;
+          sha256sum release-apks/*.apk > release-apks/SHA256SUMS.txt
+          ls -lh release-apks
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivox-xray-compose-1.0.0-apks
+          path: release-apks/*
+          if-no-files-found: error
+          compression-level: 9
+
+      - name: Create or update GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          set -Eeuo pipefail
+          git fetch --tags --force
+          git tag -f "$TAG"
+          git push --force origin "$TAG"
+          NOTES="Trivox ${TAG}\n\n- Xray core 26.7.28 only\n- sing-box and mihomo native cores removed\n- Jetpack Compose UI\n- APKs built completely on GitHub Actions\n- Universal + ABI split APKs\n"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "Trivox ${TAG}" --notes "$NOTES" --latest
+            gh release upload "$TAG" release-apks/* --clobber
+          else
+            gh release create "$TAG" release-apks/* --title "Trivox ${TAG}" --notes "$NOTES" --latest
+          fi
