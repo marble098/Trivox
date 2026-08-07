@@ -1,29 +1,36 @@
 {
-  "name": "Trivox v12 network cores patch",
-  "targetRepository": "marble098/Trivox",
-  "targetCommit": "e7e0d26edce5eb4e03f8d16aec36152de3592a3b",
-  "directFiles": [
-    ".github/workflows/openssh-binaries.yml",
-    "app/src/main/java/com/trivox/client/network/RealDelayPolicy.kt",
-    "app/src/main/java/com/trivox/client/network/BatchRealDelayRunner.kt",
-    "app/src/main/java/com/trivox/client/network/TunnelHealthVerifier.kt",
-    "app/src/main/java/com/trivox/client/config/OpenSshProfileCodec.kt",
-    "app/src/main/java/com/trivox/client/config/NordWhisperCompatibility.kt",
-    "app/src/main/java/com/trivox/client/ssh/OpenSshBinaryManager.kt",
-    "app/src/main/java/com/trivox/client/ssh/OpenSshCommand.kt",
-    "app/src/main/java/com/trivox/client/ssh/OpenSshTunnelBridge.kt",
-    "app/src/main/res/values/strings_v12.xml",
-    "app/src/main/res/values-fa/strings_v12.xml",
-    "app/src/test/java/com/trivox/client/network/RealDelayPolicyV12Test.kt"
+  "name": "Trivox Compose Material 3 migration",
+  "date": "2026-08-08",
+  "basePackage": "Trivox-0.2.62",
+  "goals": [
+    "Remove application layout XML and migrate visible UI to Jetpack Compose Material 3",
+    "Preserve existing connection, core, subscription, import/export, diagnostics and routing behavior",
+    "Add bottom-tab navigation, health overview, favorites filtering and centralized tools",
+    "Strengthen CI validation and repository replacement safety"
   ],
-  "patchedFiles": [
-    "app/src/main/java/com/trivox/client/data/Models.kt",
-    "app/src/main/java/com/trivox/client/config/ConfigParser.kt",
-    "app/src/main/java/com/trivox/client/config/XrayConfigBuilder.kt",
-    "app/src/main/java/com/trivox/client/ui/SettingsActivity.kt",
-    "app/src/main/java/com/trivox/client/ui/MainActivity.kt",
-    "app/src/main/java/com/trivox/client/service/ConnectionService.kt",
-    "app/src/main/java/com/trivox/client/service/TrivoxVpnService.kt",
-    "app/src/main/res/layout/activity_settings.xml"
+  "newFiles": [
+    "app/src/main/java/com/trivox/client/ui/compose/LegacyLayoutBridge.kt",
+    "app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt",
+    "app/src/main/java/com/trivox/client/ui/compose/RoutingComposeScreen.kt",
+    "app/src/main/java/com/trivox/client/ui/compose/TrivoxComposeUi.kt",
+    "app/src/main/res/values/ids.xml",
+    "app/src/main/res/values/strings_compose.xml",
+    "app/src/main/res/values-fa/strings_compose.xml",
+    "tools/replace-github-repo.sh",
+    "tools/verify-compose-migration.sh"
+  ],
+  "removed": [
+    "app/src/main/res/layout/",
+    ".github/workflows/apply-v6-reliability.yml",
+    ".github/workflows/apply-v7-import-wireguard.yml",
+    "historical one-shot XML patch/install scripts"
+  ],
+  "validation": [
+    "Android resource validator",
+    "Android API guard validator",
+    "String format validator",
+    "Compose migration verifier",
+    "Trivox technical audit",
+    "GitHub Actions test + lint build gate"
   ]
 }

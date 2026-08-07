@@ -1,6 +1,6 @@
 # Trivox
 
-Trivox is a compact Android client for Xray-core. It uses classic XML Views, a single Android module, platform networking APIs, `org.json`, `SharedPreferences`, and three AndroidX libraries. It has no ads, analytics, telemetry, WebView networking, root requirement, or silent in-app executable updater.
+Trivox is a compact Android client for Xray-core. The visible UI uses Jetpack Compose Material 3 with a bottom-tab information architecture, while the networking, core and persistence layers remain deliberately conservative to avoid connection regressions. The project is a single Android module and has no ads, analytics, telemetry, root requirement, or silent in-app executable updater.
 
 The pinned core is Xray `v26.7.28`, integrated through the official `XTLS/libXray` Android AAR. The AAR is deliberately not committed: run the wizard to retrieve and verify it, or provide the official archive manually.
 
@@ -35,10 +35,13 @@ To use a local artifact, place it in `core-input/` and run:
 - `TrivoxVpnService` establishes Android's TUN interface and passes a duplicated FD through Xray's `xray.tun.fd` environment during validation, then the live FD during start.
 - `ConfigParser` handles common Xray links, mixed/base64 subscriptions, and full Xray JSON while preserving every original input.
 - `ConfigRepository`, `SubscriptionRepository`, and `SettingsRepository` keep private JSON in `SharedPreferences`.
+- `ui/compose/MainComposeScreen.kt` provides Home, Configs, Subscriptions, Tools and Settings tabs.
+- `ui/compose/LegacyLayoutBridge.kt` is a temporary programmatic compatibility controller for complex legacy activity logic; it contains no XML layout inflation.
+- `AppRoutingActivity` is direct Compose and uses snapshot state rather than the old RecyclerView adapter.
 
 Mihomo and sing-box are not included. A future adapter implements `CoreAdapter`, declares its own capabilities, and is selected in `CoreManager`; UI and repositories do not need replacement.
 
-## Features in 0.1.0
+## Features
 
 - VLESS, VMess, Trojan, Shadowsocks, SOCKS, HTTP proxy links and Xray JSON.
 - TCP, WebSocket, gRPC, HTTP Upgrade, XHTTP, KCP, QUIC, TLS, and REALITY fields used by these links.
@@ -50,6 +53,15 @@ Mihomo and sing-box are not included. A future adapter implements `CoreAdapter`,
 - Sanitized bounded diagnostics and Storage Access Framework export.
 
 See [BUILDING.md](BUILDING.md), [CORE_INTEGRATION.md](CORE_INTEGRATION.md), and [README_FA.md](README_FA.md).
+
+
+## Compose Material 3 migration
+
+- `app/src/main/res/layout` has been removed.
+- Compose is enabled through the Kotlin Compose plugin and stable Compose BOM.
+- The main surface uses five bottom navigation tabs with profile health metrics, favorites filtering, centralized tools and direct Quick Settings tile setup on Android 13+.
+- Persian follows Android RTL layout direction; English follows LTR.
+- Run `bash tools/verify-compose-migration.sh` to enforce the no-layout and Compose contracts before Gradle.
 
 ## Known limits
 

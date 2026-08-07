@@ -583,10 +583,9 @@ object XrayConfigBuilder {
 
         DnsMode.DIRECT -> smartDns(localSecureDns(), settings)
 
-        DnsMode.THROUGH_PROXY ->
+        DnsMode.THROUGH_PROXY,
+        DnsMode.TRIVOX_DEFAULT ->
             smartDns(remoteSecureDns(profile), settings)
-
-        DnsMode.TRIVOX_DEFAULT -> smartDns(localSecureDns(), settings)
     }
 
     private fun importedDns(
@@ -707,8 +706,7 @@ object XrayConfigBuilder {
     ): JSONObject {
         val dnsRouteTag = when {
             settings.dnsMode == DnsMode.SYSTEM ||
-                settings.dnsMode == DnsMode.DIRECT ||
-                settings.dnsMode == DnsMode.TRIVOX_DEFAULT -> "direct"
+                settings.dnsMode == DnsMode.DIRECT -> "direct"
             mode == ConnectionMode.PROXY &&
                 settings.dnsMode != DnsMode.THROUGH_PROXY &&
                 settings.dnsMode != DnsMode.IMPORTED -> "direct"

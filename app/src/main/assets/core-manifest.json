@@ -7,6 +7,6 @@
   "sourceUrl": "https://github.com/XTLS/libXray/releases/tag/v26.7.28",
   "buildDate": "",
   "abis": [],
-  "capabilities": ["proxy", "android-tun", "xray-only"],
+  "capabilities": ["share-link-conversion", "config-validation", "proxy", "android-tun", "tcp", "udp", "ipv4", "ipv6"],
   "prepared": false
 }

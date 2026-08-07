@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tab_home">خانه</string>
+    <string name="tab_configs">کانفیگ‌ها</string>
+    <string name="tab_subscriptions">ساب‌ها</string>
+    <string name="tab_tools">ابزارها</string>
+    <string name="tab_settings">تنظیمات</string>
+    <string name="compose_connection_overview">نمای کلی اتصال</string>
+    <string name="compose_tool_fastest_summary">بهترین مسیر را از میان نتایج تأییدشدهٔ تأخیر انتخاب می‌کند.</string>
+    <string name="compose_tool_proxy_summary">آدرس پروکسی Mixed محلی را برای استفاده در برنامه‌های دیگر کپی می‌کند.</string>
+    <string name="compose_tool_backup_summary">پروفایل‌ها، ساب‌ها و تنظیمات برنامه را یکجا خروجی می‌گیرد.</string>
+    <string name="compose_tool_routing_summary">مشخص کنید کدام برنامه‌ها از VPN استفاده کنند یا آن را دور بزنند.</string>
+    <string name="compose_tool_view_summary">نمایش فهرست فشرده و شبکه‌ای را جابه‌جا می‌کند.</string>
+    <string name="compose_favorites_only">علاقه‌مندی‌ها</string>
+    <string name="quick_tile_add">افزودن کاشی تنظیمات سریع</string>
+    <string name="quick_tile_add_summary">اتصال و قطع Trivox را با یک لمس به Quick Settings اندروید اضافه می‌کند.</string>
+    <string name="quick_tile_added">کاشی Trivox به تنظیمات سریع اضافه شد.</string>
+    <string name="quick_tile_already_added">کاشی Trivox از قبل در تنظیمات سریع وجود دارد.</string>
+    <string name="quick_tile_not_added">کاشی تنظیمات سریع اضافه نشد.</string>
+    <string name="quick_tile_manual_add">ویرایش Quick Settings اندروید را باز کنید و کاشی Trivox را به‌صورت دستی اضافه کنید.</string>
+    <string name="quick_tile_request_error">اندروید نتوانست درخواست افزودن کاشی تنظیمات سریع را پردازش کند.</string>
+</resources>

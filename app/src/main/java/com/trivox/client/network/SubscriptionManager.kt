@@ -1,7 +1,6 @@
 package com.trivox.client.network
 
 import com.trivox.client.config.ConfigParser
-import com.trivox.client.config.NativeProfileDocument
 import com.trivox.client.data.ConfigProfile
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -24,7 +23,7 @@ class SubscriptionManager {
 
     fun fetch(url: String): Result {
         var current =
-            normalizeUrl(NativeProfileDocument.remoteProfileUrl(url) ?: url)
+            normalizeUrl(url)
         val visited =
             LinkedHashSet<String>()
 
@@ -200,8 +199,7 @@ class SubscriptionManager {
             connection.requestMethod = "GET"
             connection.setRequestProperty(
                 "Accept",
-                "text/yaml, application/yaml, application/x-yaml, " +
-                    "application/json;q=0.9, text/plain;q=0.9, " +
+                "text/plain, application/json;q=0.9, " +
                     "application/octet-stream;q=0.8, */*;q=0.1"
             )
             connection.setRequestProperty(

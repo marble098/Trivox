@@ -62,12 +62,7 @@ class XrayConfigBuilderWireGuardTest {
         assertTrue(wireGuard.getBoolean("noKernelTun"))
 
         val dns = root.getJSONObject("dns")
-        val dnsServers = dns.getJSONArray("servers")
-        val firstDnsServer = dnsServers.getString(0)
-        assertTrue(firstDnsServer.startsWith("https+local://"))
-        assertTrue((0 until dnsServers.length()).any {
-            dnsServers.getString(it).startsWith("https+local://")
-        })
+        assertTrue(dns.getJSONArray("servers").getString(0).startsWith("https://"))
         assertTrue(dns.getBoolean("enableParallelQuery"))
 
         val firstRule = root.getJSONObject("routing")
@@ -75,10 +70,5 @@ class XrayConfigBuilderWireGuardTest {
             .getJSONObject(0)
         assertEquals("53", firstRule.getString("port"))
         assertEquals("dns-out", firstRule.getString("outboundTag"))
-
-        val dnsEngineRoute = root.getJSONObject("routing")
-            .getJSONArray("rules")
-            .getJSONObject(1)
-        assertEquals("direct", dnsEngineRoute.getString("outboundTag"))
     }
 }

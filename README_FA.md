@@ -1,82 +1,46 @@
-# بسته اصلاحی Trivox v12 — Real Delay، NordLynx، OpenSSH و Local Proxy
+# Trivox — نسخه Compose Material 3
 
-این بسته برای وضعیت ریپو در commit زیر آماده شده است:
+Trivox یک کلاینت سبک اندرویدی مبتنی بر Xray/libXray است. رابط کاربری این نسخه از layoutهای XML به **Jetpack Compose + Material 3** مهاجرت کرده و صفحه اصلی به پنج تب پایین تقسیم شده است: خانه، کانفیگ‌ها، ساب‌ها، ابزارها و تنظیمات.
 
-`e7e0d26edce5eb4e03f8d16aec36152de3592a3b`
+## نکات اصلی
 
-## روش اعمال
+- تمام قابلیت‌های اتصال، VPN/Proxy، import/export، سابسکریپشن، تست TCP و Real Delay، DNS، WireGuard/NordLynx، OpenSSH، app routing و diagnostics حفظ شده‌اند.
+- `app/src/main/res/layout` دیگر وجود ندارد و UI قابل مشاهده با Compose ساخته می‌شود.
+- برای کاهش ریسک رگرسیون، منطق شبکه/Core/Data دست‌کاری بنیادی نشده است و کنترلرهای تست‌شدهٔ قبلی در نقاط پیچیده از یک compatibility bridge برنامه‌ای (بدون XML) استفاده می‌کنند.
+- App Routing به Compose مستقیم منتقل شده و دیگر RecyclerView قدیمی ندارد.
+- صفحه اصلی نمای وضعیت اتصال، سلامت پروفایل‌ها، فیلتر علاقه‌مندی‌ها و دسترسی متمرکز به ابزارهای پرتکرار دارد.
+- زبان فارسی RTL و انگلیسی LTR از locale استاندارد اندروید پیروی می‌کنند.
 
-1. از ریپو نسخه پشتیبان بگیرید.
-2. محتویات ZIP را در **ریشه ریپو** استخراج کنید و اجازه جایگزینی فایل‌ها را بدهید.
-3. از ریشه ریپو اجرا کنید:
-
-```bash
-python3 tools/apply_trivox_v12.py
-```
-
-4. بررسی ساختاری:
+## ساخت
 
 ```bash
-python3 tools/verify_trivox_v12.py
+./tools/trivox-wizard.sh --core-version v26.7.28 --abis arm64-v8a --prepare
+./build.sh all
 ```
 
-5. تست و بیلد:
+یا برای بررسی مهاجرت Compose قبل از build:
 
 ```bash
-./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
+bash tools/verify-compose-migration.sh
+python3 tools/audit-trivox.py --ci
 ```
 
-## فعال‌کردن باینری واقعی OpenSSH
+## GitHub Actions
 
-ریپو فعلی فقط اسکلت OpenSSH دارد و `manifest.json` آن روی `BUILD_REQUIRED` است. فایل workflow در این بسته طوری اصلاح شده که خروجی آماده با مسیرهای صحیح بسازد:
+Workflow اصلی `.github/workflows/main.yml` ابتدا منابع، API guardها، فرمت رشته‌ها و قرارداد Compose را بررسی می‌کند و سپس `test` و `lint` را با Gradle اجرا می‌کند. Workflowهای تاریخی patch که XMLهای قدیمی را بازمی‌گرداندند از این بسته حذف شده‌اند.
 
-1. در GitHub به **Actions → Build OpenSSH Android assets** بروید.
-2. `Run workflow` را اجرا کنید.
-3. artifact با نام `trivox-openssh-overlay` را دانلود کنید.
-4. آن artifact را در ریشه ریپو استخراج کنید.
-5. دوباره دستورهای verify و Gradle را اجرا کنید.
+## جایگزینی کامل ریپو
 
-بدون این مرحله، برنامه عمداً خطای واضح «OpenSSH assets have not been built» می‌دهد؛ هیچ باینری جعلی یا ناسازگار داخل APK قرار نمی‌گیرد.
+فایل `tools/replace-github-repo.sh` از احراز هویت موجود `gh` استفاده می‌کند و هیچ PAT جداگانه‌ای درخواست نمی‌کند. برای کم‌کردن مصرف اینترنت، فقط Git metadata و treeهای آخرین commit را با partial shallow fetch دریافت می‌کند و blobهای قدیمی را checkout نمی‌کند. سپس کل tree ریپو را با محتوای ZIP جایگزین می‌کند، backup tag می‌سازد و با همان حساب لاگین‌شده در `gh` push می‌کند.
 
-## فرمت افزودن OpenSSH
-
-از گزینه Import/Add existing configuration استفاده کنید:
-
-```text
-ssh://USERNAME:PASSWORD@HOST:22?timeout=10#NAME
+```bash
+bash /sdcard/Download/replace-trivox-repo-gh-direct-v7.sh \
+  /sdcard/Download/Trivox-Compose-Material3-2026-08-08-v6.zip \
+  OWNER/REPO main
 ```
 
-یا:
+برای PAT کلاسیک، scopeهای `repo` و `workflow` پیشنهاد می‌شوند. توکن را به‌عنوان آرگومان خط فرمان وارد نکنید؛ خود اسکریپت آن را با ورودی مخفی دریافت می‌کند.
 
-```text
-openssh://USERNAME:PASSWORD@HOST:22?timeout=10#NAME
-```
+## هسته
 
-نام کاربری، رمز و نام باید URL-encode شوند. رمز هنگام import مستقیماً به `AndroidKeyStore` منتقل و پیش از ذخیره پروفایل از metadata حذف می‌شود. لینک خام ذخیره‌شده شامل رمز نیست.
-
-## پروفایل‌های Real Delay
-
-- **Turbo:** گروه ۱۲، چهار worker، یک Cloudflare Trace معتبر؛ سریع‌ترین حالت.
-- **Balanced:** گروه ۸، سه worker، دو اثبات HTTPS؛ پیش‌فرض پیشنهادی.
-- **Accurate:** گروه ۶، دو worker، دو اثبات از سه مقصد؛ فشار کمتر و بررسی عمیق‌تر.
-- **Custom:** گروه، worker، timeout، مکث شروع، تعداد مقصد و تعداد اثبات قابل تنظیم است.
-
-هر حالت محدودیت هم‌زمانی دارد و برای لیست‌های بسیار بزرگ، گروه‌بندی انجام می‌شود تا گوشی با صدها process یا thread هم‌زمان تحت فشار قرار نگیرد.
-
-## اصلاح Local Proxy
-
-- listener محلی پیش از تست HTTPS بررسی می‌شود.
-- تست DNS-free از مسیر SOCKS قبل از HTTP CONNECT انجام می‌شود.
-- در حالت Proxy و DNS پیش‌فرض، bootstrap DNS از مسیر direct انجام می‌شود تا حلقه DNS-via-proxy ایجاد نشود.
-- انتخاب صریح **DNS through proxy** همچنان حفظ شده است.
-- `sniffing.routeOnly=true` مانع بازنویسی ناخواسته مقصد در mixed inbound می‌شود.
-
-## NordLynx و NordWhisper
-
-NordLynx subscription از قبل در ریپو وجود داشت و پروفایل‌های واقعی WireGuard می‌ساخت. این بسته مسیر DNS و local proxy را اصلاح می‌کند تا همان پروفایل‌ها در Proxy mode قابل استفاده باشند؛ هسته تکراری اضافه نشده است.
-
-NordWhisper یک پروتکل اختصاصی NordVPN است و runtime قابل‌باندل برای کلاینت ثالث منتشر نشده است. بسته، scheme آن را تشخیص می‌دهد و خطای دقیق می‌دهد؛ آن را به WireGuard تبدیل نمی‌کند و اتصال جعلی گزارش نمی‌کند.
-
-## فایل‌های مستقیم و فایل‌های patch‌شونده
-
-فایل‌های کوچک/جدید و جایگزین کامل داخل مسیر واقعی ریپو قرار دارند. برای فایل‌های بزرگ موجود (`Models.kt`، `ConfigParser.kt`، `SettingsActivity.kt`، سرویس‌ها و builder)، اسکریپت patcher با anchorهای دقیق و idempotent تغییر را اعمال می‌کند تا امکانات موجود حذف نشوند.
+نسخه پیش‌فرض Xray/libXray برابر `v26.7.28` است و AAR رسمی توسط wizard دریافت و اعتبارسنجی می‌شود. فایل core عمداً داخل سورس commit نشده است.

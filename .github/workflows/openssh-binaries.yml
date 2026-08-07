@@ -1,0 +1,62 @@
+name: Build OpenSSH Android assets
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 1 * *"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify host tools
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for command in docker dpkg-deb python3 git; do
+            command -v "$command" >/dev/null || {
+              echo "::error::Missing host command: $command"
+              exit 1
+            }
+          done
+          docker version
+          docker info
+      - name: Build ABI assets
+        env:
+          TERMUX_PKG_MAKE_PROCESSES: "2"
+          TRIVOX_PACKAGE_NAME: com.trivox.client
+        shell: bash
+        run: bash tools/openssh/build-openssh-android.sh
+      - name: Verify manifest and client suite
+        run: |
+          VERSION="$(cat app/src/main/assets/openssh/version.txt)"
+          python3 tools/openssh/write-manifest.py \
+            app/src/main/assets/openssh "$VERSION" com.trivox.client
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            test -f "app/src/main/assets/openssh/$abi/bin/ssh"
+            test -f "app/src/main/assets/openssh/$abi/bin/scp"
+            test -f "app/src/main/assets/openssh/$abi/bin/sftp"
+            test -f "app/src/main/assets/openssh/$abi/bin/ssh-keygen"
+          done
+          test "$(python3 -c 'import json; print(json.load(open("app/src/main/assets/openssh/manifest.json"))["version"])')" != "BUILD_REQUIRED"
+      - name: Build repository-path overlay
+        run: |
+          rm -rf openssh-overlay
+          mkdir -p openssh-overlay/app/src/main/assets
+          cp -a app/src/main/assets/openssh openssh-overlay/app/src/main/assets/
+          (
+            cd openssh-overlay
+            find . -type f ! -name SHA256SUMS.txt -print0               | sort -z               | xargs -0 sha256sum > SHA256SUMS.txt
+          )
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trivox-openssh-overlay
+          path: openssh-overlay
+          if-no-files-found: error
+          compression-level: 9
+          retention-days: 30

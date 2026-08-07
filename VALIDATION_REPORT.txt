@@ -1,13 +1,20 @@
-Trivox v11 package validation
-Base commit: ca58af07f4a45408dde350534d2baf909cdf8289
+Trivox Compose Material 3 migration validation
+Date: 2026-08-08
+Base package: Trivox-0.2.62
 
-PASS  Python sources compile with py_compile
-PASS  OpenSSH build shell passes bash -n
-PASS  New Kotlin sources compile against focused Android/Trivox API stubs
-PASS  Guarded patch --check on current-anchor fixture
-PASS  Patch application on current-anchor fixture
-PASS  Second patch application is idempotent
-PASS  Visible-text shortening preserves XML resource names and stable literal keys
-PASS  Required new files copied to repository-relative paths
-NOT RUN  Full Android Gradle test/lint (complete checkout/SDK/libXray unavailable)
-NOT RUN  OpenSSH Android cross-build (provided GitHub Actions workflow is the build gate)
+PASS  Android resource validation
+PASS  Android API guard validation
+PASS  Android string-format validation
+PASS  Compose migration verifier
+PASS  Kotlin R.id contract (172 IDs defined)
+PASS  No app/src/main/res/layout directory
+PASS  No project R.layout references in Kotlin (android.R.layout compatibility spinner rows only)
+PASS  Trivox technical audit: 0 errors
+PASS  Kotlin parser heuristic: 0 syntax diagnostics in modified Kotlin sources
+PASS  Bash syntax: verify-compose-migration.sh and replace-github-repo.sh
+PASS  Repository replacement integration test against a local bare Git remote
+PASS  Safety backup tag, full source replacement, commit and push behavior
+WARN  MainActivity.kt remains a large legacy controller; preserved intentionally to reduce connection regression risk
+WARN  NordVpnSubscriptionManager.kt remains a large network controller; not split during the UI migration
+NOT RUN  Full local Gradle test/lint/assemble because services.gradle.org was unreachable from the artifact environment
+CI GATE  .github/workflows/main.yml runs validators, Gradle test and lint on GitHub Actions

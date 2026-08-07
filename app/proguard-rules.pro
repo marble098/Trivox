@@ -1,5 +1,5 @@
 -keep class libXray.** { *; }
 -keep class go.** { *; }
--keep class com.trivox.client.core.XrayCoreAdapter { *; }
--keepattributes *Annotation*
--dontwarn org.json.**
+-keepclasseswithmembernames class * { native <methods>; }
+-dontwarn libXray.**
+-dontwarn go.**

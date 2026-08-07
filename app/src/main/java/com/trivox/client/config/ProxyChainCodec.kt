@@ -4,37 +4,38 @@ import com.trivox.client.data.ConfigProfile
 import org.json.JSONObject
 
 object ProxyChainCodec {
-    private const val MARKER = "trivox_proxy_chain_v1"
+    private const val MARKER = "_trivoxProxyChain"
+    private const val VERSION = 1
 
     data class Chain(
         val exit: JSONObject,
-        val bridge: JSONObject
+        val bridge: JSONObject,
+        val exitName: String,
+        val bridgeName: String
     )
 
-    fun encode(exit: ConfigProfile, bridge: ConfigProfile): String {
-        return JSONObject()
-            .put("type", MARKER)
-            .put("exit", JSONObject(exit.outboundJson))
-            .put("bridge", JSONObject(bridge.outboundJson))
-            .toString()
-    }
+    fun encode(
+        exit: ConfigProfile,
+        bridge: ConfigProfile
+    ): String = JSONObject()
+        .put(MARKER, VERSION)
+        .put("exitName", exit.name)
+        .put("bridgeName", bridge.name)
+        .put("exit", JSONObject(exit.outboundJson))
+        .put("bridge", JSONObject(bridge.outboundJson))
+        .toString()
 
-    fun decode(raw: String?): Chain? {
-        val text = raw?.trim().orEmpty()
-        if (text.isBlank() || !text.startsWith("{")) return null
-        val root = runCatching { JSONObject(text) }.getOrNull() ?: return null
-        val exit = root.optJSONObject("exit")
-            ?: root.optJSONObject("proxyExit")
-            ?: root.optJSONObject("chainExit")
-            ?: return null
-        val bridge = root.optJSONObject("bridge")
-            ?: root.optJSONObject("proxyBridge")
-            ?: root.optJSONObject("chainBridge")
-            ?: return null
-        return Chain(exit = exit, bridge = bridge)
-    }
-
-    fun parse(raw: String?): Chain? = decode(raw)
-
-    fun isChain(raw: String?): Boolean = decode(raw) != null
+    fun decode(value: String): Chain? =
+        runCatching {
+            val root = JSONObject(value)
+            if (root.optInt(MARKER) != VERSION) {
+                return null
+            }
+            Chain(
+                exit = root.getJSONObject("exit"),
+                bridge = root.getJSONObject("bridge"),
+                exitName = root.optString("exitName"),
+                bridgeName = root.optString("bridgeName")
+            )
+        }.getOrNull()
 }

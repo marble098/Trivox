@@ -1,92 +1,71 @@
-# Complete project tree
+# Project tree — Compose Material 3 source
 
 ```text
 trivox/
-├── .github/
-│   └── workflows/
-│       └── build.yml
+├── .github/workflows/
+│   ├── main.yml
+│   └── openssh-binaries.yml
 ├── app/
 │   ├── build.gradle.kts
 │   ├── proguard-rules.pro
 │   └── src/
 │       ├── main/
 │       │   ├── AndroidManifest.xml
-│       │   ├── assets/core-manifest.json
+│       │   ├── assets/
 │       │   ├── java/com/trivox/client/
-│       │   │   ├── TrivoxApp.kt
 │       │   │   ├── config/
-│       │   │   │   ├── ConfigParser.kt
-│       │   │   │   └── XrayConfigBuilder.kt
 │       │   │   ├── core/
-│       │   │   │   ├── CoreManager.kt
-│       │   │   │   ├── CoreModels.kt
-│       │   │   │   └── XrayCoreAdapter.kt
 │       │   │   ├── data/
-│       │   │   │   ├── Models.kt
-│       │   │   │   └── Repositories.kt
 │       │   │   ├── network/
-│       │   │   │   ├── PingManager.kt
-│       │   │   │   └── SubscriptionManager.kt
 │       │   │   ├── service/
-│       │   │   │   ├── BootReceiver.kt
-│       │   │   │   ├── ConnectionService.kt
-│       │   │   │   ├── NotificationSupport.kt
-│       │   │   │   └── TrivoxVpnService.kt
+│       │   │   ├── ssh/
 │       │   │   ├── ui/
-│       │   │   │   ├── AppRoutingActivity.kt
-│       │   │   │   ├── DiagnosticsActivity.kt
 │       │   │   │   ├── MainActivity.kt
-│       │   │   │   ├── ProfileAdapter.kt
-│       │   │   │   └── SettingsActivity.kt
-│       │   │   └── util/Diagnostics.kt
+│       │   │   │   ├── SettingsActivity.kt
+│       │   │   │   ├── SubscriptionManagementActivity.kt
+│       │   │   │   ├── AppRoutingActivity.kt
+│       │   │   │   └── compose/
+│       │   │   │       ├── MainComposeScreen.kt
+│       │   │   │       ├── RoutingComposeScreen.kt
+│       │   │   │       ├── TrivoxComposeUi.kt
+│       │   │   │       └── LegacyLayoutBridge.kt
+│       │   │   └── util/
 │       │   └── res/
+│       │       ├── color/
 │       │       ├── drawable/
-│       │       │   ├── ic_launcher.xml
-│       │       │   └── row_background.xml
-│       │       ├── layout/
-│       │       │   ├── activity_app_routing.xml
-│       │       │   ├── activity_diagnostics.xml
-│       │       │   ├── activity_main.xml
-│       │       │   ├── activity_settings.xml
-│       │       │   ├── dialog_import.xml
-│       │       │   ├── row_app.xml
-│       │       │   └── row_profile.xml
+│       │       ├── font/
 │       │       ├── values/
-│       │       │   ├── colors.xml
+│       │       │   ├── ids.xml
 │       │       │   ├── strings.xml
+│       │       │   ├── strings_compose.xml
 │       │       │   └── themes.xml
-│       │       ├── values-fa/strings.xml
-│       │       ├── values-night/themes.xml
-│       │       └── xml/locales_config.xml
-│       └── test/java/com/trivox/client/ConfigParserTest.kt
-├── core-input/README.md
+│       │       ├── values-fa/
+│       │       │   └── strings_compose.xml
+│       │       ├── values-night/
+│       │       └── xml/
+│       └── test/
+├── core-input/
 ├── gradle/wrapper/
-│   ├── gradle-wrapper.jar
-│   └── gradle-wrapper.properties
 ├── tools/
+│   ├── audit-trivox.py
 │   ├── generate-core-manifest.py
-│   ├── prepare-core.ps1
 │   ├── prepare-core.sh
+│   ├── prepare-core.ps1
+│   ├── replace-github-repo.sh
+│   ├── trivox-wizard.sh
 │   ├── trivox-wizard.ps1
-│   └── trivox-wizard.sh
-├── .gitignore
-├── BUILD_VERIFICATION.md
-├── BUILDING.md
-├── CHANGELOG.md
-├── CORE_INTEGRATION.md
-├── LICENSE
-├── LICENSES.md
-├── PROJECT_TREE.md
-├── README.md
-├── README_FA.md
-├── SECURITY.md
+│   ├── validate-android-resources.py
+│   ├── validate-api-guards.py
+│   ├── validate-string-formats.py
+│   ├── verify-compose-migration.sh
+│   └── openssh/
 ├── build.gradle.kts
-├── build.ps1
-├── build.sh
+├── settings.gradle.kts
 ├── gradle.properties
 ├── gradlew
 ├── gradlew.bat
-└── settings.gradle.kts
+├── build.sh
+└── build.ps1
 ```
 
-`app/libs/libXray.aar` and ABI directories are generated only after the wizard validates an official Android artifact; they are intentionally absent from the source ZIP.
+There is intentionally no `app/src/main/res/layout` directory. The visible application UI is Compose Material 3. The libXray AAR remains an externally prepared official artifact and is not embedded in the source package.

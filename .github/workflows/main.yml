@@ -1,0 +1,685 @@
+name: Build Trivox APKs
+
+on:
+  push:
+    branches: [main, master, develop, 'audit/**']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: Build type
+        required: true
+        default: all
+        type: choice
+        options: [debug, release, all]
+      core_version:
+        description: Pinned Xray/libXray version
+        required: true
+        default: v26.7.28
+        type: string
+      use_latest_stable:
+        description: Replace pinned version with latest stable
+        required: false
+        default: false
+        type: boolean
+      use_latest_prerelease:
+        description: Use latest compatible prerelease
+        required: false
+        default: false
+        type: boolean
+      requested_abis:
+        description: Comma-separated ABIs
+        required: true
+        default: arm64-v8a,armeabi-v7a,x86_64
+        type: string
+      release_tag:
+        description: Optional custom release tag; blank uses the automatic app version
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trivox-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: "17"
+  GRADLE_DISTRIBUTION_SHA256: "f1771298a70f6db5a29daf62378c4e18a17fc33c9ba6b14362e0cdf40610380d"
+  DEFAULT_CORE_VERSION: "v26.7.28"
+  DEFAULT_ABIS: "arm64-v8a,armeabi-v7a,x86_64"
+  STABLE_CERT_SHA256: "A4BF01B1C2F213E60F9944784B26AF6D647418AC181B4F8FEECCB2CEF00FBC9C"
+
+jobs:
+  validate:
+    name: Project validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout complete Git history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Compute automatic app version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          commit_count="$(git rev-list --count HEAD)"
+          version_code="$((1000 + commit_count))"
+          version_name="0.2.${commit_count}"
+          short_sha="$(git rev-parse --short=8 HEAD)"
+
+          {
+            printf 'TRIVOX_VERSION_CODE=%s\n' "$version_code"
+            printf 'TRIVOX_VERSION_NAME=%s\n' "$version_name"
+            printf 'TRIVOX_GIT_SHA=%s\n' "$short_sha"
+          } >> "$GITHUB_ENV"
+
+          {
+            echo "### Trivox automatic version"
+            echo
+            echo "- Version name: \`$version_name\`"
+            echo "- Version code: \`$version_code\`"
+            echo "- Commit: \`$short_sha\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Validate project files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          chmod +x gradlew build.sh
+          find tools -maxdepth 1 -type f -name "*.sh" -exec chmod +x {} +
+
+          test -s gradle/wrapper/gradle-wrapper.jar
+          test -s gradle/wrapper/gradle-wrapper.properties
+
+          grep -Fqx \
+            "distributionSha256Sum=${GRADLE_DISTRIBUTION_SHA256}" \
+            gradle/wrapper/gradle-wrapper.properties
+
+          bash -n \
+            build.sh \
+            tools/trivox-wizard.sh \
+            tools/prepare-core.sh \
+            tools/verify-compose-migration.sh
+
+          python3 -m py_compile tools/generate-core-manifest.py
+          python3 -m py_compile tools/validate-android-resources.py
+          python3 -m py_compile tools/validate-api-guards.py
+          python3 -m py_compile tools/validate-string-formats.py
+          python3 tools/validate-android-resources.py
+          python3 tools/validate-api-guards.py
+          python3 tools/validate-string-formats.py
+          bash tools/verify-compose-migration.sh
+          python3 tools/audit-trivox.py --ci
+          test ! -d app/src/main/res/layout
+          if grep -R -n -E '\bR\.layout\.[A-Za-z_][A-Za-z0-9_]*' app/src/main/java | grep -v 'android\.R\.layout'; then
+            echo "Legacy app layout references detected after Compose migration." >&2
+            exit 1
+          fi
+          grep -Fq 'org.jetbrains.kotlin.plugin.compose' build.gradle.kts
+          grep -Fq 'compose = true' app/build.gradle.kts
+          grep -Fq 'NavigationBar {' app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt
+          grep -Fq 'RoutingComposeScreen' app/src/main/java/com/trivox/client/ui/compose/RoutingComposeScreen.kt
+          grep -Fq 'LegacyLayoutBridge.install' app/src/main/java/com/trivox/client/ui/MainActivity.kt
+          grep -Fq 'SubscriptionCancelledException' \
+            app/src/main/java/com/trivox/client/network/SubscriptionSupport.kt
+          grep -Fq 'fun normalizeUrl' \
+            app/src/main/java/com/trivox/client/network/SubscriptionManager.kt
+          grep -Fq 'fetchCatalog' \
+            app/src/main/java/com/trivox/client/network/NordVpnSubscriptionManager.kt
+          grep -Fq 'BATCH_XRAY_ATTEMPTS = 2' app/src/main/java/com/trivox/client/network/PingManager.kt
+          grep -Fq 'BATCH_XRAY_MAX_TARGETS = 2' app/src/main/java/com/trivox/client/network/PingManager.kt
+          grep -Fq 'allowSingleSample = false' app/src/main/java/com/trivox/client/network/PingManager.kt
+          grep -Fq 'showConnectionStartPending' \
+            app/src/main/java/com/trivox/client/ui/MainActivity.kt
+          grep -Fq 'EXIT_REASON_PACKAGE_UPDATED' \
+            app/src/main/java/com/trivox/client/util/Diagnostics.kt
+          python3 tools/validate-api-guards.py
+          grep -Fq '%1$s/%2$s • Updating %3$s' \
+            app/src/main/res/values/strings.xml
+          grep -Fq '%1$s از %2$s • به‌روزرسانی %3$s' \
+            app/src/main/res/values-fa/strings.xml
+          if grep -R --fixed-strings             "registerController(null)"             app/src/main/java; then
+            echo "Unsafe null native controller registration detected." >&2
+            exit 1
+          fi
+          grep -Fq             "ACTIVE_PROTECT"             app/src/main/java/com/trivox/client/core/XrayCoreAdapter.kt
+          grep -Fq             "getHistoricalProcessExitReasons"             app/src/main/java/com/trivox/client/util/Diagnostics.kt
+          grep -Fq             "DEFAULT_MIXED_PORT = 10202"             app/src/main/java/com/trivox/client/data/Models.kt
+
+          grep -Fq 'protocol", "mixed"' \
+            app/src/main/java/com/trivox/client/config/XrayConfigBuilder.kt
+          grep -Fq 'DEFAULT_MIXED_PORT = 10202' \
+            app/src/main/java/com/trivox/client/data/Models.kt
+          grep -Fq 'create("persistent")' app/build.gradle.kts
+          grep -Fq 'STABLE_CERT_SHA256: "A4BF01B1C2F213E60F9944784B26AF6D647418AC181B4F8FEECCB2CEF00FBC9C"' \
+            .github/workflows/main.yml
+          legacy_secret_ref='secrets.ANDROID_CERT_'
+          legacy_secret_ref="${legacy_secret_ref}SHA256"
+          if grep -Fq "$legacy_secret_ref"             .github/workflows/main.yml; then
+            echo "Signing identity must not come from a mutable digest secret." >&2
+            exit 1
+          fi
+          grep -Fq 'Binary Android tombstone omitted' \
+            app/src/main/java/com/trivox/client/util/Diagnostics.kt
+          grep -Fq 'MARBLE098' app/src/main/res/values/strings.xml
+          grep -Fq 'PCPAPC172' app/src/main/res/values/strings.xml
+          grep -Fq 'enum class PingMethod'             app/src/main/java/com/trivox/client/data/Models.kt
+          grep -Fq 'PingStatistics.summarize'             app/src/main/java/com/trivox/client/network/PingManager.kt
+          grep -Fq 'connectedId'             app/src/main/java/com/trivox/client/ui/MainActivity.kt
+          grep -Fq '<string name="dark_theme_summary">Use the low-glare Trivox night palette.</string>' \
+            app/src/main/res/values/strings.xml
+          grep -Fq '<string name="ping_method_xray_summary">Tests the complete Xray route against a small verified connectivity pool, automatically replacing blocked or unhealthy targets. generate_204 endpoints require an exact 204 response.</string>' \
+            app/src/main/res/values/strings.xml
+          grep -Fq 'SubscriptionManagementActivity' \
+            app/src/main/AndroidManifest.xml
+          grep -Fq 'START_REDELIVER_INTENT' \
+            app/src/main/java/com/trivox/client/service/ConnectionService.kt
+          grep -Fq 'START_REDELIVER_INTENT' \
+            app/src/main/java/com/trivox/client/service/TrivoxVpnService.kt
+          grep -Fq 'setUsesChronometer(true)' \
+            app/src/main/java/com/trivox/client/service/NotificationSupport.kt
+          grep -Fq 'requestLivePingNow' \
+            app/src/main/java/com/trivox/client/ui/MainActivity.kt
+          grep -Fq 'QuickConnectTileService' \
+            app/src/main/AndroidManifest.xml
+          grep -Fq 'BIND_QUICK_SETTINGS_TILE' \
+            app/src/main/AndroidManifest.xml
+          grep -Fq 'TileServiceCompat.startActivityAndCollapse' \
+            app/src/main/java/com/trivox/client/service/QuickConnectTileService.kt
+          grep -Fq 'PendingIntentActivityWrapper' \
+            app/src/main/java/com/trivox/client/service/QuickConnectTileService.kt
+          if grep -Fq 'startActivityAndCollapse(intent)' \
+            app/src/main/java/com/trivox/client/service/QuickConnectTileService.kt; then
+            echo "Deprecated Quick Tile Intent launch detected." >&2
+            exit 1
+          fi
+          grep -Fq 'android.service.quicksettings.action.QS_TILE_PREFERENCES' \
+            app/src/main/AndroidManifest.xml
+          grep -Fq 'ic_view_grid_compact' \
+            app/src/main/java/com/trivox/client/ui/MainActivity.kt
+          grep -Fq 'popupTheme' \
+            app/src/main/res/values/themes.xml
+          grep -Fq 'LOW_LATENCY_RECHECK_ATTEMPTS' \
+            app/src/main/java/com/trivox/client/network/PingManager.kt
+          grep -Fq 'statusCode == 204' \
+            app/src/main/java/com/trivox/client/network/PingManager.kt
+          grep -Fq 'cacheBustedUrl' \
+            app/src/main/java/com/trivox/client/network/PingManager.kt
+          grep -Fq 'attempts = settings.testAttempts' \
+            app/src/main/java/com/trivox/client/ui/MainActivity.kt
+          grep -Fq 'TrustedDohResolver' \
+            app/src/main/java/com/trivox/client/network/NordVpnSubscriptionManager.kt
+          grep -Fq 'UUID.nameUUIDFromBytes' \
+            app/src/main/java/com/trivox/client/network/NordVpnSubscriptionManager.kt
+          grep -Fq 'tcpLatencyMs' \
+            app/src/main/java/com/trivox/client/data/Models.kt
+          grep -Fq 'realLatencyMs' \
+            app/src/main/java/com/trivox/client/data/Models.kt
+          grep -Fq 'acceptsHttpStatus' \
+            app/src/main/java/com/trivox/client/network/TunnelHealthVerifier.kt
+          grep -Fq 'showSubscriptionActions' \
+            app/src/main/java/com/trivox/client/ui/MainActivity.kt
+          grep -Fq 'REQUIRED_SUCCESS_NUMERATOR' \
+            app/src/main/java/com/trivox/client/network/PingStatistics.kt
+          if grep -R -n -E \
+            'Theme\.Trivox\.Neon|ThemeMode\.NEON|themeModeSpinner|neon_' \
+            app/src/main; then
+            echo "Removed Neon theme unexpectedly returned." >&2
+            exit 1
+          fi
+          if grep -Fq 'status_alive' \
+            app/src/main/java/com/trivox/client/ui/ProfileAdapter.kt || \
+             grep -Fq 'status_dead' \
+            app/src/main/java/com/trivox/client/ui/ProfileAdapter.kt; then
+            echo "Alive/dead row labels unexpectedly returned." >&2
+            exit 1
+          fi
+          grep -Fq 'https://cp.cloudflare.com/generate_204' \
+            app/src/main/java/com/trivox/client/ui/MainActivity.kt
+          grep -Fq 'localProxyInVpn' \
+            app/src/main/java/com/trivox/client/config/XrayConfigBuilder.kt
+          grep -Fq 'proxySettings' \
+            app/src/main/java/com/trivox/client/config/XrayConfigBuilder.kt
+          grep -Fq 'ManualConfigActivity' \
+            app/src/main/AndroidManifest.xml
+          if grep -Fq 'attempts = 1'             app/src/main/java/com/trivox/client/ui/MainActivity.kt; then
+            echo "Single-sample ping regression detected." >&2
+            exit 1
+          fi
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: false
+          cache-cleanup: always
+
+      - name: Run unit tests and lint
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon --stacktrace test lint
+
+      - name: Upload lint diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lint-diagnostics-${{ github.run_id }}
+          path: |
+            app/build/reports/lint-results-*.html
+            app/build/intermediates/lint_intermediate_text_report/**/lint-results-*.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
+  build:
+    name: Build direct-download APKs
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    needs: validate
+    timeout-minutes: 60
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout complete Git history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Compute automatic app version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          commit_count="$(git rev-list --count HEAD)"
+          version_code="$((1000 + commit_count))"
+          version_name="0.2.${commit_count}"
+          short_sha="$(git rev-parse --short=8 HEAD)"
+
+          {
+            printf 'TRIVOX_VERSION_CODE=%s\n' "$version_code"
+            printf 'TRIVOX_VERSION_NAME=%s\n' "$version_name"
+            printf 'TRIVOX_GIT_SHA=%s\n' "$short_sha"
+          } >> "$GITHUB_ENV"
+
+      - name: Fix script permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x gradlew build.sh
+          find tools -maxdepth 1 -type f -name "*.sh" -exec chmod +x {} +
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: false
+          cache-cleanup: always
+
+      - name: Select core inputs
+        id: core
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.core_version }}
+          INPUT_ABIS: ${{ inputs.requested_abis }}
+          LATEST_STABLE: ${{ inputs.use_latest_stable }}
+          LATEST_PRERELEASE: ${{ inputs.use_latest_prerelease }}
+        run: |
+          set -euo pipefail
+
+          version="${INPUT_VERSION:-$DEFAULT_CORE_VERSION}"
+          abis="${INPUT_ABIS:-$DEFAULT_ABIS}"
+          latest_stable="${LATEST_STABLE:-false}"
+          latest_prerelease="${LATEST_PRERELEASE:-false}"
+
+          [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || {
+            echo "Invalid core version: $version" >&2
+            exit 2
+          }
+
+          [[ "$abis" =~ ^(arm64-v8a|armeabi-v7a|x86_64)(,(arm64-v8a|armeabi-v7a|x86_64))*$ ]] || {
+            echo "Invalid ABI input: $abis" >&2
+            exit 2
+          }
+
+          if [[ "$latest_stable" == "true" && "$latest_prerelease" == "true" ]]; then
+            echo "Select only one latest-version option." >&2
+            exit 2
+          fi
+
+          {
+            printf 'version=%s\n' "$version"
+            printf 'abis=%s\n' "$abis"
+            printf 'latest_stable=%s\n' "$latest_stable"
+            printf 'latest_prerelease=%s\n' "$latest_prerelease"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Download and verify official libXray
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CORE_VERSION: ${{ steps.core.outputs.version }}
+          REQUESTED_ABIS: ${{ steps.core.outputs.abis }}
+          LATEST_STABLE: ${{ steps.core.outputs.latest_stable }}
+          LATEST_PRERELEASE: ${{ steps.core.outputs.latest_prerelease }}
+        run: |
+          set -euo pipefail
+
+          mode=(--core-version "$CORE_VERSION")
+
+          if [[ "$LATEST_STABLE" == "true" ]]; then
+            mode=(--latest-stable)
+          elif [[ "$LATEST_PRERELEASE" == "true" ]]; then
+            mode=(--latest-prerelease)
+          fi
+
+          bash tools/trivox-wizard.sh \
+            "${mode[@]}" \
+            --abis "$REQUESTED_ABIS" \
+            --prepare-only \
+            --non-interactive
+
+          test -s app/libs/libXray.aar
+          test -s app/src/main/assets/core-manifest.json
+          test -s gradle.properties
+
+      - name: Configure persistent APK signing
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          EXPECTED_CERT_SHA256: ${{ env.STABLE_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+
+          for value in \
+            "$KEYSTORE_B64" \
+            "$KEYSTORE_PASSWORD" \
+            "$KEY_ALIAS" \
+            "$KEY_PASSWORD" \
+            "$EXPECTED_CERT_SHA256"
+          do
+            [[ -n "$value" ]] || {
+              echo "Persistent signing secrets are incomplete." >&2
+              exit 1
+            }
+          done
+
+          umask 077
+
+          printf '%s' "$KEYSTORE_B64" |
+            base64 --decode > "$RUNNER_TEMP/trivox-release.jks"
+
+          keytool -list \
+            -keystore "$RUNNER_TEMP/trivox-release.jks" \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -alias "$KEY_ALIAS" \
+            > /dev/null
+
+          actual_cert="$(
+            keytool -exportcert \
+              -keystore "$RUNNER_TEMP/trivox-release.jks" \
+              -storepass "$KEYSTORE_PASSWORD" \
+              -alias "$KEY_ALIAS" |
+              sha256sum |
+              awk '{print toupper($1)}'
+          )"
+
+          expected_cert="$(
+            printf '%s' "$EXPECTED_CERT_SHA256" |
+              tr -cd '0-9A-Fa-f' |
+              tr '[:lower:]' '[:upper:]'
+          )"
+
+          [[ "$expected_cert" =~ ^[0-9A-F]{64}$ ]] || {
+            echo "Pinned signing certificate is invalid." >&2
+            exit 1
+          }
+
+          [[ "$actual_cert" == "$expected_cert" ]] || {
+            echo "The stored Android keystore does not match the permanent Trivox identity." >&2
+            echo "Expected: $expected_cert" >&2
+            echo "Actual:   $actual_cert" >&2
+            echo "No key was changed. Restore the original repository secret." >&2
+            exit 1
+          }
+
+          printf 'Permanent signing identity verified: %s\n' "$actual_cert"
+
+          {
+            printf '%s\n' "storeFile=$RUNNER_TEMP/trivox-release.jks"
+            printf '%s\n' "storePassword=$KEYSTORE_PASSWORD"
+            printf '%s\n' "keyAlias=$KEY_ALIAS"
+            printf '%s\n' "keyPassword=$KEY_PASSWORD"
+          } > signing.properties
+
+      - name: Build selected variants
+        shell: bash
+        env:
+          REQUESTED_BUILD: ${{ inputs.build_type }}
+          TRIVOX_ABIS: ${{ steps.core.outputs.abis }}
+        run: |
+          set -euo pipefail
+
+          bash build.sh "${REQUESTED_BUILD:-all}"
+
+          compgen -G "dist/*.apk" > /dev/null || {
+            echo "No APK files were generated." >&2
+            exit 1
+          }
+
+          test -s dist/SHA256SUMS.txt
+
+          {
+            printf 'versionName=%s\n' "$TRIVOX_VERSION_NAME"
+            printf 'versionCode=%s\n' "$TRIVOX_VERSION_CODE"
+            printf 'gitSha=%s\n' "$TRIVOX_GIT_SHA"
+            printf 'coreVersion=%s\n' "${{ steps.core.outputs.version }}"
+          } > dist/VERSION.txt
+
+          ls -lh dist/*.apk
+          cat dist/SHA256SUMS.txt
+          cat dist/VERSION.txt
+
+      - name: Verify stable APK certificate
+        shell: bash
+        env:
+          EXPECTED_CERT_SHA256: ${{ env.STABLE_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+
+          apksigner="$(
+            find "$ANDROID_HOME/build-tools" \
+              -type f \
+              -name apksigner \
+              -print |
+              sort -V |
+              tail -n 1
+          )"
+
+          [[ -x "$apksigner" ]] || {
+            echo "apksigner was not found." >&2
+            exit 1
+          }
+
+          normalize_sha256() {
+            tr -cd '0-9A-Fa-f' |
+              tr '[:lower:]' '[:upper:]'
+          }
+
+          extract_cert_sha256() {
+            awk -F ': ' 'index(tolower($0), "certificate sha-256 digest:") { value=$NF; gsub(/[^0-9A-Fa-f]/, "", value); print toupper(value); exit }'
+          }
+
+          expected="$(
+            printf '%s' "$EXPECTED_CERT_SHA256" |
+              normalize_sha256
+          )"
+
+          [[ "$expected" =~ ^[0-9A-F]{64}$ ]] || {
+            echo "ANDROID_CERT_SHA256 is empty or invalid." >&2
+            exit 1
+          }
+
+          parser_test="$(
+            printf '%s\n' \
+              "V2 Signer: certificate SHA-256 digest: a4bf01b1c2f213e60f9944784b26af6d647418ac181b4f8feeccb2cef00fbc9c" |
+              extract_cert_sha256
+          )"
+
+          [[ "$parser_test" == "A4BF01B1C2F213E60F9944784B26AF6D647418AC181B4F8FEECCB2CEF00FBC9C" ]] || {
+            echo "The certificate parser self-test failed." >&2
+            exit 1
+          }
+
+          shopt -s nullglob
+          apks=(dist/*.apk)
+          shopt -u nullglob
+
+          (( ${#apks[@]} > 0 )) || {
+            echo "No APK files are available for certificate verification." >&2
+            exit 1
+          }
+
+          first=""
+
+          for apk in "${apks[@]}"; do
+            cert_output=""
+
+            if ! cert_output="$(
+              "$apksigner" verify \
+                --verbose \
+                --print-certs \
+                "$apk" \
+                2>&1
+            )"; then
+              printf '%s\n' "$cert_output" >&2
+              echo "APK signature verification failed: $apk" >&2
+              exit 1
+            fi
+
+            printf '%s\n' "$cert_output"
+
+            actual="$(
+              printf '%s\n' "$cert_output" |
+                extract_cert_sha256
+            )"
+
+            [[ "$actual" =~ ^[0-9A-F]{64}$ ]] || {
+              echo "Could not parse a valid certificate SHA-256 from $apk" >&2
+              echo "Raw apksigner output:" >&2
+              printf '%s\n' "$cert_output" >&2
+              exit 1
+            }
+
+            [[ "$actual" == "$expected" ]] || {
+              echo "Unexpected certificate for $apk" >&2
+              echo "Expected: $expected" >&2
+              echo "Actual:   $actual" >&2
+              exit 1
+            }
+
+            if [[ -z "$first" ]]; then
+              first="$actual"
+            elif [[ "$first" != "$actual" ]]; then
+              echo "APK signatures are inconsistent." >&2
+              echo "First:   $first" >&2
+              echo "Current: $actual" >&2
+              echo "APK:     $apk" >&2
+              exit 1
+            fi
+
+            printf 'Verified certificate %s for %s\n' \
+              "$actual" \
+              "$apk"
+          done
+
+          printf '%s\n' "$first" > \
+            dist/SIGNING_CERT_SHA256.txt
+
+      - name: Remove temporary signing files
+        if: always()
+        shell: bash
+        run: |
+          rm -f -- \
+            signing.properties \
+            "$RUNNER_TEMP/trivox-release.jks"
+
+      - name: Publish APK files for direct download
+        if: >-
+          github.event_name == 'workflow_dispatch' ||
+          (github.event_name == 'push' &&
+          (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          if [[ -n "$INPUT_RELEASE_TAG" ]]; then
+            release_tag="$INPUT_RELEASE_TAG"
+          else
+            release_tag="v${TRIVOX_VERSION_NAME}"
+          fi
+
+          release_title="Trivox ${TRIVOX_VERSION_NAME} (${TRIVOX_GIT_SHA})"
+
+          if gh release view "$release_tag" > /dev/null 2>&1; then
+            gh release upload \
+              "$release_tag" \
+              dist/*.apk \
+              dist/SHA256SUMS.txt \
+              dist/VERSION.txt \
+              dist/SIGNING_CERT_SHA256.txt \
+              --clobber
+          else
+            gh release create \
+              "$release_tag" \
+              dist/*.apk \
+              dist/SHA256SUMS.txt \
+              dist/VERSION.txt \
+              dist/SIGNING_CERT_SHA256.txt \
+              --target "$GITHUB_SHA" \
+              --title "$release_title" \
+              --generate-notes \
+              --prerelease
+          fi
+
+          {
+            echo "### Direct APK downloads"
+            echo
+            echo "Version: \`${TRIVOX_VERSION_NAME}\` (code \`${TRIVOX_VERSION_CODE}\`)"
+            echo
+
+            for apk in dist/*.apk; do
+              name="$(basename -- "$apk")"
+              echo "- [$name](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${release_tag}/${name})"
+            done
+
+            echo "- [SHA256SUMS.txt](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${release_tag}/SHA256SUMS.txt)"
+            echo "- [VERSION.txt](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${release_tag}/VERSION.txt)"
+            echo "- [SIGNING_CERT_SHA256.txt](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${release_tag}/SIGNING_CERT_SHA256.txt)"
+          } >> "$GITHUB_STEP_SUMMARY"
