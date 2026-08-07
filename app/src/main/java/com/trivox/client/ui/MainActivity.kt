@@ -36,11 +36,13 @@ import androidx.appcompat.widget.AppCompatImageButton
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
 import androidx.core.os.LocaleListCompat
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.trivox.client.R
 import com.trivox.client.ui.compose.LegacyLayoutBridge
+import com.trivox.client.ui.compose.ComposeBatchState
 import com.trivox.client.ui.compose.MainComposeActions
 import com.trivox.client.ui.compose.MainComposeScreen
 import com.trivox.client.config.ConfigParser
@@ -143,6 +145,12 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         ConcurrentHashMap<String, PingResult>()
     private val pingFlushScheduled =
         AtomicBoolean(false)
+    private val composeRevisionState = mutableIntStateOf(0)
+    private val composeBatchRunning = AtomicBoolean(false)
+    private val composeBatchCompleted = AtomicInteger(0)
+    private val composeBatchTotal = AtomicInteger(0)
+    @Volatile
+    private var composeBatchMethod: PingMethod? = null
 
     @Volatile
     private var livePingResult:
@@ -268,6 +276,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         setupToolbar()
         setupList()
         setupControls()
+        repairStaleTestingStates()
         handleShareIntent(intent)
 
         ConnectionRuntime.addListener(runtimeListener)
@@ -641,6 +650,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             return
         }
 
+        notifyComposeChanged()
         refreshSubscriptionsButton.isEnabled =
             false
         refreshSubscriptionsButton.text = "…"
@@ -691,6 +701,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                         runOnUiThreadIfAlive {
                             subscriptionRefreshBusy
                                 .set(false)
+                            notifyComposeChanged()
                             refreshSubscriptionsButton
                                 .isEnabled = true
                             refreshSubscriptionsButton
@@ -726,6 +737,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
 
         if (!accepted) {
             subscriptionRefreshBusy.set(false)
+            notifyComposeChanged()
             refreshSubscriptionsButton.isEnabled =
                 true
             refreshSubscriptionsButton.text = "↻"
@@ -775,6 +787,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             R.string
                 .live_ping_measuring
         )
+        notifyComposeChanged()
         handler.removeCallbacks(
             livePingTick
         )
@@ -962,6 +975,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             R.string
                 .real_delay_measuring
         )
+        notifyComposeChanged()
         val sessionId =
             snapshot.sessionId
 
@@ -1457,6 +1471,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             infoProfile,
             settings
         )
+        notifyComposeChanged()
     }
 
     private fun renderConnectedInfo(
@@ -1841,17 +1856,37 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         )
     }
 
+    private fun repairStaleTestingStates() {
+        storageWorker.execute {
+            val staleIds = repository.all()
+                .filter { profile ->
+                    profile.testStatus == TestStatus.TESTING ||
+                        profile.tcpTestStatus == TestStatus.TESTING ||
+                        profile.realTestStatus == TestStatus.TESTING
+                }
+                .map(ConfigProfile::id)
+
+            if (staleIds.isEmpty()) return@execute
+
+            repository.updateMany(staleIds) { profile ->
+                if (profile.testStatus == TestStatus.TESTING) {
+                    profile.testStatus = TestStatus.UNTESTED
+                }
+                if (profile.tcpTestStatus == TestStatus.TESTING) {
+                    profile.tcpTestStatus = TestStatus.UNTESTED
+                }
+                if (profile.realTestStatus == TestStatus.TESTING) {
+                    profile.realTestStatus = TestStatus.UNTESTED
+                }
+            }
+            runOnUiThreadIfAlive(::refresh)
+        }
+    }
+
     private fun testSingleProfile(
         profile: ConfigProfile,
         method: PingMethod = PingMethod.TCP_CONNECT
     ) {
-        if (
-            profile.testStatus ==
-            TestStatus.TESTING
-        ) {
-            return
-        }
-
         if (
             method == PingMethod.XRAY_HTTP &&
             ConnectionRuntime.current().state !in setOf(
@@ -1868,9 +1903,12 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             pingGeneration.incrementAndGet()
 
         storageWorker.execute {
-            repository.update(profile.id) {
-                it.testStatus =
-                    TestStatus.TESTING
+            repository.update(profile.id) { current ->
+                current.testStatus = TestStatus.TESTING
+                when (method) {
+                    PingMethod.TCP_CONNECT -> current.tcpTestStatus = TestStatus.TESTING
+                    PingMethod.XRAY_HTTP -> current.realTestStatus = TestStatus.TESTING
+                }
             }
 
             runOnUiThread(::refresh)
@@ -1937,7 +1975,12 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         cancelPingTasks()
         val generation =
             pingGeneration.incrementAndGet()
+        composeBatchMethod = method
+        composeBatchCompleted.set(0)
+        composeBatchTotal.set(0)
+        composeBatchRunning.set(true)
         setBatchControlsEnabled(false)
+        notifyComposeChanged()
 
         storageWorker.execute {
             val subscriptionId = activeSubscriptionId
@@ -1953,16 +1996,28 @@ class MainActivity : ThemedActivity(), MainComposeActions {
 
             if (profiles.isEmpty()) {
                 runOnUiThread {
+                    composeBatchRunning.set(false)
+                    composeBatchMethod = null
+                    composeBatchCompleted.set(0)
+                    composeBatchTotal.set(0)
                     setBatchControlsEnabled(true)
+                    notifyComposeChanged()
+                    toast(getString(R.string.no_profiles))
                 }
                 return@execute
             }
 
+            composeBatchTotal.set(profiles.size)
+            notifyComposeChanged()
+
             repository.updateMany(
                 profiles.map { it.id }
-            ) {
-                it.testStatus =
-                    TestStatus.TESTING
+            ) { current ->
+                current.testStatus = TestStatus.TESTING
+                when (method) {
+                    PingMethod.TCP_CONNECT -> current.tcpTestStatus = TestStatus.TESTING
+                    PingMethod.XRAY_HTTP -> current.realTestStatus = TestStatus.TESTING
+                }
             }
 
             runOnUiThread {
@@ -2003,6 +2058,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
 
                     val completedCount =
                         completed.incrementAndGet()
+                    composeBatchCompleted.set(completedCount)
 
                     if (
                         completedCount == totalProfiles ||
@@ -2030,6 +2086,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                                     tcpPingButton.text =
                                         label
                                 }
+                                notifyComposeChanged()
                             }
                         }
                     }
@@ -2043,9 +2100,9 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                             immediate = true
                         )
                         runOnUiThread {
-                            setBatchControlsEnabled(
-                                true
-                            )
+                            composeBatchRunning.set(false)
+                            setBatchControlsEnabled(true)
+                            notifyComposeChanged()
                         }
                     }
                 }
@@ -2575,9 +2632,12 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     }
 
     private fun confirmClearDeadProfiles() {
-        val dead = repository.all().filter {
-            it.testStatus == TestStatus.DEAD ||
-                it.testStatus == TestStatus.ERROR
+        val dead = repository.all().filter { profile ->
+            val tcpFailed = profile.tcpTestStatus in setOf(TestStatus.DEAD, TestStatus.ERROR)
+            val realFailed = profile.realTestStatus in setOf(TestStatus.DEAD, TestStatus.ERROR)
+            val anyAlive = profile.tcpTestStatus == TestStatus.ALIVE ||
+                profile.realTestStatus == TestStatus.ALIVE
+            !anyAlive && tcpFailed && realFailed
         }
         if (dead.isEmpty()) {
             toast(getString(R.string.no_dead_profiles))
@@ -3334,7 +3394,15 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         pingManager.cancel(tasks)
         pingResultBuffer.clear()
         pingFlushScheduled.set(false)
+        composeBatchRunning.set(false)
+        composeBatchMethod = null
+        composeBatchCompleted.set(0)
+        composeBatchTotal.set(0)
         setBatchControlsEnabled(true)
+        notifyComposeChanged()
+        if (::repository.isInitialized && !activityDestroyed.get()) {
+            repairStaleTestingStates()
+        }
     }
 
     private fun dualLatencyTier(profile: ConfigProfile): Int {
@@ -3505,6 +3573,19 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         }
     }
 
+    private fun notifyComposeChanged() {
+        val update = {
+            if (!activityDestroyed.get()) {
+                composeRevisionState.intValue = composeRevisionState.intValue + 1
+            }
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            update()
+        } else {
+            handler.post(update)
+        }
+    }
+
     private fun toast(message: String) =
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
 
@@ -3537,6 +3618,16 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     }
 
 
+    override fun composeRevision(): Int = composeRevisionState.intValue
+
+    override fun composeBatchState(): ComposeBatchState =
+        ComposeBatchState(
+            running = composeBatchRunning.get(),
+            method = composeBatchMethod,
+            completed = composeBatchCompleted.get(),
+            total = composeBatchTotal.get()
+        )
+
     override fun composeProfiles(
         query: String,
         subscriptionId: String?,
@@ -3565,6 +3656,8 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     override fun composeSubscriptions(): List<SubscriptionSource> =
         SubscriptionRepository(this).all().sortedBy { it.name.lowercase(Locale.getDefault()) }
 
+    override fun composeSubscriptionRefreshing(): Boolean = subscriptionRefreshBusy.get()
+
     override fun composeSelectedId(): String? =
         if (::repository.isInitialized) repository.selectedId() else null
 
@@ -3588,6 +3681,10 @@ class MainActivity : ThemedActivity(), MainComposeActions {
 
     override fun composeProfileActions(id: String) {
         repository.find(id)?.let { showActions(it) }
+    }
+
+    override fun composeSubscriptionActions(id: String) {
+        showSubscriptionActions(id)
     }
 
     override fun composePingProfile(id: String, method: PingMethod) {
@@ -3631,6 +3728,29 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         applyLayout()
     }
 
+    override fun composeSetHideIp(value: Boolean) {
+        if (!::settingsRepository.isInitialized) return
+        val settings = settingsRepository.load()
+        if (settings.hideIpOnMain == value) return
+        settings.hideIpOnMain = value
+        settingsRepository.save(settings)
+        refresh()
+    }
+
+    override fun composeSetLivePingEnabled(value: Boolean) {
+        if (!::settingsRepository.isInitialized) return
+        val settings = settingsRepository.load()
+        if (settings.livePingEnabled == value) return
+        settings.livePingEnabled = value
+        settingsRepository.save(settings)
+        handler.removeCallbacks(livePingTick)
+        val runtime = ConnectionRuntime.current()
+        if (value && runtime.state == ConnectionState.CONNECTED) {
+            handler.post(livePingTick)
+        }
+        refresh()
+    }
+
     override fun composeRequestQuickTile() {
         requestQuickSettingsTile()
     }
@@ -3670,6 +3790,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         if (::modeSpinner.isInitialized) {
             modeSpinner.setSelection(if (mode == ConnectionMode.PROXY) 0 else 1)
         }
+        refresh()
     }
 
     override fun composeLivePingLabel(): String =

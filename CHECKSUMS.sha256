@@ -71,7 +71,7 @@ dc879e75b4e8092ad7f7048d552e249857c28986660042f6d960fb14de6ac883  ./app/src/main
 74ff5b2702aa219b05be9a26c6ba3c4c6bf06646a1696dbd03d5f8f0f9c31b8a  ./app/src/main/java/com/trivox/client/ui/AppRoutingActivity.kt
 ad6d28dc0250e5488d031ec795bc50f7bfbfe60904f07201ff265e79e78e4b59  ./app/src/main/java/com/trivox/client/ui/ConfigEditorActivity.kt
 87d6ef8ca1afd60d560ca7164bea2967a5dbc42ecf9bb46f98cf53272631c338  ./app/src/main/java/com/trivox/client/ui/DiagnosticsActivity.kt
-60cbd5f48ba998145390f932aa14d1b376e8c1bad2060e68ab01e740a034f7dd  ./app/src/main/java/com/trivox/client/ui/MainActivity.kt
+575425040275726d50a4f04a316500694abd5da036e4dba11aa932b8e71fd406  ./app/src/main/java/com/trivox/client/ui/MainActivity.kt
 b3e355f0422a85f1170700f37ecd9b58c8a13594861116c5bc42ebb3f4563c58  ./app/src/main/java/com/trivox/client/ui/ManualConfigActivity.kt
 6f38d4731b10ced728c0a74958721a97e662ecdf157c5b9ebfb55b1162690ad8  ./app/src/main/java/com/trivox/client/ui/ProfileAdapter.kt
 ff3087ffbb877efe2b4beed9017e409eec693d1f017c5d9becb70c9cc2e7c6f1  ./app/src/main/java/com/trivox/client/ui/ProxyChainActivity.kt
@@ -80,9 +80,9 @@ ff3087ffbb877efe2b4beed9017e409eec693d1f017c5d9becb70c9cc2e7c6f1  ./app/src/main
 ac90290ded6f5c25887f62b5d722b08e5b057a1cc144ea71bbaac5b5f7a4acbc  ./app/src/main/java/com/trivox/client/ui/ThemedActivity.kt
 856eeb8e2c72ceb08be0651e9bde7e29bc503389c0a4bfaa17b03b8b878bb929  ./app/src/main/java/com/trivox/client/ui/UiInsets.kt
 a6dd44767d64edae8ec54895ddb524009b13034d450baff8d1aae5a3228b96e4  ./app/src/main/java/com/trivox/client/ui/compose/LegacyLayoutBridge.kt
-e8898d66b7a7ffc7fca7d2ccf41327cd877f17758de8bcfd2b6b0226dd80d4a0  ./app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt
-e9df055e30734cdfd2ba1f81a228df122f5102a78b31ea95b537e881da5abc43  ./app/src/main/java/com/trivox/client/ui/compose/RoutingComposeScreen.kt
-8018571a7519df58e99c7e510b58df10333b061fc98e95064278d595555ea146  ./app/src/main/java/com/trivox/client/ui/compose/TrivoxComposeUi.kt
+a3e724c35a9dd5480710a5ce2021a70f260dec7416a95084017bd82cc5789f58  ./app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt
+d0af0b76e024009807055a3c35360470077b6512547d1ecc7657e51ed75bc587  ./app/src/main/java/com/trivox/client/ui/compose/RoutingComposeScreen.kt
+471e18887b77304ea7e5e67942da7549bba4b0074ba1b9bd58875d75f9e01c8c  ./app/src/main/java/com/trivox/client/ui/compose/TrivoxComposeUi.kt
 22fc2fea3013958e0f3950f89b1836eef3a950e78b4d49fc7f194828196a4d13  ./app/src/main/java/com/trivox/client/update/UpdateChecker.kt
 6cf684b1ce5e58a5a42adba26fa59d5b44cb4bd940e4690c2aa43714d72e407c  ./app/src/main/java/com/trivox/client/update/VersionComparator.kt
 5042ff89fce0dabd9f1f4af42b75e21d482a2482b32e4a4ded767839ed7b8db7  ./app/src/main/java/com/trivox/client/util/Diagnostics.kt
@@ -93,6 +93,11 @@ c49b7cf4371055f07084eaa8d1ed3643ee4ea9960c14bb108eaab25d336442a6  ./app/src/main
 2b1a39feb0a84774a32ee4ca7aeb0e2f19fe3cfdb2b276d3669e2119c692112f  ./app/src/main/res/drawable/button_secondary_background.xml
 d8643f4c4faa19c368a26882fffb02c1e5ea1513eac61ded190e9616e5661977  ./app/src/main/res/drawable/ic_expand_more_rounded.xml
 d92ffea6a7c7586f03b1a8df236253cdffa858b015e7ddf15d43c6b2b46987ec  ./app/src/main/res/drawable/ic_launcher.xml
+c56930c3ac4c47f06ebf753c2dcc9c37eb44c2e4360104d1f09e064d32fd68a5  ./app/src/main/res/drawable/ic_nav_configs.xml
+ae6d9b56cda2496c7b72eed2a4647e9fbead879af7eca62d528d15b1debcd444  ./app/src/main/res/drawable/ic_nav_home.xml
+7bff7076ea48c993ccb9e19f97239637a4c31fd7e712908224b0c8baa19996f2  ./app/src/main/res/drawable/ic_nav_settings.xml
+6101c16382d478b926f5d1f7f8f956b948000b9813f5f1024e2b5e62f7628f40  ./app/src/main/res/drawable/ic_nav_subscriptions.xml
+21ea3fec4643678f8cfd2113ab6900eb553c77e59c8a9457bdd4d3e8ef4de429  ./app/src/main/res/drawable/ic_nav_tools.xml
 f1f938bd9762e5de6e6431ae2c62c5263900925e5f9ef1c70c36d9f8305791f9  ./app/src/main/res/drawable/ic_qs_trivox.xml
 86a189e0c9b098a5f61040abf0334a3a8e56f00ae0a525390a584298bc7c0e2b  ./app/src/main/res/drawable/ic_view_grid_compact.xml
 8402eaf61d40217de6d55d3c909e9b6eed01d9cc5aa77d6639fa9fdff8c16fe4  ./app/src/main/res/drawable/input_background.xml
@@ -111,7 +116,7 @@ b986623e4ddef10755e04be39f8ea7bcb1dc08bfe8dd0aa6af395736f256ad4a  ./app/src/main
 b69fd4c680b8f3f225feabcc655a2c585d97627b8f5f5c0f9985e894069f3a56  ./app/src/main/res/font/vazirmatn_regular.ttf
 3f239d8364c14ee32c46b6839fa197c28958358b82a9673d2c6acc8506d78bc5  ./app/src/main/res/font/vazirmatn_semibold.ttf
 f681d58e5dd2d6164dff96c43c8a1a220493e800d70704496ca152061dc37ffd  ./app/src/main/res/values-fa/strings.xml
-2e426b023118e1d6ff8f75a4fa62df5f9ef2d365aa3da482d873e55ecb5db682  ./app/src/main/res/values-fa/strings_compose.xml
+aa540ec05dbb46eca1256e9990c2fdc625c5b7fc1bd300b65fed658c4896ac05  ./app/src/main/res/values-fa/strings_compose.xml
 6729578bff05f2b26ccf9bdffc61671df8008ef5869cdb189c3dad3ed127205a  ./app/src/main/res/values-fa/strings_v12.xml
 5da8ce3fb73ba437fa6a6e53e39163fc5e16effeb22b968c09b5976651d0a23a  ./app/src/main/res/values-fa/strings_v5.xml
 4242e41fb57e37e6524fa95974f5c15183e79eb1f39668e80c5ea7d672642d02  ./app/src/main/res/values-fa/strings_v6.xml
@@ -122,7 +127,7 @@ b8b7fe474702c1af44b4c2eb4acb33b977d43e1a699dce9f1c7f7bd49380346e  ./app/src/main
 5e0bca21c634fb2fb7e0b9de200e2b69cc0c07320404bdd23222871d8b5337f5  ./app/src/main/res/values/colors.xml
 8cc35c7e18aac36fff2cef9f403f957e38800a50a910ee1627f6911d83478ce3  ./app/src/main/res/values/ids.xml
 d2eb089b72b35f7a33329050c6a2b4be78966fe2cb20124af37039740f23ff4a  ./app/src/main/res/values/strings.xml
-2e4ed91d55b4f19bb265a2601d5dbacd2ab6172e7306cfffa608bb7088ecac22  ./app/src/main/res/values/strings_compose.xml
+c650a0f1bc0373ae6a46aa6e8d74d90491807646223e243c231befd5e9d6ce01  ./app/src/main/res/values/strings_compose.xml
 4d25ec713dc129a1efbd7b77408fec99a814c77d9f3a89c9198deeef82dc508f  ./app/src/main/res/values/strings_v12.xml
 f7333ba6238aa0b5c956863188f83a44540177277d65dbe8532c15a90cf76189  ./app/src/main/res/values/strings_v5.xml
 6b4409ba988861824bf4ea9b99762474d092657b3e9110a8e32f6ea13d3bef59  ./app/src/main/res/values/strings_v6.xml
@@ -159,7 +164,6 @@ f9572e2734030d1fcf516b4236de70e9cb71ea329eff118072a6834734ba3727  ./app/src/test
 b456d4dfb091478c253af3aeb6777d09e4894e96d6379f18c66e1f4c6169569a  ./build.gradle.kts
 ef314a208b0756a4121392974ccd457b81fef8de09ad34cbe76c6a963af22160  ./build.ps1
 be28a038fa4e751aecebf9fcc8753aae6de9d4e753ea9b5537dad6d68e019303  ./build.sh
-26b380c4982fa5fc11e30f9f6c7b5d93aca6f551387e8853b517c22693fa759a  ./core-input/README.md
 d9f657e744b8a5d0e3629d63b2f2f8607823c15aec9527f5bcc1c872a002bfee  ./docs/CORE_CAPABILITY_MATRIX.md
 bb9744c67489d7fbf0064fb36398ad18577578799a985af3198dcb11b6cbcfa2  ./docs/TRIVOX_FULL_TECHNICAL_AUDIT_V3.md
 374c95b6e150d2449c110bc97ffc43573a495920d6a6cdafee7c381212e925f2  ./docs/TRIVOX_PERFORMANCE_UI_V2.md
@@ -188,4 +192,4 @@ d9775eefee793eb1a110e470ab92688a0a8f5040a619b2435e5ebb397e57b9ea  ./tools/openss
 03d4961aeb69ca9e3278ec4c3f1757a8a9237cf5ecf79825be386e19f70d949e  ./tools/validate-android-resources.py
 5e0eaf59e140118cf08891e912a2b945b09adbb3f823f4e6c4e82097742f2c93  ./tools/validate-api-guards.py
 94e56f1059f0981fad2db85aa1e43a8b93a93ebbf37479d016143e91d587fe37  ./tools/validate-string-formats.py
-7f88b27f132bdd3b3e268e45264bafc8767d5f7bfb05470a73d03ebf384baaa1  ./tools/verify-compose-migration.sh
+d67ae567dd2956151731f5e8fb8d56a6fe83a663cfb19cb70eefc46444860d1f  ./tools/verify-compose-migration.sh

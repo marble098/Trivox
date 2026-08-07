@@ -96,4 +96,27 @@ print(f'Compose ID contract passed: {len(used)} Kotlin IDs are defined.')
 PY
 fi
 
+# Runtime/UI regression checks added after the full Material 3 stabilization pass.
+main_compose="app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt"
+routing_compose="app/src/main/java/com/trivox/client/ui/compose/RoutingComposeScreen.kt"
+legacy_compose="app/src/main/java/com/trivox/client/ui/compose/TrivoxComposeUi.kt"
+main_activity="app/src/main/java/com/trivox/client/ui/MainActivity.kt"
+
+grep -Fq 'contentWindowInsets = WindowInsets(0, 0, 0, 0)' "$main_compose" || \
+  fail "main Compose screen may double-apply system bar insets"
+grep -Fq 'NavigationBar(windowInsets = WindowInsets(0, 0, 0, 0))' "$main_compose" || \
+  fail "bottom navigation may double-apply navigation-bar insets"
+grep -Fq 'composeBatchState' "$main_compose" || fail "Compose batch-test progress state missing"
+grep -Fq 'composeSubscriptionActions' "$main_compose" || fail "subscription actions are not exposed in Compose"
+grep -Fq 'GridCells.Adaptive' "$main_compose" || fail "Compose grid mode is not implemented"
+! grep -Fq 'R.string.status_alive' "$main_compose" || fail "formatted legacy alive label used without arguments"
+! grep -Fq 'R.string.status_dead' "$main_compose" || fail "formatted legacy dead label used without arguments"
+grep -Fq 'current.tcpTestStatus = TestStatus.TESTING' "$main_activity" || \
+  fail "TCP tests do not publish method-specific running state"
+grep -Fq 'current.realTestStatus = TestStatus.TESTING' "$main_activity" || \
+  fail "Real Delay tests do not publish method-specific running state"
+grep -Fq 'repairStaleTestingStates' "$main_activity" || fail "stale testing-state recovery missing"
+grep -Fq 'RadioButton' "$routing_compose" || fail "responsive routing policy selector missing"
+grep -Fq 'AlertDialog' "$legacy_compose" || fail "safe spinner dialog renderer missing"
+
 echo "Compose Material 3 migration verification passed."
