@@ -1,0 +1,196 @@
+name: Trivox Actions-Only Full Repository Replace
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_tag:
+        required: true
+        type: string
+      asset_name:
+        required: true
+        type: string
+      target_branch:
+        required: true
+        type: string
+      original_sha:
+        required: true
+        type: string
+      dispatch_sha:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  replace:
+    name: Validate and completely replace repository tree
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout only on GitHub-hosted runner
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_branch }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Refuse concurrent branch changes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          current="$(git rev-parse HEAD)"
+          expected="${{ inputs.dispatch_sha }}"
+          if [[ "$current" != "$expected" ]]; then
+            echo "::error::Target branch changed after dispatch setup. Expected $expected, got $current."
+            exit 1
+          fi
+
+      - name: Create remote safety tag
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          tag="trivox-backup-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git tag "$tag" "${{ inputs.original_sha }}"
+          git push origin "refs/tags/$tag"
+          echo "Backup tag: $tag" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Download source ZIP inside GitHub
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "$RUNNER_TEMP/trivox-upload"
+          gh release download "${{ inputs.upload_tag }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "${{ inputs.asset_name }}" \
+            --dir "$RUNNER_TEMP/trivox-upload"
+          test -s "$RUNNER_TEMP/trivox-upload/${{ inputs.asset_name }}"
+
+      - name: Validate ZIP and locate project root
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ZIP="$RUNNER_TEMP/trivox-upload/${{ inputs.asset_name }}"
+          DEST="$RUNNER_TEMP/trivox-new-source"
+          rm -rf "$DEST"
+          mkdir -p "$DEST"
+
+          python3 - "$ZIP" "$DEST" <<'PY'
+          import pathlib, sys, zipfile
+
+          zip_path = pathlib.Path(sys.argv[1])
+          dest = pathlib.Path(sys.argv[2]).resolve()
+
+          with zipfile.ZipFile(zip_path) as zf:
+              bad = zf.testzip()
+              if bad:
+                  raise SystemExit(f"Corrupted ZIP member: {bad}")
+              for info in zf.infolist():
+                  name = info.filename.replace('\\', '/')
+                  if not name or name.endswith('/'):
+                      continue
+                  p = pathlib.PurePosixPath(name)
+                  if p.is_absolute() or '..' in p.parts:
+                      raise SystemExit(f"Unsafe ZIP path: {name}")
+              zf.extractall(dest)
+
+          entries = [p for p in dest.iterdir() if p.name != '__MACOSX']
+          if not entries:
+              raise SystemExit("ZIP extracted to an empty directory")
+
+          def project(root: pathlib.Path) -> bool:
+              has_settings = (root / 'settings.gradle.kts').is_file() or (root / 'settings.gradle').is_file()
+              return has_settings and (root / 'app').is_dir()
+
+          source = dest
+          if len(entries) == 1 and entries[0].is_dir() and project(entries[0]):
+              source = entries[0]
+          elif not project(dest):
+              candidates = [p for p in entries if p.is_dir() and project(p)]
+              if len(candidates) != 1:
+                  raise SystemExit("Could not uniquely locate Android project root")
+              source = candidates[0]
+
+          pathlib.Path('/tmp/trivox_source_root').write_text(str(source.resolve()), encoding='utf-8')
+          print(f"Validated source root: {source}")
+          PY
+
+      - name: Run source validators on GitHub runner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          SRC="$(cat /tmp/trivox_source_root)"
+          cd "$SRC"
+
+          run_py() { [[ -f "$1" ]] && python3 "$1" || true; }
+          run_sh() { [[ -f "$1" ]] && bash "$1" || true; }
+
+          if [[ -f tools/validate-android-resources.py ]]; then python3 tools/validate-android-resources.py; fi
+          if [[ -f tools/validate-api-guards.py ]]; then python3 tools/validate-api-guards.py; fi
+          if [[ -f tools/validate-string-formats.py ]]; then python3 tools/validate-string-formats.py; fi
+          if [[ -f tools/validate_android_resources.py ]]; then python3 tools/validate_android_resources.py; fi
+          if [[ -f tools/validate_android_api_guards.py ]]; then python3 tools/validate_android_api_guards.py; fi
+          if [[ -f tools/validate_android_string_formats.py ]]; then python3 tools/validate_android_string_formats.py; fi
+          if [[ -f tools/audit-trivox.py ]]; then python3 tools/audit-trivox.py --ci; fi
+          if [[ -f tools/technical_audit.py ]]; then python3 tools/technical_audit.py; fi
+          if [[ -f tools/verify-compose-migration.sh ]]; then bash tools/verify-compose-migration.sh; fi
+          if [[ -f tools/verify_compose_migration.py ]]; then python3 tools/verify_compose_migration.py; fi
+
+      - name: Delete current repository files and copy complete ZIP tree
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          SRC="$(cat /tmp/trivox_source_root)"
+
+          # Remove every checked-out file and directory except Git metadata.
+          find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf -- {} +
+
+          # Copy every source item, including dotfiles and .github.
+          cp -a "$SRC"/. "$GITHUB_WORKSPACE"/
+
+          cd "$GITHUB_WORKSPACE"
+          test -d app
+          test -f settings.gradle.kts -o -f settings.gradle
+          echo "Final tree files: $(find . -type f ! -path './.git/*' | wc -l)"
+
+      - name: Final Compose and whitespace sanity checks
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$GITHUB_WORKSPACE"
+          if [[ -f tools/verify-compose-migration.sh ]]; then
+            bash tools/verify-compose-migration.sh
+          fi
+          git add -A
+          git diff --cached --check
+
+      - name: Commit and push exact replacement tree
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$GITHUB_WORKSPACE"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "Repository already matches the ZIP tree."
+            exit 0
+          fi
+
+          git commit -m "Replace repository with Trivox Compose source"
+          git push origin "HEAD:${{ inputs.target_branch }}"
+
+      - name: Remove temporary source release
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          gh release delete "${{ inputs.upload_tag }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --cleanup-tag \
+            --yes
