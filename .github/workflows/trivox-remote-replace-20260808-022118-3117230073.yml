@@ -1,0 +1,303 @@
+name: Trivox Actions-Only Full Repository Replace
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_tag:
+        required: true
+        type: string
+      asset_name:
+        required: true
+        type: string
+      target_branch:
+        required: true
+        type: string
+      original_sha:
+        required: true
+        type: string
+      dispatch_sha:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: trivox-full-replace-${{ github.repository }}
+  cancel-in-progress: false
+
+env:
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  replace:
+    name: Validate and completely replace repository tree
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Verify temporary PAT secret on runner before checkout
+        shell: bash
+        env:
+          TRIVOX_PUSH_TOKEN: ${{ secrets.TRIVOX_REPLACE_PUSH_TOKEN_20260808_022118_3117230073 }}
+        run: |
+          set -Eeuo pipefail
+          if [[ -z "${TRIVOX_PUSH_TOKEN:-}" ]]; then
+            echo "::error::Temporary PAT secret is empty on the runner. The workflow will not touch the repository."
+            exit 1
+          fi
+          login="$(GH_TOKEN="$TRIVOX_PUSH_TOKEN" gh api user --jq '.login' 2>/dev/null || true)"
+          if [[ -z "$login" ]]; then
+            echo "::error::Temporary PAT secret reached the runner but GitHub rejected it."
+            exit 1
+          fi
+          echo "PAT secret is available to the runner as GitHub user: $login"
+
+      - name: Checkout repository with normal runner read credential only
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.target_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Refuse concurrent branch changes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          current="$(git rev-parse HEAD)"
+          expected="${{ inputs.dispatch_sha }}"
+          if [[ "$current" != "$expected" ]]; then
+            echo "::error::Target branch changed after dispatch setup. Expected $expected, got $current."
+            exit 1
+          fi
+
+      - name: Create remote safety tag with explicit user PAT
+        shell: bash
+        env:
+          TRIVOX_PUSH_TOKEN: ${{ secrets.TRIVOX_REPLACE_PUSH_TOKEN_20260808_022118_3117230073 }}
+        run: |
+          set -Eeuo pipefail
+          cd "$GITHUB_WORKSPACE"
+          ASKPASS="$RUNNER_TEMP/trivox-git-askpass.sh"
+          cat > "$ASKPASS" <<'SH'
+          #!/usr/bin/env bash
+          case "$1" in
+            *Username*) printf '%s\n' 'x-access-token' ;;
+            *Password*) printf '%s\n' "${TRIVOX_PUSH_TOKEN:?}" ;;
+            *) exit 1 ;;
+          esac
+          SH
+          chmod 700 "$ASKPASS"
+
+          tag="trivox-backup-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git tag "$tag" "${{ inputs.original_sha }}"
+          GIT_ASKPASS="$ASKPASS" GIT_TERMINAL_PROMPT=0 \
+            git -c credential.helper= push "https://github.com/${GITHUB_REPOSITORY}.git" "refs/tags/$tag"
+          echo "Backup tag: $tag" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Download source ZIP inside GitHub
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "$RUNNER_TEMP/trivox-upload"
+          gh release download "${{ inputs.upload_tag }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "${{ inputs.asset_name }}" \
+            --dir "$RUNNER_TEMP/trivox-upload"
+          test -s "$RUNNER_TEMP/trivox-upload/${{ inputs.asset_name }}"
+
+      - name: Validate ZIP, restore Unix modes, and locate project root
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ZIP="$RUNNER_TEMP/trivox-upload/${{ inputs.asset_name }}"
+          DEST="$RUNNER_TEMP/trivox-new-source"
+          rm -rf "$DEST"
+          mkdir -p "$DEST"
+
+          python3 - "$ZIP" "$DEST" <<'PY'
+          import os
+          import pathlib
+          import shutil
+          import stat
+          import sys
+          import zipfile
+
+          zip_path = pathlib.Path(sys.argv[1])
+          dest = pathlib.Path(sys.argv[2]).resolve()
+
+          with zipfile.ZipFile(zip_path) as zf:
+              bad = zf.testzip()
+              if bad:
+                  raise SystemExit(f"Corrupted ZIP member: {bad}")
+
+              for info in zf.infolist():
+                  raw_name = info.filename.replace('\\', '/')
+                  if not raw_name:
+                      continue
+                  rel = pathlib.PurePosixPath(raw_name)
+                  if rel.is_absolute() or '..' in rel.parts:
+                      raise SystemExit(f"Unsafe ZIP path: {raw_name}")
+
+                  target = dest.joinpath(*rel.parts)
+                  resolved_parent = target.parent.resolve()
+                  if dest != resolved_parent and dest not in resolved_parent.parents:
+                      raise SystemExit(f"ZIP member escapes destination: {raw_name}")
+
+                  unix_mode = (info.external_attr >> 16) & 0xFFFF
+                  if stat.S_ISLNK(unix_mode):
+                      raise SystemExit(f"Symlink entries are not accepted: {raw_name}")
+
+                  if info.is_dir() or raw_name.endswith('/'):
+                      target.mkdir(parents=True, exist_ok=True)
+                      if unix_mode:
+                          os.chmod(target, stat.S_IMODE(unix_mode))
+                      continue
+
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  with zf.open(info, 'r') as src, open(target, 'wb') as out:
+                      shutil.copyfileobj(src, out)
+                  if unix_mode:
+                      os.chmod(target, stat.S_IMODE(unix_mode))
+
+          entries = [p for p in dest.iterdir() if p.name != '__MACOSX']
+          if not entries:
+              raise SystemExit("ZIP extracted to an empty directory")
+
+          def project(root: pathlib.Path) -> bool:
+              has_settings = (root / 'settings.gradle.kts').is_file() or (root / 'settings.gradle').is_file()
+              return has_settings and (root / 'app').is_dir()
+
+          source = dest
+          if len(entries) == 1 and entries[0].is_dir() and project(entries[0]):
+              source = entries[0]
+          elif not project(dest):
+              candidates = [p for p in entries if p.is_dir() and project(p)]
+              if len(candidates) != 1:
+                  raise SystemExit("Could not uniquely locate Android project root")
+              source = candidates[0]
+
+          gradlew = source / 'gradlew'
+          if gradlew.is_file() and not os.access(gradlew, os.X_OK):
+              raise SystemExit("ZIP executable mode for gradlew was not restored")
+
+          pathlib.Path('/tmp/trivox_source_root').write_text(str(source.resolve()), encoding='utf-8')
+          print(f"Validated source root: {source}")
+          print(f"gradlew mode: {oct(gradlew.stat().st_mode & 0o777) if gradlew.exists() else 'missing'}")
+          PY
+
+      - name: Run source validators on GitHub runner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          SRC="$(cat /tmp/trivox_source_root)"
+          cd "$SRC"
+
+          if [[ -f tools/validate-android-resources.py ]]; then python3 tools/validate-android-resources.py; fi
+          if [[ -f tools/validate-api-guards.py ]]; then python3 tools/validate-api-guards.py; fi
+          if [[ -f tools/validate-string-formats.py ]]; then python3 tools/validate-string-formats.py; fi
+          if [[ -f tools/validate_android_resources.py ]]; then python3 tools/validate_android_resources.py; fi
+          if [[ -f tools/validate_android_api_guards.py ]]; then python3 tools/validate_android_api_guards.py; fi
+          if [[ -f tools/validate_android_string_formats.py ]]; then python3 tools/validate_android_string_formats.py; fi
+          if [[ -f tools/audit-trivox.py ]]; then python3 tools/audit-trivox.py --ci; fi
+          if [[ -f tools/technical_audit.py ]]; then python3 tools/technical_audit.py; fi
+          if [[ -f tools/verify-compose-migration.sh ]]; then bash tools/verify-compose-migration.sh; fi
+          if [[ -f tools/verify_compose_migration.py ]]; then python3 tools/verify_compose_migration.py; fi
+
+      - name: Delete current repository files and copy complete ZIP tree
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          SRC="$(cat /tmp/trivox_source_root)"
+
+          find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf -- {} +
+          cp -a "$SRC"/. "$GITHUB_WORKSPACE"/
+
+          cd "$GITHUB_WORKSPACE"
+          test -d app
+          test -f settings.gradle.kts -o -f settings.gradle
+          if [[ -f gradlew ]]; then
+            test -x gradlew || { echo "::error::gradlew lost executable mode"; exit 1; }
+          fi
+          echo "Final tree files: $(find . -type f ! -path './.git/*' | wc -l)"
+
+      - name: Final Compose, permission, and whitespace checks
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$GITHUB_WORKSPACE"
+          if [[ -f tools/verify-compose-migration.sh ]]; then
+            bash tools/verify-compose-migration.sh
+          fi
+          if [[ -f gradlew ]]; then
+            [[ -x gradlew ]] || { echo "::error::gradlew is not executable"; exit 1; }
+          fi
+          git add -A
+          git diff --cached --check
+
+      - name: Commit exact replacement tree
+        id: commit
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$GITHUB_WORKSPACE"
+          git config user.name "marble098"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Repository already matches the ZIP tree."
+            exit 0
+          fi
+
+          git commit -m "Replace repository with Trivox Compose source"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Push exact replacement with explicit user PAT
+        if: steps.commit.outputs.changed == 'true'
+        shell: bash
+        env:
+          TRIVOX_PUSH_TOKEN: ${{ secrets.TRIVOX_REPLACE_PUSH_TOKEN_20260808_022118_3117230073 }}
+        run: |
+          set -Eeuo pipefail
+          cd "$GITHUB_WORKSPACE"
+          [[ -n "${TRIVOX_PUSH_TOKEN:-}" ]] || { echo "::error::PAT secret missing at push time"; exit 1; }
+
+          ASKPASS="$RUNNER_TEMP/trivox-git-askpass.sh"
+          test -x "$ASKPASS" || {
+            echo "::error::PAT askpass helper is missing"
+            exit 1
+          }
+
+          # Checkout credentials are deliberately not persisted. The only credential
+          # used by this push is the PAT returned by GIT_ASKPASS.
+          GIT_ASKPASS="$ASKPASS" GIT_TERMINAL_PROMPT=0 \
+            git -c credential.helper= push "https://github.com/${GITHUB_REPOSITORY}.git" \
+            "HEAD:${{ inputs.target_branch }}"
+
+          echo "Replacement commit: $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Final push used the temporary user PAT through GIT_ASKPASS; checkout credentials were not persisted." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove temporary source release
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          gh release delete "${{ inputs.upload_tag }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --cleanup-tag \
+            --yes
+
+      - name: Delete temporary user push credential
+        if: always()
+        continue-on-error: true
+        shell: bash
+        env:
+          USER_GH_TOKEN: ${{ secrets.TRIVOX_REPLACE_PUSH_TOKEN_20260808_022118_3117230073 }}
+        run: |
+          set -Eeuo pipefail
+          [[ -n "${USER_GH_TOKEN:-}" ]] || exit 0
+          GH_TOKEN="$USER_GH_TOKEN" gh api --method DELETE \
+            "repos/$GITHUB_REPOSITORY/actions/secrets/TRIVOX_REPLACE_PUSH_TOKEN_20260808_022118_3117230073" || true
