@@ -7,6 +7,7 @@ import com.trivox.client.data.DnsMode
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -50,7 +51,7 @@ class XrayConfigBuilderWireGuardTest {
             XrayConfigBuilder.build(profile, settings, ConnectionMode.VPN)
         )
         val inbounds = root.getJSONArray("inbounds")
-        assertTrue((0 until inbounds.length()).any {
+        assertFalse((0 until inbounds.length()).any {
             inbounds.getJSONObject(it).optString("protocol") == "mixed"
         })
 

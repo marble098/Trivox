@@ -6,11 +6,12 @@ import com.trivox.client.data.ConnectionMode
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class XrayConfigBuilderWireGuardV6Test {
     @Test
-    fun normalizesPortableWireGuardFieldsWithoutOverwritingValidStrategy() {
+    fun normalizesPortableWireGuardFieldsToDocumentedStrategy() {
         val outbound = JSONObject()
             .put("protocol", "wireguard")
             .put(
@@ -45,8 +46,8 @@ class XrayConfigBuilderWireGuardV6Test {
             .getJSONObject("settings")
 
         assertEquals("10.5.0.2/32", settings.getJSONArray("address").getString(0))
-        assertEquals("AsIs", settings.getString("domainStrategy"))
-        assertEquals(2, settings.getInt("workers"))
+        assertEquals("ForceIPv4", settings.getString("domainStrategy"))
+        assertFalse(settings.has("workers"))
         assertEquals(
             "example.com:51820",
             settings.getJSONArray("peers").getJSONObject(0).getString("endpoint")

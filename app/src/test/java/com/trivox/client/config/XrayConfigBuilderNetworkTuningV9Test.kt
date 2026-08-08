@@ -104,7 +104,7 @@ class XrayConfigBuilderNetworkTuningV9Test {
         val peer = settings.getJSONArray("peers").getJSONObject(0)
 
         assertEquals(0, peer.getInt("keepAlive"))
-        assertEquals(3, settings.getInt("workers"))
+        assertFalse(settings.has("workers"))
         assertEquals(1300, settings.getInt("mtu"))
         assertEquals("ForceIPv4", settings.getString("domainStrategy"))
         assertEquals(2, peer.getJSONArray("allowedIPs").length())
