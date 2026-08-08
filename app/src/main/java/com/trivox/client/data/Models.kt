@@ -331,7 +331,7 @@ data class AppSettings(
     var wireGuardKeepAliveSeconds: Int = 25,
     var wireGuardHandshakeTimeoutMs: Int = 18_000,
     var wireGuardDomainStrategy: String = DEFAULT_WIREGUARD_DOMAIN_STRATEGY,
-    var nativeWireGuardVpn: Boolean = true
+    var nativeWireGuardVpn: Boolean = false
 ) {
     fun normalize(): AppSettings {
         if (socksPort == LEGACY_SOCKS_PORT || socksPort !in 1..65535) {
@@ -358,6 +358,13 @@ data class AppSettings(
         wireGuardDomainStrategy = wireGuardDomainStrategy
             .takeIf { it in WIREGUARD_DOMAIN_STRATEGIES }
             ?: DEFAULT_WIREGUARD_DOMAIN_STRATEGY
+
+        /*
+         * v24 removed the separate WireGuard Android Go backend after a
+         * reproducible libwg-go.so SIGSEGV. Keep this legacy JSON field only
+         * so old backups remain readable; runtime WireGuard is Xray-only.
+         */
+        nativeWireGuardVpn = false
         if (
             testUrl.isBlank() ||
             testUrl == LEGACY_TEST_URL ||
@@ -427,8 +434,7 @@ data class AppSettings(
             "ForceIPv4",
             "ForceIPv6",
             "ForceIPv4v6",
-            "ForceIPv6v4",
-            "AsIs"
+            "ForceIPv6v4"
         )
 
         private const val LEGACY_SOCKS_PORT = 10808
@@ -509,10 +515,7 @@ data class AppSettings(
                     "wireGuardDomainStrategy",
                     DEFAULT_WIREGUARD_DOMAIN_STRATEGY
                 ),
-                nativeWireGuardVpn = json.optBoolean(
-                    "nativeWireGuardVpn",
-                    true
-                )
+                nativeWireGuardVpn = false
             ).normalize()
         }
     }

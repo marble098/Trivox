@@ -51,10 +51,6 @@ class TrivoxVpnService : VpnService() {
         AtomicBoolean(false)
     private val ownsCore =
         AtomicBoolean(false)
-    private val nativeWireGuardActive =
-        AtomicBoolean(false)
-    private val nativeWireGuardStarting =
-        AtomicBoolean(false)
     private val reconnectQueued =
         AtomicBoolean(false)
     private var sshHandle: OpenSshTunnelBridge.Handle? = null
@@ -160,8 +156,6 @@ class TrivoxVpnService : VpnService() {
         stopRequested.set(false)
         cleanupStarted.set(false)
         ownsCore.set(false)
-        nativeWireGuardActive.set(false)
-        nativeWireGuardStarting.set(false)
         startedElapsed = 0L
         sessionId =
             ConnectionRuntime
@@ -307,65 +301,6 @@ class TrivoxVpnService : VpnService() {
                     !isWireGuard ||
                         wireGuardHasIpv6Address(profile)
                     )
-
-        if (
-            isWireGuard &&
-            settings.nativeWireGuardVpn &&
-            NativeWireGuardManager.supports(profile)
-        ) {
-            ConnectionRuntime.update(
-                ConnectionRuntime.Snapshot(
-                    state = ConnectionState.PREPARING,
-                    profileId = profile.id,
-                    profileName = profile.name,
-                    mode = ConnectionMode.VPN,
-                    sessionId = sessionId
-                )
-            )
-            ConnectionRuntime.updateSession(sessionId) {
-                it.copy(state = ConnectionState.CONNECTING)
-            }
-
-            nativeWireGuardStarting.set(true)
-            val nativeResult =
-                try {
-                    NativeWireGuardManager.start(
-                        context = this,
-                        profile = profile,
-                        settings = settings,
-                        isCancelled = {
-                            stopRequested.get() ||
-                                cleanupStarted.get()
-                        }
-                    )
-                } finally {
-                    nativeWireGuardStarting.set(false)
-                }
-
-            if (
-                stopRequested.get() ||
-                cleanupStarted.get() ||
-                nativeResult.errorCategory == "cancelled"
-            ) {
-                NativeWireGuardManager.cancelPending()
-                finishSession(null)
-                return
-            }
-
-            if (nativeResult.success) {
-                completeNativeWireGuardStart(
-                    profile = profile,
-                    result = nativeResult
-                )
-                return
-            }
-
-            NativeWireGuardManager.stop()
-            Diagnostics.warning(
-                "Native WireGuard unavailable; falling back to Xray: " +
-                    "${nativeResult.errorCategory} ${nativeResult.detail}"
-            )
-        }
 
         if (!core.adapter.isAvailable()) {
             fail(
@@ -719,81 +654,6 @@ class TrivoxVpnService : VpnService() {
     }
 
 
-    private fun completeNativeWireGuardStart(
-        profile: ConfigProfile,
-        result: NativeWireGuardManager.StartResult
-    ) {
-        nativeWireGuardActive.set(true)
-        ownsCore.set(false)
-
-        startedElapsed =
-            restoredStartedElapsed
-                .takeIf {
-                    it > 0L &&
-                        it <= SystemClock.elapsedRealtime()
-                }
-                ?: SystemClock.elapsedRealtime()
-
-        ConnectionRuntime.updateSession(sessionId) {
-            it.copy(
-                state = ConnectionState.CONNECTED,
-                startedElapsed = startedElapsed,
-                error = ""
-            )
-        }
-
-        ConnectionSessionStore.markConnected(
-            context = this,
-            mode = ConnectionMode.VPN,
-            profileId = profile.id,
-            profileName = profile.name,
-            startedElapsed = startedElapsed
-        )
-
-        QuickConnectStore.save(
-            this,
-            ConnectionMode.VPN,
-            profile.id,
-            profile.name
-        )
-        QuickConnectTileService.requestUpdate(this)
-
-        startForeground(
-            NotificationSupport.ID,
-            NotificationSupport.build(
-                this,
-                profile.name,
-                profile.id,
-                ConnectionMode.VPN,
-                startedElapsed,
-                Intent(
-                    this,
-                    TrivoxVpnService::class.java
-                ).setAction(ACTION_STOP)
-            )
-        )
-
-        Diagnostics.info(
-            "VPN started for ${profile.name} via native WireGuard " +
-                "(mtu=${result.mtu ?: 0}, backend=${result.backendVersion})"
-        )
-
-        handler.postDelayed(
-            {
-                val current = ConnectionRuntime.current()
-                if (
-                    current.sessionId == sessionId &&
-                    current.state == ConnectionState.CONNECTED
-                ) {
-                    Diagnostics.markNativeSessionStable()
-                }
-            },
-            NATIVE_STABILITY_WINDOW_MS
-        )
-
-        scheduleMonitor()
-    }
-
     private fun applyAppRouting(
         builder: Builder,
         mode: AppRoutingMode,
@@ -1058,15 +918,6 @@ class TrivoxVpnService : VpnService() {
                                 fail("OpenSSH tunnel stopped unexpectedly: " + ssh.failureText())
                             } else if (
                                 !stopRequested.get() &&
-                                nativeWireGuardActive.get() &&
-                                !NativeWireGuardManager.isRunning()
-                            ) {
-                                fail(
-                                    "Native WireGuard tunnel stopped unexpectedly"
-                                )
-                            } else if (
-                                !stopRequested.get() &&
-                                !nativeWireGuardActive.get() &&
                                 !core.isRunning()
                             ) {
                                 fail(
@@ -1116,13 +967,6 @@ class TrivoxVpnService : VpnService() {
 
         stopRequested.set(true)
 
-        if (
-            nativeWireGuardStarting.get() ||
-            nativeWireGuardActive.get()
-        ) {
-            NativeWireGuardManager.cancelPending()
-        }
-
         ConnectionRuntime
             .updateSession(sessionId) {
                 it.copy(
@@ -1163,20 +1007,6 @@ class TrivoxVpnService : VpnService() {
                     null
                 )
             unregisterNetworkCallback()
-
-            val nativeWasStarting =
-                nativeWireGuardStarting.getAndSet(false)
-            val nativeWasActive =
-                nativeWireGuardActive.getAndSet(false)
-            if (nativeWasStarting || nativeWasActive) {
-                runCatching {
-                    NativeWireGuardManager.stop()
-                }.onFailure {
-                    Diagnostics.warning(
-                        "Native WireGuard stop failed: " + it.message
-                    )
-                }
-            }
 
             if (
                 ownsCore.compareAndSet(
@@ -1443,20 +1273,6 @@ class TrivoxVpnService : VpnService() {
             .removeCallbacksAndMessages(
                 null
             )
-
-        val nativeWasStarting =
-            nativeWireGuardStarting.getAndSet(false)
-        val nativeWasActive =
-            nativeWireGuardActive.getAndSet(false)
-        if (nativeWasStarting || nativeWasActive) {
-            runCatching {
-                NativeWireGuardManager.stop()
-            }.onFailure {
-                Diagnostics.warning(
-                    "Native WireGuard destroy cleanup failed: " + it.message
-                )
-            }
-        }
 
         if (
             ownsCore.compareAndSet(

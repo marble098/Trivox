@@ -441,8 +441,13 @@ private fun HomeTab(
                 connected =
                     runtime.state ==
                         ConnectionState.CONNECTED,
+                sessionId =
+                    runtime.sessionId,
                 settings = settings,
-                mode = runtime.mode,
+                exitIp =
+                    selected
+                        ?.exitIp
+                        .orEmpty(),
                 countryCode =
                     selected
                         ?.exitCountryCode
@@ -464,7 +469,9 @@ private fun HomeTab(
                                 ?.name
                                 .orEmpty()
                         )
-                    }
+                    },
+                hideIp =
+                    settings.hideIpOnMain
             )
         }
 

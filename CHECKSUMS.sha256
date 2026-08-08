@@ -19,8 +19,8 @@ c1a583ea4b4ce805b67c03f227c6b0920aae9256cc3c62712485820d4a5a7759  ./TRIVOX_V8_PA
 b3b99a26b32c34f45a0580e1ccd5ff382eb7a1b265e0704d2db41a7069e1eb2e  ./VALIDATION.md
 4e3de406146469412a6820b14118898e2745b72bad7c33e503018b50e893da82  ./VALIDATION_REPORT.txt
 e6f4ce7b6c830d5a25a4f8ac777c267cd7d3c180bc2a7150ca57cbb9b280c4b7  ./VAZIRMATN_LICENSE.txt
-54be7d1c2c68c2bad629a8765e5e4f343871ca2812a15b22ac7dccea353d1f3f  ./app/build.gradle.kts
-d293aea038c8ed78838e66670496c6dbec4646654eccfc6133e0f99dcc9d93aa  ./app/proguard-rules.pro
+be0a937a1d53ec2945bda03e2aba805f649e84791d57beafdf107306d5014779  ./app/build.gradle.kts
+49354cc8071e00f7d48c54a4c76064de943dbff5df5f814a3a57268d2d16fca7  ./app/proguard-rules.pro
 2c13658ccc6c27d8bd82566a1c83bb1f0a7dd6f5edc2a7369d2911d6a22e7db2  ./app/src/main/AndroidManifest.xml
 5bce63a90b21e0b37bd4e4b8e052c170feac998cb59e81b2510ed81f46b3a525  ./app/src/main/assets/core-manifest.json
 1154b22d1125db43ef7ae193be67d674af5d2b3e8546797cc063580e9407781a  ./app/src/main/assets/openssh/README.txt
@@ -29,7 +29,6 @@ e0837ca254caaa4b160925bf67080da08d600a1622cded6d1c4afe3c86e08be0  ./app/src/main
 f8a6368e43285937a1832d61062caf5c5391dad904e040f9aae6c76bfae6ad63  ./app/src/main/java/com/trivox/client/config/ConfigEditorCodec.kt
 8d82668275e47916940b73807ce9a546bf56e866feb7805738d1f233e1858554  ./app/src/main/java/com/trivox/client/config/ConfigParser.kt
 7c9bd2803d6f7787a9cddaedc616a2d02b5fa3487ec2ea40b8006ff01d0dd8c0  ./app/src/main/java/com/trivox/client/config/ManualConfigFactory.kt
-da2ca93710b5b053425e252e1e19ff56103faf219bf9465f6d7bc7116424c8ac  ./app/src/main/java/com/trivox/client/config/NativeWireGuardConfig.kt
 2ac00222a438e4d6e22a022dcde9cb6988c4cf70ca298cf2200c0c8c0f454ff9  ./app/src/main/java/com/trivox/client/config/NordWhisperCompatibility.kt
 af96f9126bca3662401b239785da5af32b07ffc6990b35bd19a077e809776da3  ./app/src/main/java/com/trivox/client/config/OpenSshProfileCodec.kt
 eb36a28ccd3af8f4feebabf015509baede1ce458e033ca3954c539da78342b21  ./app/src/main/java/com/trivox/client/config/ProxyChainCodec.kt
@@ -39,7 +38,7 @@ b4f0ec4a9a78a34a8b588ead93270c7da151fcd77f8172405e44b161664f4885  ./app/src/main
 2ba4c8e43d8819a027f69351742642d690da5d3512a16b9b6eec18e5f914368f  ./app/src/main/java/com/trivox/client/core/CoreManager.kt
 a9710bbc4c7d4b33ccd62de4a207fde07be3a8aa27f3c38c49c346f8fc04a65c  ./app/src/main/java/com/trivox/client/core/CoreModels.kt
 3c36d43d4b0ed7127498e1a2b6c9365e09f9423c4cab993f46cae3e9f03e91ab  ./app/src/main/java/com/trivox/client/core/XrayCoreAdapter.kt
-d5adae463b4ff325524347739c53aa25bd884855de504d8fe07d2dbe4648b1bb  ./app/src/main/java/com/trivox/client/data/Models.kt
+93f042a1463a954727e561c8e4b9db291c91d78ae4ce800f605fbfe59f3029c9  ./app/src/main/java/com/trivox/client/data/Models.kt
 156ea914b6b3e8296dcb2d5879bb7ff616a58adfe3294401f84d741e599e7585  ./app/src/main/java/com/trivox/client/data/Repositories.kt
 23281a11dac97c5056fe743085b6a5ad0034c4199f2757c6dd5e53811fbf66c5  ./app/src/main/java/com/trivox/client/importing/SmartClipboardImporter.kt
 c87dde7ae486b96a74b70fcf92b5e9c339a821a0c52b35c1accae5a1139072b0  ./app/src/main/java/com/trivox/client/network/BatchRealDelayRunner.kt
@@ -62,7 +61,6 @@ aec4cf44adb86ca9747897bf78282f8ed075903b73eb015f403e1a8bef47a89a  ./app/src/main
 b26bb04b9725dbc99d528a99f96ca42906fcc466ed8e1b00eda1cbb8c164df1c  ./app/src/main/java/com/trivox/client/service/ConnectionService.kt
 5a0a5fa2ec0438f3f9eb096759bf973fb00a5abd8ac05b6744ea6837abe15e8f  ./app/src/main/java/com/trivox/client/service/ConnectionSessionStore.kt
 d72b65ce5fabe7ddcc54b501efa07256188b1efb4d65991d0afd55b94ebfd8a8  ./app/src/main/java/com/trivox/client/service/LocalProxyPortGuard.kt
-6183d92cf7e469c631f9a8192db7d93043319ee12ab5fb577748bb20cf9dfae7  ./app/src/main/java/com/trivox/client/service/NativeWireGuardManager.kt
 92f02e70ae1252b6b36a32a05e620f8a3e99396d81fc3df5f3cdae5cb7b5d6b7  ./app/src/main/java/com/trivox/client/service/NotificationActionActivity.kt
 28259ec291c940ae44288932c6bf28f20ec19e6df9e1f39d39ce17c3199e4bbd  ./app/src/main/java/com/trivox/client/service/NotificationQuickSwitchReceiver.kt
 1944bc1b4abd2d5cfe26a50bdaac5a2cd73a505d3321f62917a26bfd3235086d  ./app/src/main/java/com/trivox/client/service/NotificationQuickSwitchStore.kt
@@ -71,7 +69,7 @@ e6baa328a00f7fcdcc3535f0b2372d04401d964b8b4e1d209eef1ae1abd99731  ./app/src/main
 1b575b88f1e7d7ae7743e935ca07f66ff802def94a2c375b67245cf1a5e53f16  ./app/src/main/java/com/trivox/client/service/QuickConnectActivity.kt
 203949d8abaa595c9a4e67ccf02d6ac6f85c35a8ec6ef8ba1b91cadfa6649b7d  ./app/src/main/java/com/trivox/client/service/QuickConnectStore.kt
 a2a5cb464b992365acfaedeb606859b80a370910f0f0345da179f23d43c10444  ./app/src/main/java/com/trivox/client/service/QuickConnectTileService.kt
-d3a22488ba3248b530cf382490747c26462998730ea1190837a4e90fd8469b21  ./app/src/main/java/com/trivox/client/service/TrivoxVpnService.kt
+a1726583b948418f997acf11ef4152f7b5866318cbc11b0af85c7fb866029ec1  ./app/src/main/java/com/trivox/client/service/TrivoxVpnService.kt
 bb823265a6a6a1e4aa0be6edca9b6de27bdcc95bc338bb30ee728730edb3a1f9  ./app/src/main/java/com/trivox/client/ssh/OpenSshBinaryManager.kt
 ca9f54e7c8759bdc64818268edd3c34b3a766539eeeae0fa9bae98c9cda8b27a  ./app/src/main/java/com/trivox/client/ssh/OpenSshCommand.kt
 dc879e75b4e8092ad7f7048d552e249857c28986660042f6d960fb14de6ac883  ./app/src/main/java/com/trivox/client/ssh/OpenSshTunnelBridge.kt
@@ -79,7 +77,7 @@ dc879e75b4e8092ad7f7048d552e249857c28986660042f6d960fb14de6ac883  ./app/src/main
 74ff5b2702aa219b05be9a26c6ba3c4c6bf06646a1696dbd03d5f8f0f9c31b8a  ./app/src/main/java/com/trivox/client/ui/AppRoutingActivity.kt
 ad6d28dc0250e5488d031ec795bc50f7bfbfe60904f07201ff265e79e78e4b59  ./app/src/main/java/com/trivox/client/ui/ConfigEditorActivity.kt
 87d6ef8ca1afd60d560ca7164bea2967a5dbc42ecf9bb46f98cf53272631c338  ./app/src/main/java/com/trivox/client/ui/DiagnosticsActivity.kt
-bd88fedd9207016ed37cd084005d6938b190ec08fdbe3ca5d8e9d5dbbbd0a54d  ./app/src/main/java/com/trivox/client/ui/MainActivity.kt
+d5f554bce23609c1d1e2237000ac6344c89b685cf2b6736b7a98d81b147fcac9  ./app/src/main/java/com/trivox/client/ui/MainActivity.kt
 b3e355f0422a85f1170700f37ecd9b58c8a13594861116c5bc42ebb3f4563c58  ./app/src/main/java/com/trivox/client/ui/ManualConfigActivity.kt
 6f38d4731b10ced728c0a74958721a97e662ecdf157c5b9ebfb55b1162690ad8  ./app/src/main/java/com/trivox/client/ui/ProfileAdapter.kt
 ff3087ffbb877efe2b4beed9017e409eec693d1f017c5d9becb70c9cc2e7c6f1  ./app/src/main/java/com/trivox/client/ui/ProxyChainActivity.kt
@@ -88,10 +86,10 @@ ff3087ffbb877efe2b4beed9017e409eec693d1f017c5d9becb70c9cc2e7c6f1  ./app/src/main
 ac90290ded6f5c25887f62b5d722b08e5b057a1cc144ea71bbaac5b5f7a4acbc  ./app/src/main/java/com/trivox/client/ui/ThemedActivity.kt
 856eeb8e2c72ceb08be0651e9bde7e29bc503389c0a4bfaa17b03b8b878bb929  ./app/src/main/java/com/trivox/client/ui/UiInsets.kt
 a6dd44767d64edae8ec54895ddb524009b13034d450baff8d1aae5a3228b96e4  ./app/src/main/java/com/trivox/client/ui/compose/LegacyLayoutBridge.kt
-6d19a039d3264920761c7441579181def775c947f43fc6fdb354a14a9da2e165  ./app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt
+45282ae1bfded309584996a88e934b4d2168a7825dab64e9ce1327d776816685  ./app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt
 d0af0b76e024009807055a3c35360470077b6512547d1ecc7657e51ed75bc587  ./app/src/main/java/com/trivox/client/ui/compose/RoutingComposeScreen.kt
 f9f3817cc3f3bceb02f1d0dcaebb0c8c20cc3f6ad0ca3b7ea3c0abc3df17b5a2  ./app/src/main/java/com/trivox/client/ui/compose/TrivoxComposeUi.kt
-a41d2894c6425cea0ee1a937545a899f8b4329c8df44e54655f718129f275bee  ./app/src/main/java/com/trivox/client/ui/compose/UnifiedSettingsScreen.kt
+3f2856d9301bb0b1cee928bff6126d845add8f8c71ca45297c372bdf831da4eb  ./app/src/main/java/com/trivox/client/ui/compose/UnifiedSettingsScreen.kt
 22fc2fea3013958e0f3950f89b1836eef3a950e78b4d49fc7f194828196a4d13  ./app/src/main/java/com/trivox/client/update/UpdateChecker.kt
 6cf684b1ce5e58a5a42adba26fa59d5b44cb4bd940e4690c2aa43714d72e407c  ./app/src/main/java/com/trivox/client/update/VersionComparator.kt
 5042ff89fce0dabd9f1f4af42b75e21d482a2482b32e4a4ded767839ed7b8db7  ./app/src/main/java/com/trivox/client/util/Diagnostics.kt
@@ -199,7 +197,7 @@ a3e7f898f894b491336caf714e08d4d1318e42ef76b277b5b95a279918f431f0  ./docs/TRIVOX_
 6511f11ac2a6b82afb989501ba94584b38bac822aa4d8c5815eedb1115b9d1e6  ./gradlew
 a5e61627e012be7890d6f351f241a740dd3f7443c71030d56aa9b4ffdb264bb5  ./gradlew.bat
 3dff92e6840eb09b2628e41d1eeb8d7708e7d2b6aeee1e4037b9228fa2f5df8b  ./settings.gradle.kts
-a582ae5b6e2ca00c0cac16d4dcd5b5469e8032d7af7b2b90a2067811eede33b7  ./tools/audit-trivox.py
+ddd33fcd088efe77839f18911236fee830d857f4e771992345799b2d4e096ed1  ./tools/audit-trivox.py
 8eb48ce199ecd2caaf4ba986a60f1cc0d234a8bcb878c9492cb4233fe68e780a  ./tools/generate-core-manifest.py
 ff1945b5e5aa5f0580f7dcf6866fff774d995ea1513a9ba4fa6a7e4ced23721f  ./tools/openssh/build-openssh-android.sh
 d9775eefee793eb1a110e470ab92688a0a8f5040a619b2435e5ebb397e57b9ea  ./tools/openssh/prepare-termux-properties.py
@@ -213,9 +211,12 @@ d9775eefee793eb1a110e470ab92688a0a8f5040a619b2435e5ebb397e57b9ea  ./tools/openss
 5e0eaf59e140118cf08891e912a2b945b09adbb3f823f4e6c4e82097742f2c93  ./tools/validate-api-guards.py
 94e56f1059f0981fad2db85aa1e43a8b93a93ebbf37479d016143e91d587fe37  ./tools/validate-string-formats.py
 b43e47ed3eb4e9bc07b0f098a82b47de718e28ef9e3f2f57e557a4988075b8b5  ./tools/verify-compose-migration.sh
-48b4ade8d64f8b30d106cad26a917a61ea61471ca3c85ddfd4f3ba7cf6deea0c  ./app/src/main/java/com/trivox/client/ui/compose/WorldMapCard.kt
+f2cb3e86611434c56c74dabdf38bfa7c1b1c24c2f43c5e4a54ad2113805990fb  ./app/src/main/java/com/trivox/client/ui/compose/WorldMapCard.kt
 d2694c1ef6d46a65e653664dea876ee03f6e912013aee22789252f3faa297407  ./app/src/main/java/com/trivox/client/ui/compose/WorldMapGeo.kt
 fe3e713b919d56dc47b4df13e49a43c0fc3fe1bd2958c5df8ce67bcb69b1cacd  ./app/src/main/res/values-fa/strings_v22.xml
 fbeb3169602037869c7c2b966ddcd85e37f0c3e182b20b2084066ce2f7af07ba  ./app/src/main/res/values/strings_v22.xml
 de472f4ecca5801c404f284caee0d3cacd924a80aeaa253f7c88c27c94ab3850  ./app/src/test/java/com/trivox/client/network/RealDelayPolicyV22Test.kt
 d5c2aafbd7d00ba39817b80da4d08e575666bc733732d3b576092a58bce2bf57  ./app/src/test/java/com/trivox/client/ui/compose/WorldMapGeoV22Test.kt
+cf935b9a712a944acbd5343272e13349e5665e1684e11c6c5018f692e7918662  ./app/src/main/java/com/trivox/client/ui/compose/WorldMapGeometry.kt
+aef6251bc53f84fa2c3f1f2393e1478ed64a515d6ecffad75408af438f33e467  ./app/src/test/java/com/trivox/client/ui/compose/WorldMapGeometryV24Test.kt
+f2f40235b4896d7bcb6f5be1dd75d320f8948f147b8399e1170fe34384e36e0f  ./docs/TRIVOX_V24_STABILITY_AUDIT.md

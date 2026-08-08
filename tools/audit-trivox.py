@@ -241,12 +241,107 @@ def audit(root: Path) -> tuple[list[Finding], dict[str, object]]:
         if "favoritesOnly" not in text:
             add("error", "compose-favorites-filter", main_compose, "Favorites filtering is missing from the Compose profile surface.")
 
+    build_script = root / "app/build.gradle.kts"
+    if build_script.is_file():
+        build_text = read(build_script)
+        if "com.wireguard.android:tunnel" in build_text:
+            add(
+                "error",
+                "native-wireguard-dependency",
+                build_script,
+                "The crash-prone libwg-go WireGuard Android backend returned.",
+            )
+
+    proguard_rules = root / "app/proguard-rules.pro"
+    if proguard_rules.is_file() and "com.wireguard.android" in read(proguard_rules):
+        add(
+            "error",
+            "native-wireguard-proguard",
+            proguard_rules,
+            "Stale WireGuard Android backend keep rules returned.",
+        )
+
+    vpn_service = root / "app/src/main/java/com/trivox/client/service/TrivoxVpnService.kt"
+    if vpn_service.is_file() and "NativeWireGuardManager" in read(vpn_service):
+        add(
+            "error",
+            "native-wireguard-runtime",
+            vpn_service,
+            "VPN service must use Xray WireGuard only after the v24 native crash.",
+        )
+
+    models = root / "app/src/main/java/com/trivox/client/data/Models.kt"
+    if models.is_file():
+        models_text = read(models)
+        if "nativeWireGuardVpn: Boolean = true" in models_text:
+            add(
+                "error",
+                "native-wireguard-default",
+                models,
+                "Legacy nativeWireGuardVpn must never default to true.",
+            )
+        strategy_start = models_text.find("WIREGUARD_DOMAIN_STRATEGIES")
+        if strategy_start >= 0 and '"AsIs"' in models_text[strategy_start:]:
+            add(
+                "error",
+                "wireguard-domain-strategy",
+                models,
+                "WireGuard settings expose unsupported AsIs.",
+            )
+
+    geometry = root / "app/src/main/java/com/trivox/client/ui/compose/WorldMapGeometry.kt"
+    if not geometry.is_file():
+        add(
+            "error",
+            "world-map-geometry",
+            geometry,
+            "Detailed dependency-free world geometry is missing.",
+        )
+    elif read(geometry).count("floatArrayOf(") < 220:
+        add(
+            "error",
+            "world-map-detail",
+            geometry,
+            "World map geometry regressed to an overly coarse shape set.",
+        )
+
+    if main.is_file():
+        main_text = read(main)
+        single_start = main_text.find("private fun testSingleProfile")
+        single_end = main_text.find("private fun testProfiles", single_start)
+        single_text = (
+            main_text[single_start:single_end]
+            if single_start >= 0 and single_end > single_start
+            else ""
+        )
+        if "latencyWorker.submit" not in single_text or "trackPingTasks" not in single_text:
+            add(
+                "error",
+                "single-test-worker",
+                main,
+                "Single-profile tests must be cancellable and must not block storageWorker.",
+            )
+
     for path in kotlin:
         text = read(path)
         if "GlobalScope" in text or "runBlocking" in text:
             add("error", "unsafe-coroutine", path, "Global/blocking coroutine primitive found.")
         if "notifyDataSetChanged()" in text:
             add("warning", "full-list-refresh", path, "RecyclerView full-list invalidation found.")
+        if "Executors.newCachedThreadPool" in text:
+            add(
+                "warning",
+                "unbounded-executor",
+                path,
+                "Unbounded cached executor can amplify memory pressure.",
+            )
+        if "/ui/" in path.as_posix() and "Thread.sleep(" in text:
+            add(
+                "warning",
+                "ui-thread-sleep-review",
+                path,
+                "UI package contains Thread.sleep; verify it never runs on the main thread.",
+            )
         line_count = text.count("\n") + 1
         if line_count > 1500:
             add(

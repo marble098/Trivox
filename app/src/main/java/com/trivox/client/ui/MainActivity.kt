@@ -2022,10 +2022,11 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     ) {
         if (
             method == PingMethod.XRAY_HTTP &&
-            ConnectionRuntime.current().state !in setOf(
-                ConnectionState.DISCONNECTED,
-                ConnectionState.ERROR
-            )
+            ConnectionRuntime.current().state !in
+                setOf(
+                    ConnectionState.DISCONNECTED,
+                    ConnectionState.ERROR
+                )
         ) {
             toast(getString(R.string.xray_ping_requires_disconnect))
             return
@@ -2039,58 +2040,90 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         val generation =
             pingGeneration.incrementAndGet()
 
-        storageWorker.execute {
+        storageWorker.execute prepareSingle@ {
             repository.update(profile.id) { current ->
                 current.testStatus = TestStatus.TESTING
                 when (method) {
-                    PingMethod.TCP_CONNECT -> current.tcpTestStatus = TestStatus.TESTING
-                    PingMethod.XRAY_HTTP -> current.realTestStatus = TestStatus.TESTING
+                    PingMethod.TCP_CONNECT ->
+                        current.tcpTestStatus = TestStatus.TESTING
+                    PingMethod.XRAY_HTTP ->
+                        current.realTestStatus = TestStatus.TESTING
                 }
             }
-
-            runOnUiThread(::refresh)
-
-            val settings =
-                settingsRepository
-                    .load()
-                    .copy(
-                        pingMethod = method
-                    )
-            val result =
-                runCatching {
-                    pingManager.measureSingle(
-                        profile = profile,
-                        settings = settings,
-                        workDir = cacheDir
-                    )
-                }.getOrElse {
-                    Diagnostics.recordThrowable(
-                        "Single ping test",
-                        it
-                    )
-                    failedPingResult(
-                        settings.pingMethod,
-                        it
-                    )
-                }
+            runOnUiThreadIfAlive(::refresh)
 
             if (
-                pingGeneration.get() ==
-                generation
+                activityDestroyed.get() ||
+                pingGeneration.get() != generation
             ) {
-                repository.update(profile.id) {
-                    applyPingResultToProfile(
-                        it,
-                        result
-                    )
-                }
-                Diagnostics.info(
-                    "Single profile test completed; method=${method.name}, " +
-                        "profile=${profile.id}, success=${result.success}, " +
-                        "latency=${result.latencyMs}, error=${result.errorCategory.orEmpty()}"
-                )
-                runOnUiThread(::refresh)
+                return@prepareSingle
             }
+
+            val settings =
+                settingsRepository.load().copy(
+                    pingMethod = method
+                )
+
+            val future =
+                try {
+                    latencyWorker.submit singleNetwork@ {
+                        val result =
+                            runCatching {
+                                pingManager.measureSingle(
+                                    profile = profile,
+                                    settings = settings,
+                                    workDir = cacheDir
+                                )
+                            }.getOrElse { error ->
+                                Diagnostics.recordThrowable(
+                                    "Single ping test",
+                                    error
+                                )
+                                failedPingResult(
+                                    settings.pingMethod,
+                                    error
+                                )
+                            }
+
+                        if (
+                            Thread.currentThread().isInterrupted ||
+                            pingGeneration.get() != generation
+                        ) {
+                            return@singleNetwork
+                        }
+
+                        storageWorker.execute persistSingle@ {
+                            if (
+                                pingGeneration.get() != generation ||
+                                activityDestroyed.get()
+                            ) {
+                                return@persistSingle
+                            }
+
+                            repository.update(profile.id) { current ->
+                                applyPingResultToProfile(
+                                    current,
+                                    result
+                                )
+                            }
+                            Diagnostics.info(
+                                "Single profile test completed; " +
+                                    "method=${method.name}, " +
+                                    "profile=${profile.id}, " +
+                                    "success=${result.success}, " +
+                                    "latency=${result.latencyMs}, " +
+                                    "error=${result.errorCategory.orEmpty()}"
+                            )
+                            runOnUiThreadIfAlive(::refresh)
+                        }
+                    }
+                } catch (
+                    _: java.util.concurrent.RejectedExecutionException
+                ) {
+                    return@prepareSingle
+                }
+
+            trackPingTasks(listOf(future))
         }
     }
 
@@ -3340,7 +3373,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                 lastInfoProfileId =
                     snapshot.profileId
                 refreshExitInfo(
-                    force = false,
+                    force = true,
                     showError = false
                 )
             }

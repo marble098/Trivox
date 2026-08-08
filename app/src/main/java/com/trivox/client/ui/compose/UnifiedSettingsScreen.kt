@@ -271,19 +271,6 @@ internal fun UnifiedSettingsScreen(
 
         item {
             SettingsSection(activity.getString(R.string.v15_settings_wireguard)) {
-                BooleanSetting(
-                    activity.getString(R.string.v19_native_wireguard),
-                    settings.nativeWireGuardVpn
-                ) {
-                    actions.composeSaveSettings(
-                        settings.copy(nativeWireGuardVpn = it)
-                    )
-                }
-                Text(
-                    activity.getString(R.string.v19_native_wireguard_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
                 NumberSetting(
                     activity.getString(R.string.v15_wireguard_mtu),
                     settings.wireGuardMtu,
