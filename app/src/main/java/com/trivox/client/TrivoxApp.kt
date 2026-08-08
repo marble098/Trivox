@@ -1,5 +1,7 @@
 package com.trivox.client
 
+// TRIVOX_V20_SAFE_NATIVE_LIFECYCLE
+
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
@@ -16,10 +18,13 @@ class TrivoxApp : Application() {
 
         val themeMode = SettingsRepository(this).load().themeMode
         AppCompatDelegate.setDefaultNightMode(
-            if (themeMode == ThemeMode.LIGHT) {
-                AppCompatDelegate.MODE_NIGHT_NO
-            } else {
-                AppCompatDelegate.MODE_NIGHT_YES
+            when (themeMode) {
+                ThemeMode.SYSTEM ->
+                    AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+                ThemeMode.LIGHT ->
+                    AppCompatDelegate.MODE_NIGHT_NO
+                ThemeMode.DARK ->
+                    AppCompatDelegate.MODE_NIGHT_YES
             }
         )
 

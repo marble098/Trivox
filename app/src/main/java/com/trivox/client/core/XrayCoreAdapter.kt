@@ -1,9 +1,12 @@
 package com.trivox.client.core
 
+// TRIVOX_V20_SAFE_NATIVE_LIFECYCLE
+
 import android.content.Context
 import com.trivox.client.util.Diagnostics
 import org.json.JSONObject
 import java.lang.reflect.Proxy
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 class XrayCoreAdapter(
@@ -95,18 +98,20 @@ class XrayCoreAdapter(
                 return@synchronized unavailable()
             }
 
-            val staleStop =
-                stopNativeUnsafe(
-                    "pre-start"
-                )
+            if (NATIVE_RUNNING.get()) {
+                val staleStop =
+                    stopNativeUnsafe(
+                        "pre-start"
+                    )
 
-            if (!staleStop.success) {
-                return@synchronized CoreResult(
-                    false,
-                    "Previous Xray session " +
-                        "could not be stopped: " +
-                        staleStop.error
-                )
+                if (!staleStop.success) {
+                    return@synchronized CoreResult(
+                        false,
+                        "Previous Xray session " +
+                            "could not be stopped: " +
+                            staleStop.error
+                    )
+                }
             }
 
             val registered =
@@ -149,6 +154,12 @@ class XrayCoreAdapter(
                     )
                 )
 
+            if (result.success) {
+                NATIVE_RUNNING.set(true)
+            } else {
+                NATIVE_RUNNING.set(false)
+            }
+
             Diagnostics.nativeCheckpoint(
                 "runXrayFromJson",
                 if (result.success) {
@@ -181,6 +192,15 @@ class XrayCoreAdapter(
         synchronized(NATIVE_LOCK) {
             if (!isAvailable()) {
                 unavailable()
+            } else if (!NATIVE_RUNNING.get()) {
+                CoreResult(
+                    success = true,
+                    data = JSONObject()
+                        .put(
+                            "data",
+                            JSONObject().put("running", false)
+                        )
+                )
             } else {
                 invoke("getXrayState")
             }
@@ -218,18 +238,30 @@ class XrayCoreAdapter(
     private fun stopNativeUnsafe(
         reason: String
     ): CoreResult {
+        /*
+         * libXray StopXray crosses JNI into Go. Calling it when this process
+         * does not own a successfully-started Xray instance is unnecessary and,
+         * on affected Android/libgojni builds, can terminate the whole process.
+         *
+         * NATIVE_RUNNING is process-global because libXray itself is process-
+         * global. Every entry is still serialized by NATIVE_LOCK.
+         */
+        if (!NATIVE_RUNNING.compareAndSet(true, false)) {
+            ACTIVE_PROTECT.set(null)
+            Diagnostics.nativeCheckpoint(
+                "stopXray",
+                "skipped",
+                "$reason; no owned native Xray instance"
+            )
+            return CoreResult(true)
+        }
+
         Diagnostics.nativeCheckpoint(
             "stopXray",
             "begin",
             reason
         )
 
-        /*
-         * XTLS/libXray StopXray is synchronous and
-         * idempotent: it closes the instance under
-         * its own mutex and then clears coreServer.
-         * Extra getXrayState polling is unnecessary.
-         */
         val result =
             invoke("stopXray")
 
@@ -243,19 +275,19 @@ class XrayCoreAdapter(
             result.error
         )
 
-        if (result.success) {
-            releaseSessionUnsafe()
+        /*
+         * Never immediately retry a failed native stop from another cleanup
+         * path. Re-entering JNI after a partial Go shutdown is more dangerous
+         * than treating the instance as unavailable for the rest of the
+         * session. A new process starts with a clean flag.
+         */
+        releaseSessionUnsafe()
 
+        if (result.success) {
             try {
-                Thread.sleep(
-                    CLEANUP_COOLDOWN_MS
-                )
-            } catch (
-                _: InterruptedException
-            ) {
-                Thread
-                    .currentThread()
-                    .interrupt()
+                Thread.sleep(CLEANUP_COOLDOWN_MS)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
             }
         }
 
@@ -511,6 +543,9 @@ class XrayCoreAdapter(
         private val NATIVE_LOCK =
             Any()
 
+        private val NATIVE_RUNNING =
+            AtomicBoolean(false)
+
         private val ACTIVE_PROTECT =
             AtomicReference<
                 ((Int) -> Boolean)?
@@ -525,6 +560,6 @@ class XrayCoreAdapter(
             false
 
         private const val
-            CLEANUP_COOLDOWN_MS = 180L
+            CLEANUP_COOLDOWN_MS = 90L
     }
 }

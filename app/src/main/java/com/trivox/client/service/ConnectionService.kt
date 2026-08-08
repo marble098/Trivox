@@ -1,5 +1,7 @@
 package com.trivox.client.service
 
+// TRIVOX_V20_SAFE_NATIVE_LIFECYCLE
+
 import android.app.Service
 import android.content.Intent
 import android.os.Handler
@@ -554,15 +556,25 @@ class ConnectionService : Service() {
                     null
                 )
 
-            ownsCore.set(false)
             sshHandle?.close()
             sshHandle = null
-            runCatching { core.stop() }
-                .onFailure {
-                    Diagnostics.warning(
-                        "Immediate core stop failed: " + it.message
-                    )
-                }
+            if (
+                ownsCore.compareAndSet(
+                    true,
+                    false
+                )
+            ) {
+                runCatching { core.stop() }
+                    .onFailure {
+                        Diagnostics.warning(
+                            "Immediate core stop failed: " + it.message
+                        )
+                    }
+            } else {
+                Diagnostics.debug(
+                    "Skipped Xray stop: proxy session did not own Xray"
+                )
+            }
             if (!LocalProxyPortGuard.awaitReleased(mixedPort)) {
                 Diagnostics.warning(
                     "Mixed proxy port $mixedPort was still busy after service cleanup"

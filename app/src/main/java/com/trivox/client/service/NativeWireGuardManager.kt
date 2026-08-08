@@ -1,5 +1,7 @@
 package com.trivox.client.service
 
+// TRIVOX_V20_SAFE_NATIVE_LIFECYCLE
+
 import android.content.Context
 import com.trivox.client.config.NativeWireGuardConfig
 import com.trivox.client.data.AppSettings
@@ -128,7 +130,7 @@ object NativeWireGuardManager {
             backend = candidateBackend
             tunnel = candidateTunnel
 
-            if (!waitCancellable(350L, isCancelled)) {
+            if (!waitCancellable(160L, isCancelled)) {
                 stopLocked()
                 return@synchronized StartResult(
                     success = false,
@@ -143,8 +145,8 @@ object NativeWireGuardManager {
                 settings = settings,
                 mode = ConnectionMode.VPN,
                 attempts = 2,
-                budgetMs = 4_500,
-                perProbeTimeoutMs = 3_000,
+                budgetMs = 3_500,
+                perProbeTimeoutMs = 2_400,
                 isCancelled = isCancelled
             )
             val stats = runCatching {
@@ -182,7 +184,7 @@ object NativeWireGuardManager {
 
             stopLocked()
             if (index < candidates.lastIndex) {
-                waitCancellable(650L, isCancelled)
+                waitCancellable(300L, isCancelled)
             }
         }
 

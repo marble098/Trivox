@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v20_theme_system">System default</string>
+    <string name="v20_live_ping_auto_hint">Live ping is automatically rate-limited while Trivox is visible, reducing background traffic, wakeups and measurement-induced jitter.</string>
+    <string name="v20_wireguard_auto_hint">Handshake timing, worker behavior and domain strategy are managed automatically. MTU and keepalive remain available because they can materially affect difficult networks.</string>
+</resources>

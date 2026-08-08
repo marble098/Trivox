@@ -1,5 +1,7 @@
 package com.trivox.client.data
 
+// TRIVOX_V20_SAFE_NATIVE_LIFECYCLE
+
 // TRIVOX_V19_NATIVE_WIREGUARD_LEAK_GUARD
 
 import org.json.JSONArray
@@ -59,15 +61,17 @@ enum class ProfileSortMode {
 }
 
 enum class ThemeMode {
+    SYSTEM,
     LIGHT,
     DARK;
 
     companion object {
         fun fromStored(value: String?, legacyDark: Boolean): ThemeMode =
             when (value?.trim()?.uppercase()) {
+                SYSTEM.name -> SYSTEM
                 LIGHT.name -> LIGHT
                 DARK.name, "NEON" -> DARK
-                else -> if (legacyDark) DARK else LIGHT
+                else -> if (legacyDark) DARK else SYSTEM
             }
     }
 }
@@ -298,12 +302,12 @@ data class AppSettings(
     var pingMethod: PingMethod = PingMethod.XRAY_HTTP,
     var livePingMethod: PingMethod = PingMethod.XRAY_HTTP,
     var livePingEnabled: Boolean = true,
-    var livePingIntervalSeconds: Int = 8,
+    var livePingIntervalSeconds: Int = 15,
     var hideIpOnMain: Boolean = false,
     var sortMode: ProfileSortMode = ProfileSortMode.SMART,
     var darkMode: Boolean = false,
-    var themeMode: ThemeMode = ThemeMode.LIGHT,
-    var localProxyInVpn: Boolean = true,
+    var themeMode: ThemeMode = ThemeMode.SYSTEM,
+    var localProxyInVpn: Boolean = false,
     var autoLeakProtection: Boolean = false,
     var autoUpdateCheck: Boolean = true,
     var testUrl: String = DEFAULT_TEST_URL,
@@ -342,7 +346,7 @@ data class AppSettings(
         realDelayStartGraceMs = realDelayStartGraceMs.coerceIn(0, 1_000)
         realDelayTargetCount = realDelayTargetCount.coerceIn(1, 4)
         realDelayRequiredProofs = realDelayRequiredProofs.coerceIn(1, realDelayTargetCount)
-        livePingIntervalSeconds = livePingIntervalSeconds.coerceIn(3, 300)
+        livePingIntervalSeconds = livePingIntervalSeconds.coerceIn(12, 300)
         tcpKeepAliveIdleSeconds = tcpKeepAliveIdleSeconds.coerceIn(0, 3600)
         tcpKeepAliveIntervalSeconds = tcpKeepAliveIntervalSeconds.coerceIn(0, 600)
         tcpUserTimeoutMs = tcpUserTimeoutMs.coerceIn(0, 120_000)
@@ -468,7 +472,7 @@ data class AppSettings(
                     legacyPingMethod
                 ),
                 livePingEnabled = json.optBoolean("livePingEnabled", true),
-                livePingIntervalSeconds = json.optInt("livePingIntervalSeconds", 8),
+                livePingIntervalSeconds = json.optInt("livePingIntervalSeconds", 15),
                 hideIpOnMain = json.optBoolean("hideIpOnMain", false),
                 sortMode = ProfileSortMode.fromStored(json.optString("sortMode")),
                 darkMode = legacyDark,

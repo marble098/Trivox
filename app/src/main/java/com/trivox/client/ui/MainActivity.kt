@@ -1,5 +1,7 @@
 package com.trivox.client.ui
 
+// TRIVOX_V20_SAFE_NATIVE_LIFECYCLE
+
 // TRIVOX_V19_NATIVE_WIREGUARD_LEAK_GUARD
 
 import android.Manifest
@@ -148,6 +150,8 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     private val subscriptionRefreshBusy =
         AtomicBoolean(false)
     private val activityDestroyed =
+        AtomicBoolean(false)
+    private val uiResumed =
         AtomicBoolean(false)
     private val pingResultBuffer =
         ConcurrentHashMap<String, PingResult>()
@@ -3337,9 +3341,13 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                 durationTick,
                 1_000
             )
-            if (settingsRepository.load().livePingEnabled) {
-                handler.post(
-                    livePingTick
+            if (
+                settingsRepository.load().livePingEnabled &&
+                uiResumed.get()
+            ) {
+                handler.postDelayed(
+                    livePingTick,
+                    FIRST_LIVE_PING_DELAY_MS
                 )
             }
         } else {
@@ -3404,7 +3412,12 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         object : Runnable {
             override fun run() {
                 val snapshot = ConnectionRuntime.current()
-                if (snapshot.state != ConnectionState.CONNECTED) return
+                if (
+                    snapshot.state != ConnectionState.CONNECTED ||
+                    !uiResumed.get()
+                ) {
+                    return
+                }
 
                 val settings = settingsRepository.load()
                 val manual = manualLivePingRequested.getAndSet(false)
@@ -3486,7 +3499,8 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                         if (
                             current.state == ConnectionState.CONNECTED &&
                             current.sessionId == sessionId &&
-                            latestSettings.livePingEnabled
+                            latestSettings.livePingEnabled &&
+                            uiResumed.get()
                         ) {
                             handler.postDelayed(
                                 this,
@@ -3788,11 +3802,30 @@ class MainActivity : ThemedActivity(), MainComposeActions {
 
     override fun onResume() {
         super.onResume()
+        uiResumed.set(true)
         renderSubscriptionTabs(
             force = true
         )
         refresh()
         UpdateChecker.checkIfDue(this)
+
+        val current = ConnectionRuntime.current()
+        if (
+            current.state == ConnectionState.CONNECTED &&
+            settingsRepository.load().livePingEnabled
+        ) {
+            handler.removeCallbacks(livePingTick)
+            handler.postDelayed(
+                livePingTick,
+                FIRST_LIVE_PING_DELAY_MS
+            )
+        }
+    }
+
+    override fun onPause() {
+        uiResumed.set(false)
+        handler.removeCallbacks(livePingTick)
+        super.onPause()
     }
 
     override fun onDestroy() {
@@ -4046,6 +4079,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             handler.removeCallbacks(livePingTick)
             if (
                 next.livePingEnabled &&
+                uiResumed.get() &&
                 ConnectionRuntime.current().state == ConnectionState.CONNECTED
             ) {
                 handler.post(livePingTick)
@@ -4061,10 +4095,13 @@ class MainActivity : ThemedActivity(), MainComposeActions {
 
         if (previous.themeMode != next.themeMode) {
             applyNightModeWithMotion(
-                if (next.themeMode == com.trivox.client.data.ThemeMode.DARK) {
-                    AppCompatDelegate.MODE_NIGHT_YES
-                } else {
-                    AppCompatDelegate.MODE_NIGHT_NO
+                when (next.themeMode) {
+                    com.trivox.client.data.ThemeMode.SYSTEM ->
+                        AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+                    com.trivox.client.data.ThemeMode.LIGHT ->
+                        AppCompatDelegate.MODE_NIGHT_NO
+                    com.trivox.client.data.ThemeMode.DARK ->
+                        AppCompatDelegate.MODE_NIGHT_YES
                 }
             )
         }
@@ -4211,8 +4248,15 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         settingsRepository.save(settings)
         handler.removeCallbacks(livePingTick)
         val runtime = ConnectionRuntime.current()
-        if (value && runtime.state == ConnectionState.CONNECTED) {
-            handler.post(livePingTick)
+        if (
+            value &&
+            uiResumed.get() &&
+            runtime.state == ConnectionState.CONNECTED
+        ) {
+            handler.postDelayed(
+                livePingTick,
+                FIRST_LIVE_PING_DELAY_MS
+            )
         }
         refresh()
     }
@@ -4318,9 +4362,11 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         private const val MENU_ROUTING = 106
         private const val MENU_DIAGNOSTICS = 107
         private const val LIVE_PING_BUDGET_MS =
-            10_000
+            4_500
         private const val REAL_DELAY_BUDGET_MS =
-            16_000
+            10_000
+        private const val FIRST_LIVE_PING_DELAY_MS =
+            1_500L
         private const val LIVE_PING_URL =
             "https://cp.cloudflare.com/generate_204"
         private const val
@@ -4330,8 +4376,8 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             CONNECTION_START_UI_TIMEOUT_MS =
                 6_000L
         private const val
-            PROFILE_SWITCH_DELAY_MS = 350L
-        private const val PING_RESULT_FLUSH_MS = 220L
+            PROFILE_SWITCH_DELAY_MS = 180L
+        private const val PING_RESULT_FLUSH_MS = 300L
         private const val SINGLE_METHOD_PENALTY_MS = 5_000L
         private const val MAIN_UI_PREFS = "main_ui"
         private const val KEY_ACTIVE_SUBSCRIPTION =

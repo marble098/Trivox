@@ -1,5 +1,7 @@
 package com.trivox.client.service
 
+// TRIVOX_V20_SAFE_NATIVE_LIFECYCLE
+
 import com.trivox.client.core.CoreManager
 import com.trivox.client.util.Diagnostics
 import java.net.InetSocketAddress
@@ -18,13 +20,21 @@ internal object LocalProxyPortGuard {
             return@synchronized true
         }
 
+        if (!core.isRunning()) {
+            Diagnostics.error(
+                "Mixed proxy port $port is busy, but Trivox does not own a " +
+                    "running Xray instance. Refusing an unsafe native stop."
+            )
+            return@synchronized false
+        }
+
         Diagnostics.warning(
-            "Mixed proxy port $port is busy; requesting stale Xray cleanup"
+            "Mixed proxy port $port is busy; stopping the owned Xray instance"
         )
         val stop = runCatching { core.stop() }.getOrNull()
         if (stop != null && !stop.success) {
             Diagnostics.warning(
-                "Stale Xray cleanup reported: ${stop.error}"
+                "Owned Xray cleanup reported: ${stop.error}"
             )
         }
 

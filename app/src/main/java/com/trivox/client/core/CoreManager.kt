@@ -1,5 +1,7 @@
 package com.trivox.client.core
 
+// TRIVOX_V20_SAFE_NATIVE_LIFECYCLE
+
 import android.content.Context
 import com.trivox.client.config.XrayConfigBuilder
 import com.trivox.client.data.ConnectionMode
@@ -240,6 +242,12 @@ class CoreManager(context: Context) {
         )
 
     private fun stopAfterRejectedStart() {
+        if (!isRunning()) {
+            Diagnostics.debug(
+                "Skipped rejected-start cleanup: no owned Xray is running"
+            )
+            return
+        }
         runCatching { adapter.stop() }
             .onFailure {
                 Diagnostics.warning(

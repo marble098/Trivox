@@ -1,5 +1,7 @@
 package com.trivox.client.service
 
+// TRIVOX_V20_SAFE_NATIVE_LIFECYCLE
+
 // TRIVOX_V19_NATIVE_WIREGUARD_LEAK_GUARD
 
 import android.content.Intent
@@ -154,6 +156,7 @@ class TrivoxVpnService : VpnService() {
         stopRequested.set(false)
         cleanupStarted.set(false)
         ownsCore.set(false)
+        nativeWireGuardActive.set(false)
         startedElapsed = 0L
         sessionId =
             ConnectionRuntime
@@ -1139,13 +1142,23 @@ class TrivoxVpnService : VpnService() {
                 }
             }
 
-            ownsCore.set(false)
-            runCatching { core.stop() }
-                .onFailure {
-                    Diagnostics.warning(
-                        "Immediate core stop failed: " + it.message
-                    )
-                }
+            if (
+                ownsCore.compareAndSet(
+                    true,
+                    false
+                )
+            ) {
+                runCatching { core.stop() }
+                    .onFailure {
+                        Diagnostics.warning(
+                            "Immediate core stop failed: " + it.message
+                        )
+                    }
+            } else {
+                Diagnostics.debug(
+                    "Skipped Xray stop: VPN session did not own Xray"
+                )
+            }
             mixedListenerPort?.let { port ->
                 if (!LocalProxyPortGuard.awaitReleased(port)) {
                     Diagnostics.warning(
@@ -1450,7 +1463,7 @@ class TrivoxVpnService : VpnService() {
         const val EXTRA_PROFILE_ID =
             "profile_id"
         private const val
-            MONITOR_INTERVAL_MS = 5_000L
+            MONITOR_INTERVAL_MS = 8_000L
         private const val
             NATIVE_STABILITY_WINDOW_MS =
                 30_000L

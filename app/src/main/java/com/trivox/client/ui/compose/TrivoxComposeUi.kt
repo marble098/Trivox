@@ -1,5 +1,7 @@
 package com.trivox.client.ui.compose
 
+// TRIVOX_V20_SAFE_NATIVE_LIFECYCLE
+
 import android.app.Activity
 import android.view.View
 import android.view.ViewGroup
@@ -15,6 +17,7 @@ import android.widget.TextView
 import androidx.appcompat.widget.SwitchCompat
 import androidx.appcompat.widget.Toolbar
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -99,7 +102,13 @@ private val TrivoxShapes = Shapes(
 
 @Composable
 fun TrivoxTheme(activity: Activity, content: @Composable () -> Unit) {
-    val dark = SettingsRepository(activity).load().themeMode == ThemeMode.DARK
+    val themeMode = SettingsRepository(activity).load().themeMode
+    val systemDark = isSystemInDarkTheme()
+    val dark = when (themeMode) {
+        ThemeMode.SYSTEM -> systemDark
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
     val scheme = if (dark) {
         darkColorScheme(
             primary = Color(0xFF9AB7FF),

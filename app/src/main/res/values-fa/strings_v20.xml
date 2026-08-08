@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v20_theme_system">پیش‌فرض گوشی</string>
+    <string name="v20_live_ping_auto_hint">پینگ زنده فقط هنگام نمایش Trivox و با فاصله زمانی کنترل‌شده اجرا می‌شود تا ترافیک پس‌زمینه، بیدارشدن پردازنده و جیتر ناشی از اندازه‌گیری کمتر شود.</string>
+    <string name="v20_wireguard_auto_hint">زمان‌بندی هندشیک، رفتار worker و راهبرد دامنه به‌صورت خودکار مدیریت می‌شوند. MTU و Keepalive باقی مانده‌اند چون در شبکه‌های دشوار واقعاً می‌توانند مؤثر باشند.</string>
+</resources>

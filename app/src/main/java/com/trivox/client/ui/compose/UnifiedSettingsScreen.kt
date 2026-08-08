@@ -1,5 +1,7 @@
 package com.trivox.client.ui.compose
 
+// TRIVOX_V20_SAFE_NATIVE_LIFECYCLE
+
 // TRIVOX_V19_NATIVE_WIREGUARD_LEAK_GUARD
 
 import android.app.Activity
@@ -79,6 +81,7 @@ internal fun UnifiedSettingsScreen(
                     label = activity.getString(R.string.v15_theme),
                     value = settings.themeMode,
                     choices = listOf(
+                        ThemeMode.SYSTEM to activity.getString(R.string.v20_theme_system),
                         ThemeMode.LIGHT to activity.getString(R.string.v15_theme_light),
                         ThemeMode.DARK to activity.getString(R.string.v15_theme_dark)
                     )
@@ -150,13 +153,6 @@ internal fun UnifiedSettingsScreen(
                 ) {
                     actions.composeSaveSettings(settings.copy(localProxyInVpn = it))
                 }
-                NumberSetting(
-                    label = activity.getString(R.string.v15_mtu),
-                    value = settings.mtu,
-                    range = 576..9000
-                ) {
-                    actions.composeSaveSettings(settings.copy(mtu = it))
-                }
                 BooleanSetting(
                     activity.getString(R.string.v15_ipv6),
                     settings.ipv6
@@ -192,110 +188,32 @@ internal fun UnifiedSettingsScreen(
                     activity.getString(R.string.live_ping_enabled),
                     settings.livePingEnabled
                 ) {
-                    actions.composeSaveSettings(settings.copy(livePingEnabled = it))
-                }
-                ChoiceSetting(
-                    label = activity.getString(R.string.v15_live_ping_method),
-                    value = settings.livePingMethod,
-                    choices = listOf(
-                        PingMethod.TCP_CONNECT to activity.getString(R.string.ping_method_tcp),
-                        PingMethod.XRAY_HTTP to activity.getString(R.string.ping_method_xray)
-                    )
-                ) {
-                    actions.composeSaveSettings(settings.copy(livePingMethod = it))
-                }
-                NumberSetting(
-                    label = activity.getString(R.string.v15_live_ping_interval),
-                    value = settings.livePingIntervalSeconds,
-                    range = 3..300
-                ) {
                     actions.composeSaveSettings(
-                        settings.copy(livePingIntervalSeconds = it)
+                        settings.copy(livePingEnabled = it)
                     )
                 }
-                ChoiceSetting(
-                    label = activity.getString(R.string.v15_test_attempts),
-                    value = settings.testAttempts,
-                    choices = (2..5).map { it to it.toString() }
-                ) {
-                    actions.composeSaveSettings(settings.copy(testAttempts = it))
-                }
-                StringSetting(
-                    label = activity.getString(R.string.v15_test_url),
-                    value = settings.testUrl,
-                    validator = ::validHttpUrl
-                ) {
-                    actions.composeSaveSettings(settings.copy(testUrl = it))
-                }
-            }
-        }
-
-        item {
-            SettingsSection(activity.getString(R.string.v15_settings_real_delay)) {
+                Text(
+                    activity.getString(R.string.v20_live_ping_auto_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 ChoiceSetting(
                     label = activity.getString(R.string.v15_real_profile),
                     value = settings.realDelayProfile,
                     choices = listOf(
-                        RealDelayProfile.TURBO to activity.getString(R.string.real_delay_profile_turbo),
-                        RealDelayProfile.BALANCED to activity.getString(R.string.real_delay_profile_balanced),
-                        RealDelayProfile.ACCURATE to activity.getString(R.string.real_delay_profile_accurate),
-                        RealDelayProfile.CUSTOM to activity.getString(R.string.real_delay_profile_custom)
-                    )
-                ) {
-                    actions.composeSaveSettings(settings.copy(realDelayProfile = it))
-                }
-                NumberSetting(
-                    activity.getString(R.string.v15_real_group_size),
-                    settings.realDelayGroupSize,
-                    2..16
-                ) {
-                    actions.composeSaveSettings(settings.copy(realDelayGroupSize = it))
-                }
-                NumberSetting(
-                    activity.getString(R.string.v15_real_workers),
-                    settings.realDelayWorkers,
-                    1..6
-                ) {
-                    actions.composeSaveSettings(settings.copy(realDelayWorkers = it))
-                }
-                NumberSetting(
-                    activity.getString(R.string.v15_real_timeout),
-                    settings.realDelayProbeTimeoutMs,
-                    1500..10000
-                ) {
-                    actions.composeSaveSettings(
-                        settings.copy(realDelayProbeTimeoutMs = it)
-                    )
-                }
-                NumberSetting(
-                    activity.getString(R.string.v15_real_grace),
-                    settings.realDelayStartGraceMs,
-                    0..1000
-                ) {
-                    actions.composeSaveSettings(
-                        settings.copy(realDelayStartGraceMs = it)
-                    )
-                }
-                NumberSetting(
-                    activity.getString(R.string.v15_real_targets),
-                    settings.realDelayTargetCount,
-                    1..4
-                ) {
-                    val proofs = settings.realDelayRequiredProofs.coerceAtMost(it)
-                    actions.composeSaveSettings(
-                        settings.copy(
-                            realDelayTargetCount = it,
-                            realDelayRequiredProofs = proofs
+                        RealDelayProfile.TURBO to activity.getString(
+                            R.string.real_delay_profile_turbo
+                        ),
+                        RealDelayProfile.BALANCED to activity.getString(
+                            R.string.real_delay_profile_balanced
+                        ),
+                        RealDelayProfile.ACCURATE to activity.getString(
+                            R.string.real_delay_profile_accurate
                         )
                     )
-                }
-                NumberSetting(
-                    activity.getString(R.string.v15_real_proofs),
-                    settings.realDelayRequiredProofs,
-                    1..settings.realDelayTargetCount.coerceAtLeast(1)
                 ) {
                     actions.composeSaveSettings(
-                        settings.copy(realDelayRequiredProofs = it)
+                        settings.copy(realDelayProfile = it)
                     )
                 }
             }
@@ -344,61 +262,6 @@ internal fun UnifiedSettingsScreen(
         }
 
         item {
-            SettingsSection(activity.getString(R.string.v15_settings_network_tuning)) {
-                BooleanSetting(
-                    activity.getString(R.string.v15_network_tuning),
-                    settings.networkTuningEnabled
-                ) {
-                    actions.composeSaveSettings(settings.copy(networkTuningEnabled = it))
-                }
-                BooleanSetting(
-                    activity.getString(R.string.v15_adaptive_handshake),
-                    settings.adaptiveHandshake
-                ) {
-                    actions.composeSaveSettings(settings.copy(adaptiveHandshake = it))
-                }
-                BooleanSetting(
-                    activity.getString(R.string.v15_tcp_fast_open),
-                    settings.tcpFastOpen
-                ) {
-                    actions.composeSaveSettings(settings.copy(tcpFastOpen = it))
-                }
-                NumberSetting(
-                    activity.getString(R.string.v15_tcp_keep_idle),
-                    settings.tcpKeepAliveIdleSeconds,
-                    0..3600
-                ) {
-                    actions.composeSaveSettings(
-                        settings.copy(tcpKeepAliveIdleSeconds = it)
-                    )
-                }
-                NumberSetting(
-                    activity.getString(R.string.v15_tcp_keep_interval),
-                    settings.tcpKeepAliveIntervalSeconds,
-                    0..600
-                ) {
-                    actions.composeSaveSettings(
-                        settings.copy(tcpKeepAliveIntervalSeconds = it)
-                    )
-                }
-                NumberSetting(
-                    activity.getString(R.string.v15_tcp_user_timeout),
-                    settings.tcpUserTimeoutMs,
-                    0..120000
-                ) {
-                    actions.composeSaveSettings(settings.copy(tcpUserTimeoutMs = it))
-                }
-                NumberSetting(
-                    activity.getString(R.string.v15_network_buffer),
-                    settings.networkBufferSizeKb,
-                    8..256
-                ) {
-                    actions.composeSaveSettings(settings.copy(networkBufferSizeKb = it))
-                }
-            }
-        }
-
-        item {
             SettingsSection(activity.getString(R.string.v15_settings_wireguard)) {
                 BooleanSetting(
                     activity.getString(R.string.v19_native_wireguard),
@@ -416,46 +279,26 @@ internal fun UnifiedSettingsScreen(
                 NumberSetting(
                     activity.getString(R.string.v15_wireguard_mtu),
                     settings.wireGuardMtu,
-                    576..9000
+                    1280..1420
                 ) {
-                    actions.composeSaveSettings(settings.copy(wireGuardMtu = it))
-                }
-                ChoiceSetting(
-                    label = activity.getString(R.string.v15_wireguard_workers),
-                    value = settings.wireGuardWorkers,
-                    choices = (1..8).map { it to it.toString() }
-                ) {
-                    actions.composeSaveSettings(settings.copy(wireGuardWorkers = it))
+                    actions.composeSaveSettings(
+                        settings.copy(wireGuardMtu = it)
+                    )
                 }
                 NumberSetting(
                     activity.getString(R.string.v15_wireguard_keepalive),
                     settings.wireGuardKeepAliveSeconds,
-                    0..300
+                    0..120
                 ) {
                     actions.composeSaveSettings(
                         settings.copy(wireGuardKeepAliveSeconds = it)
                     )
                 }
-                NumberSetting(
-                    activity.getString(R.string.v15_wireguard_handshake),
-                    settings.wireGuardHandshakeTimeoutMs,
-                    5000..60000
-                ) {
-                    actions.composeSaveSettings(
-                        settings.copy(wireGuardHandshakeTimeoutMs = it)
-                    )
-                }
-                ChoiceSetting(
-                    label = activity.getString(R.string.v15_wireguard_strategy),
-                    value = settings.wireGuardDomainStrategy,
-                    choices = AppSettings.WIREGUARD_DOMAIN_STRATEGIES.map {
-                        it to it
-                    }
-                ) {
-                    actions.composeSaveSettings(
-                        settings.copy(wireGuardDomainStrategy = it)
-                    )
-                }
+                Text(
+                    activity.getString(R.string.v20_wireguard_auto_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
 
