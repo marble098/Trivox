@@ -277,7 +277,6 @@ private fun HomeTab(
     val runtime = remember(uiRevision) { actions.composeRuntime() }
     val settings = remember(uiRevision) { actions.composeSettings() }
     val selected = remember(uiRevision) { actions.composeSelectedProfile() }
-    val stats = remember(uiRevision) { actions.composeProfileStats() }
     val leakStatus = remember(uiRevision) { actions.composeLeakStatus() }
     val leakBusy = remember(uiRevision) { actions.composeLeakCheckBusy() }
     val connected = runtime.state !in setOf(ConnectionState.DISCONNECTED, ConnectionState.ERROR)
@@ -436,12 +435,14 @@ private fun HomeTab(
             }
         }
 
+        
         item {
             WorldMapCard(
-                activity = activity,
                 connected =
                     runtime.state ==
                         ConnectionState.CONNECTED,
+                settings = settings,
+                mode = runtime.mode,
                 countryCode =
                     selected
                         ?.exitCountryCode
@@ -606,28 +607,7 @@ private fun HomeTab(
             }
         }
 
-        item {
-            SectionCard(activity.getString(R.string.profile_details)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MetricChip(
-                        stats.total.toString(),
-                        activity.getString(R.string.configurations),
-                        Modifier.weight(1f)
-                    )
-                    MetricChip(
-                        stats.alive.toString(),
-                        activity.getString(R.string.compose_alive_label),
-                        Modifier.weight(1f)
-                    )
-                    MetricChip(
-                        stats.failed.toString(),
-                        activity.getString(R.string.compose_failed_label),
-                        Modifier.weight(1f)
-                    )
-                }
             }
-        }
-    }
 }
 
 @Composable

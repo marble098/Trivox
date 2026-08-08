@@ -91,6 +91,36 @@ class PingManager(
         )
     }
 
+    fun measureSingle(
+        profile: ConfigProfile,
+        settings: AppSettings,
+        workDir: File
+    ): PingResult = when {
+        profile.protocol.equals("wireguard", ignoreCase = true) &&
+            settings.pingMethod == PingMethod.TCP_CONNECT -> wireGuardTcp(
+                profile = profile,
+                settings = settings,
+                workDir = workDir,
+                attempts = 2,
+                timeoutMs = SINGLE_WIREGUARD_TIMEOUT_MS
+            )
+        settings.pingMethod == PingMethod.TCP_CONNECT -> tcp(
+            profile = profile,
+            attempts = 2,
+            timeoutMs = SINGLE_TCP_TIMEOUT_MS,
+            lowLatencyRecheck = false
+        )
+        else -> realXray(
+            profile = profile,
+            settings = settings,
+            workDir = workDir,
+            attempts = 1,
+            timeoutSeconds = SINGLE_XRAY_TIMEOUT_SECONDS,
+            allowSingleSample = true,
+            maxTargetsPerSample = 1
+        )
+    }
+
     /**
      * WireGuard endpoints are UDP, so TCP-connect to :51820 is meaningless.
      * Start Xray on an isolated local mixed proxy and require verified HTTPS
@@ -220,7 +250,8 @@ class PingManager(
     fun tcp(
         profile: ConfigProfile,
         attempts: Int = 3,
-        timeoutMs: Int = DEFAULT_TCP_TIMEOUT_MS
+        timeoutMs: Int = DEFAULT_TCP_TIMEOUT_MS,
+        lowLatencyRecheck: Boolean = true
     ): PingResult {
         val timestamp = System.currentTimeMillis()
         val count = attempts.coerceIn(2, 5)
@@ -278,6 +309,7 @@ class PingManager(
         var totalAttempts = count
         var summary = PingStatistics.summarize(samples, totalAttempts)
         if (
+            lowLatencyRecheck &&
             summary.success &&
             (summary.latencyMs ?: Long.MAX_VALUE) < LOW_LATENCY_RECHECK_THRESHOLD_MS
         ) {
@@ -1053,6 +1085,9 @@ class PingManager(
         private const val MIN_TIMEOUT_MS = 500
         private const val MAX_TIMEOUT_MS = 15_000
         private const val DEFAULT_TCP_TIMEOUT_MS = 4_000
+        private const val SINGLE_TCP_TIMEOUT_MS = 2_500
+        private const val SINGLE_WIREGUARD_TIMEOUT_MS = 3_500
+        private const val SINGLE_XRAY_TIMEOUT_SECONDS = 4
         private const val ADDRESS_PROBE_TIMEOUT_MS = 1_500
         private const val LOW_LATENCY_RECHECK_THRESHOLD_MS = 10L
         private const val LOW_LATENCY_RECHECK_ATTEMPTS = 3

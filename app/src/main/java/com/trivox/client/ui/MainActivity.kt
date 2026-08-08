@@ -2051,11 +2051,14 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             runOnUiThread(::refresh)
 
             val settings =
-                settingsRepository.load()
-            settings.pingMethod = method
+                settingsRepository
+                    .load()
+                    .copy(
+                        pingMethod = method
+                    )
             val result =
                 runCatching {
-                    pingManager.measure(
+                    pingManager.measureSingle(
                         profile = profile,
                         settings = settings,
                         workDir = cacheDir

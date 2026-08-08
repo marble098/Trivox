@@ -293,6 +293,8 @@ class TrivoxVpnService : VpnService() {
         val settings =
             SettingsRepository(this)
                 .load()
+        var effectiveSettings =
+            settings
 
         val isWireGuard =
             profile.protocol.equals(
@@ -380,20 +382,32 @@ class TrivoxVpnService : VpnService() {
         val needsMixedListener =
             settings.localProxyInVpn &&
                 !isWireGuard
-        mixedListenerPort =
-            settings.socksPort.takeIf { needsMixedListener }
-        if (
-            needsMixedListener &&
-            !LocalProxyPortGuard.prepare(
-                core = core,
-                port = settings.socksPort
-            )
-        ) {
-            fail(
-                "The local mixed proxy port ${settings.socksPort} is still in use. " +
-                    "Choose another local proxy port or disable the VPN local proxy."
-            )
-            return
+        if (needsMixedListener) {
+            val preparedPort =
+                LocalProxyPortGuard.prepareVpnPort(
+                    core = core,
+                    preferredPort = settings.socksPort
+                )
+
+            if (preparedPort == null) {
+                fail("No safe local mixed proxy port is available for this VPN session.")
+                return
+            }
+
+            mixedListenerPort = preparedPort
+
+            if (preparedPort != settings.socksPort) {
+                effectiveSettings = settings.copy(
+                    socksPort = preparedPort,
+                    httpPort = preparedPort
+                ).normalize()
+                Diagnostics.warning(
+                    "VPN session will use temporary local mixed proxy port " +
+                        "$preparedPort instead of ${settings.socksPort}"
+                )
+            }
+        } else {
+            mixedListenerPort = null
         }
 
         ConnectionRuntime.update(
@@ -545,7 +559,7 @@ class TrivoxVpnService : VpnService() {
         val request =
             CoreStartRequest(
                 effectiveProfile,
-                settings,
+                effectiveSettings,
                 ConnectionMode.VPN,
                 tun!!.fd
             )
