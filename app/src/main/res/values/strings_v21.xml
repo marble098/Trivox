@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v21_scope_all">All</string>
+    <string name="v21_scope_favorites">★ Favorites</string>
+    <string name="v21_leak_auto_hint">When enabled, Trivox checks DNS, IPv4 and IPv6 after every VPN connection and hardens unsafe settings automatically.</string>
+    <string name="v21_leak_inconclusive">Leak check was inconclusive. No forced reconnect was performed.</string>
+    <string name="v21_leak_unresolved">A leak risk is still visible, but protection settings are already hardened. A reconnect loop was not started.</string>
+</resources>

@@ -1,5 +1,7 @@
 package com.trivox.client.ui.compose
 
+// TRIVOX_V21_STABILITY_AUTO_LEAK_UI
+
 // TRIVOX_V20_SAFE_NATIVE_LIFECYCLE
 
 import android.app.Activity
@@ -179,7 +181,7 @@ fun LegacyMirrorScreen(activity: Activity, legacy: ViewGroup, fallbackTitle: Str
     var revision by remember { mutableIntStateOf(0) }
     LaunchedEffect(legacy) {
         while (true) {
-            delay(1_250)
+            delay(3_000)
             revision++
         }
     }
@@ -303,8 +305,10 @@ private fun LegacyLinearGroup(group: LinearLayout, revision: Int, parentTopLevel
         if (decorate) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                )
             ) {
                 Column(
                     modifier = Modifier.padding(12.dp),

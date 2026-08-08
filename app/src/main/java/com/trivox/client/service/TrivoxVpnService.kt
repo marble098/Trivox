@@ -1,5 +1,7 @@
 package com.trivox.client.service
 
+// TRIVOX_V21_STABILITY_AUTO_LEAK_UI
+
 // TRIVOX_V20_SAFE_NATIVE_LIFECYCLE
 
 // TRIVOX_V19_NATIVE_WIREGUARD_LEAK_GUARD
@@ -50,6 +52,8 @@ class TrivoxVpnService : VpnService() {
     private val ownsCore =
         AtomicBoolean(false)
     private val nativeWireGuardActive =
+        AtomicBoolean(false)
+    private val nativeWireGuardStarting =
         AtomicBoolean(false)
     private val reconnectQueued =
         AtomicBoolean(false)
@@ -157,6 +161,7 @@ class TrivoxVpnService : VpnService() {
         cleanupStarted.set(false)
         ownsCore.set(false)
         nativeWireGuardActive.set(false)
+        nativeWireGuardStarting.set(false)
         startedElapsed = 0L
         sessionId =
             ConnectionRuntime
@@ -319,12 +324,31 @@ class TrivoxVpnService : VpnService() {
                 it.copy(state = ConnectionState.CONNECTING)
             }
 
-            val nativeResult = NativeWireGuardManager.start(
-                context = this,
-                profile = profile,
-                settings = settings,
-                isCancelled = stopRequested::get
-            )
+            nativeWireGuardStarting.set(true)
+            val nativeResult =
+                try {
+                    NativeWireGuardManager.start(
+                        context = this,
+                        profile = profile,
+                        settings = settings,
+                        isCancelled = {
+                            stopRequested.get() ||
+                                cleanupStarted.get()
+                        }
+                    )
+                } finally {
+                    nativeWireGuardStarting.set(false)
+                }
+
+            if (
+                stopRequested.get() ||
+                cleanupStarted.get() ||
+                nativeResult.errorCategory == "cancelled"
+            ) {
+                NativeWireGuardManager.cancelPending()
+                finishSession(null)
+                return
+            }
 
             if (nativeResult.success) {
                 completeNativeWireGuardStart(
@@ -334,23 +358,10 @@ class TrivoxVpnService : VpnService() {
                 return
             }
 
+            NativeWireGuardManager.stop()
             Diagnostics.warning(
-                "Native WireGuard start failed: " +
+                "Native WireGuard unavailable; falling back to Xray: " +
                     "${nativeResult.errorCategory} ${nativeResult.detail}"
-            )
-
-            if (nativeResult.activated) {
-                fail(
-                    getString(
-                        com.trivox.client.R.string.v19_wireguard_verify_failed,
-                        nativeResult.errorCategory
-                    )
-                )
-                return
-            }
-
-            Diagnostics.warning(
-                "Native WireGuard could not activate; trying Xray compatibility path"
             )
         }
 
@@ -1091,6 +1102,13 @@ class TrivoxVpnService : VpnService() {
 
         stopRequested.set(true)
 
+        if (
+            nativeWireGuardStarting.get() ||
+            nativeWireGuardActive.get()
+        ) {
+            NativeWireGuardManager.cancelPending()
+        }
+
         ConnectionRuntime
             .updateSession(sessionId) {
                 it.copy(
@@ -1132,7 +1150,11 @@ class TrivoxVpnService : VpnService() {
                 )
             unregisterNetworkCallback()
 
-            if (nativeWireGuardActive.getAndSet(false)) {
+            val nativeWasStarting =
+                nativeWireGuardStarting.getAndSet(false)
+            val nativeWasActive =
+                nativeWireGuardActive.getAndSet(false)
+            if (nativeWasStarting || nativeWasActive) {
                 runCatching {
                     NativeWireGuardManager.stop()
                 }.onFailure {
@@ -1408,7 +1430,11 @@ class TrivoxVpnService : VpnService() {
                 null
             )
 
-        if (nativeWireGuardActive.getAndSet(false)) {
+        val nativeWasStarting =
+            nativeWireGuardStarting.getAndSet(false)
+        val nativeWasActive =
+            nativeWireGuardActive.getAndSet(false)
+        if (nativeWasStarting || nativeWasActive) {
             runCatching {
                 NativeWireGuardManager.stop()
             }.onFailure {

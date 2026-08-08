@@ -1,10 +1,13 @@
 package com.trivox.client.ui.compose
 
+// TRIVOX_V21_STABILITY_AUTO_LEAK_UI
+
 // TRIVOX_V20_SAFE_NATIVE_LIFECYCLE
 
 // TRIVOX_V19_NATIVE_WIREGUARD_LEAK_GUARD
 
 import android.app.Activity
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -229,6 +232,11 @@ internal fun UnifiedSettingsScreen(
                         settings.copy(autoLeakProtection = it)
                     )
                 }
+                Text(
+                    activity.getString(R.string.v21_leak_auto_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 ChoiceSetting(
                     label = activity.getString(R.string.v15_dns_mode),
                     value = settings.dnsMode,
@@ -335,21 +343,23 @@ private fun SettingsSection(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(17.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Column(
-            Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            Modifier.padding(horizontal = 15.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(11.dp)
         ) {
             Text(
                 title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.70f)
+            )
             content()
         }
     }
@@ -362,7 +372,10 @@ private fun BooleanSetting(
     onCheckedChange: (Boolean) -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) }
+            .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
@@ -372,7 +385,7 @@ private fun BooleanSetting(
         )
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange
+            onCheckedChange = null
         )
     }
 }

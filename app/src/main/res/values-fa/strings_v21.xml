@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v21_scope_all">همه</string>
+    <string name="v21_scope_favorites">★ علاقه‌مندی‌ها</string>
+    <string name="v21_leak_auto_hint">با فعال بودن این گزینه، Trivox بعد از هر اتصال VPN نشتی DNS، IPv4 و IPv6 را بررسی می‌کند و تنظیمات ناامن را به‌صورت خودکار سخت‌گیرانه‌تر می‌کند.</string>
+    <string name="v21_leak_inconclusive">بررسی نشتی قطعی نبود. برای جلوگیری از حلقه اتصال مجدد، اتصال به اجبار ری‌استارت نشد.</string>
+    <string name="v21_leak_unresolved">هنوز ریسک نشتی دیده می‌شود، اما تنظیمات حفاظتی از قبل سخت‌گیرانه هستند. حلقه اتصال مجدد ایجاد نشد.</string>
+</resources>

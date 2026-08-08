@@ -1,5 +1,7 @@
 package com.trivox.client.network
 
+// TRIVOX_V21_STABILITY_AUTO_LEAK_UI
+
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.LinkProperties
@@ -32,11 +34,17 @@ class LeakProtectionManager(
         val probeIncomplete: Boolean = false
     ) {
         val hasLeak: Boolean
-            get() = ipLeak || dnsLeak || ipv6LeakRisk || probeIncomplete
+            get() = ipLeak || dnsLeak || ipv6LeakRisk
 
         fun compactSummary(): String = buildString {
             append("IP ")
-            append(if (!ipLeak && !probeIncomplete) "✓" else "!")
+            append(
+                when {
+                    ipLeak -> "!"
+                    probeIncomplete -> "?"
+                    else -> "✓"
+                }
+            )
             append(" • DNS ")
             append(if (!dnsLeak) "✓" else "!")
             append(" • IPv6 ")

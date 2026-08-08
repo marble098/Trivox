@@ -1,5 +1,7 @@
 package com.trivox.client.ui.compose
 
+// TRIVOX_V21_STABILITY_AUTO_LEAK_UI
+
 // TRIVOX_V19_NATIVE_WIREGUARD_LEAK_GUARD
 
 import android.app.Activity
@@ -10,7 +12,6 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -66,7 +67,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -172,7 +172,11 @@ fun MainComposeScreen(activity: Activity, actions: MainComposeActions) {
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = { MainTopBar(activity, tab) },
             bottomBar = {
-                NavigationBar(windowInsets = WindowInsets(0, 0, 0, 0)) {
+                NavigationBar(
+                    windowInsets = WindowInsets(0, 0, 0, 0),
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    tonalElevation = 2.dp
+                ) {
                     MainTab.entries.forEach { item ->
                         val selected = tab == item
                         NavigationBarItem(
@@ -182,7 +186,7 @@ fun MainComposeScreen(activity: Activity, actions: MainComposeActions) {
                                 Icon(
                                     painter = painterResource(item.iconRes),
                                     contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(21.dp)
                                 )
                             },
                             label = {
@@ -237,26 +241,29 @@ fun MainComposeScreen(activity: Activity, actions: MainComposeActions) {
 @Composable
 private fun MainTopBar(activity: Activity, tab: MainTab) {
     Surface(color = MaterialTheme.colorScheme.background) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
+        Column {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
                 Text(
-                    activity.getString(R.string.app_name),
+                    tabLabel(activity, tab),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    tabSubtitle(activity, tab),
+                    "${activity.getString(R.string.app_name)} • ${tabSubtitle(activity, tab)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+            )
         }
     }
 }
@@ -297,13 +304,9 @@ private fun HomeTab(
                         StatusDot(runtime.state)
                         Spacer(Modifier.width(9.dp))
                         Column(Modifier.weight(1f)) {
-                            val connectedGreen = if (isSystemInDarkTheme()) {
-                                Color(0xFF56D99A)
-                            } else {
-                                Color(0xFF087A4E)
-                            }
                             val statusColor = when (runtime.state) {
-                                ConnectionState.CONNECTED -> connectedGreen
+                                ConnectionState.CONNECTED ->
+                                    MaterialTheme.colorScheme.secondary
                                 ConnectionState.ERROR ->
                                     MaterialTheme.colorScheme.error
                                 ConnectionState.PREPARING,
@@ -519,7 +522,7 @@ private fun HomeTab(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            activity.getString(R.string.v19_leak_guard_hint),
+                            activity.getString(R.string.v21_leak_auto_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -698,8 +701,19 @@ private fun ConfigsTab(
             BatchStateBanner(activity, batch)
         }
 
-        val allProfileCount = actions.composeProfiles("", null, false).size
-        val favoriteProfileCount = actions.composeProfiles("", null, true).size
+        val countSnapshot = remember(uiRevision) {
+            actions.composeProfiles("", null, false)
+        }
+        val allProfileCount = countSnapshot.size
+        val favoriteProfileCount = remember(countSnapshot) {
+            countSnapshot.count { it.favorite }
+        }
+        val sourceCounts = remember(countSnapshot) {
+            countSnapshot
+                .groupingBy { it.subscriptionId }
+                .eachCount()
+        }
+
         LazyRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -707,10 +721,8 @@ private fun ConfigsTab(
         ) {
             item {
                 ConfigScopeChip(
-                    label = activity.getString(
-                        R.string.subscription_all_count,
-                        allProfileCount
-                    ),
+                    label = activity.getString(R.string.v21_scope_all),
+                    count = allProfileCount,
                     selected = selectedSource == null,
                     onClick = {
                         selectedSource = null
@@ -720,7 +732,7 @@ private fun ConfigsTab(
             }
             item {
                 ConfigScopeChip(
-                    label = "★ ${activity.getString(R.string.compose_favorites_only)}",
+                    label = activity.getString(R.string.v21_scope_favorites),
                     count = favoriteProfileCount,
                     selected = favoritesOnly,
                     onClick = { favoritesOnly = !favoritesOnly }
@@ -729,7 +741,7 @@ private fun ConfigsTab(
             lazyItems(sources, key = { it.id }) { source ->
                 ConfigScopeChip(
                     label = source.name,
-                    count = actions.composeProfiles("", source.id, false).size,
+                    count = sourceCounts[source.id] ?: 0,
                     selected = selectedSource == source.id,
                     onClick = {
                         selectedSource = source.id
@@ -818,7 +830,7 @@ private fun ProfileCard(
         ),
         colors = CardDefaults.cardColors(
             containerColor = if (selected)
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.58f)
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.34f)
             else MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
@@ -999,10 +1011,16 @@ private fun SubscriptionsTab(
 ) {
     val sources = remember(uiRevision) { actions.composeSubscriptions() }
     val refreshing = remember(uiRevision) { actions.composeSubscriptionRefreshing() }
+    val sourceCounts = remember(uiRevision) {
+        actions.composeProfiles("", null, false)
+            .groupingBy { it.subscriptionId }
+            .eachCount()
+    }
+
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(9.dp)
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1018,8 +1036,11 @@ private fun SubscriptionsTab(
                     enabled = !refreshing
                 ) {
                     Text(
-                        if (refreshing) activity.getString(R.string.subscription_updating)
-                        else activity.getString(R.string.update_all_subscriptions),
+                        if (refreshing) {
+                            activity.getString(R.string.subscription_updating)
+                        } else {
+                            activity.getString(R.string.update_all_subscriptions)
+                        },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -1031,7 +1052,12 @@ private fun SubscriptionsTab(
             item { EmptyCard(activity.getString(R.string.no_subscriptions)) }
         } else {
             lazyItems(sources, key = { it.id }) { source ->
-                SubscriptionCard(activity, source, actions)
+                SubscriptionCard(
+                    activity = activity,
+                    source = source,
+                    configCount = sourceCounts[source.id] ?: 0,
+                    actions = actions
+                )
             }
         }
     }
@@ -1041,46 +1067,78 @@ private fun SubscriptionsTab(
 private fun SubscriptionCard(
     activity: Activity,
     source: SubscriptionSource,
+    configCount: Int,
     actions: MainComposeActions
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { actions.composeOpenSubscriptions(source.id) },
-        shape = RoundedCornerShape(17.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.75f)
+        ),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        )
     ) {
-        Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(
+            Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(source.name, fontWeight = FontWeight.SemiBold)
                     Text(
-                        if (source.enabled) activity.getString(R.string.compose_enabled_status)
-                        else activity.getString(R.string.compose_disabled_status),
+                        source.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        if (source.enabled) {
+                            activity.getString(R.string.compose_enabled_status)
+                        } else {
+                            activity.getString(R.string.compose_disabled_status)
+                        },
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (source.enabled) MaterialTheme.colorScheme.secondary
-                        else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (source.enabled) {
+                            MaterialTheme.colorScheme.secondary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
                     )
                 }
-                TextButton(onClick = { actions.composeSubscriptionActions(source.id) }) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    Text(
+                        configCount.toString(),
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(Modifier.width(4.dp))
+                TextButton(onClick = {
+                    actions.composeSubscriptionActions(source.id)
+                }) {
                     Text("⋮", fontSize = 18.sp)
                 }
             }
 
             Text(
-                if (source.url.isBlank()) activity.getString(R.string.nordvpn_source_label) else source.url,
+                if (source.url.isBlank()) {
+                    activity.getString(R.string.nordvpn_source_label)
+                } else {
+                    source.url
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
-            )
-
-            Text(
-                activity.getString(
-                    R.string.compose_config_count,
-                    actions.composeProfiles("", source.id, false).size
-                ),
-                style = MaterialTheme.typography.bodySmall
             )
 
             if (source.lastError.isNotBlank()) {
@@ -1149,7 +1207,7 @@ private fun ToolsTab(
     )
 
     LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+        columns = GridCells.Adaptive(160.dp),
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1192,7 +1250,7 @@ private fun ConfigScopeChip(
                 onClick = onClick,
                 onLongClick = onLongClick
             ),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         color = if (selected) {
             MaterialTheme.colorScheme.secondaryContainer
         } else {
@@ -1206,23 +1264,19 @@ private fun ConfigScopeChip(
                 MaterialTheme.colorScheme.outlineVariant
             }
         ),
-        tonalElevation = if (selected) 1.5.dp else 0.dp,
+        tonalElevation = if (selected) 1.dp else 0.dp,
         shadowElevation = 0.dp
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
         ) {
             Text(
                 label,
                 modifier = Modifier.widthIn(min = 0.dp, max = 172.dp),
                 style = MaterialTheme.typography.labelLarge,
-                fontWeight = if (selected) {
-                    FontWeight.Bold
-                } else {
-                    FontWeight.Medium
-                },
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1242,7 +1296,7 @@ private fun ConfigScopeChip(
                 ) {
                     Text(
                         count.toString(),
-                        Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold
                     )
@@ -1402,17 +1456,26 @@ private fun ToolButton(title: String, subtitle: String, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(124.dp)
+            .height(112.dp)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(17.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
+        ),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        )
     ) {
         Column(
-            Modifier.fillMaxSize().padding(13.dp),
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = 13.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
                 title,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -1421,7 +1484,7 @@ private fun ToolButton(title: String, subtitle: String, onClick: () -> Unit) {
                 subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 3,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
         }

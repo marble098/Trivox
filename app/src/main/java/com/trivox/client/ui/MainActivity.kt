@@ -1,5 +1,7 @@
 package com.trivox.client.ui
 
+// TRIVOX_V21_STABILITY_AUTO_LEAK_UI
+
 // TRIVOX_V20_SAFE_NATIVE_LIFECYCLE
 
 // TRIVOX_V19_NATIVE_WIREGUARD_LEAK_GUARD
@@ -139,6 +141,8 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         AtomicBoolean(false)
     private val leakCheckBusy =
         AtomicBoolean(false)
+    private val lastAutoLeakSessionId =
+        AtomicLong(-1L)
     private val connectionActionBusy =
         AtomicBoolean(false)
     private val connectionStartPending =
@@ -260,6 +264,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         runOnUiThread {
             renderState(it)
             completePendingProfileSwitch(it)
+            scheduleAutomaticLeakCheck(it)
         }
     }
 
@@ -3973,15 +3978,68 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     override fun composeClearDead() = confirmClearDeadProfiles()
 
 
-    private fun checkLeaksAndRepair() {
+    private fun scheduleAutomaticLeakCheck(
+        snapshot: ConnectionRuntime.Snapshot
+    ) {
+        if (!::settingsRepository.isInitialized) return
+        if (
+            snapshot.state != ConnectionState.CONNECTED ||
+            snapshot.mode != ConnectionMode.VPN ||
+            snapshot.sessionId <= 0L ||
+            !settingsRepository.load().autoLeakProtection
+        ) {
+            return
+        }
+
+        if (
+            lastAutoLeakSessionId.getAndSet(snapshot.sessionId) ==
+            snapshot.sessionId
+        ) {
+            return
+        }
+
+        val expectedSession = snapshot.sessionId
+        handler.postDelayed(
+            {
+                if (activityDestroyed.get()) return@postDelayed
+                val latest = ConnectionRuntime.current()
+                if (
+                    latest.sessionId != expectedSession ||
+                    latest.state != ConnectionState.CONNECTED ||
+                    latest.mode != ConnectionMode.VPN ||
+                    !settingsRepository.load().autoLeakProtection
+                ) {
+                    return@postDelayed
+                }
+
+                checkLeaksAndRepair(
+                    autoTriggered = true,
+                    expectedSessionId = expectedSession
+                )
+            },
+            1_500L
+        )
+    }
+
+    private fun checkLeaksAndRepair(
+        autoTriggered: Boolean = false,
+        expectedSessionId: Long? = null
+    ) {
         val snapshot = ConnectionRuntime.current()
         if (
             snapshot.state != ConnectionState.CONNECTED ||
-            snapshot.mode != ConnectionMode.VPN
+            snapshot.mode != ConnectionMode.VPN ||
+            (
+                expectedSessionId != null &&
+                    snapshot.sessionId != expectedSessionId
+                )
         ) {
-            toast(getString(R.string.v19_leak_connect_first))
+            if (!autoTriggered) {
+                toast(getString(R.string.v19_leak_connect_first))
+            }
             return
         }
+
         if (!leakCheckBusy.compareAndSet(false, true)) {
             return
         }
@@ -3998,41 +4056,97 @@ class MainActivity : ThemedActivity(), MainComposeActions {
 
             runOnUiThreadIfAlive {
                 leakCheckBusy.set(false)
-                result.onSuccess { report ->
-                    if (report.hasLeak) {
-                        val hardened = manager.hardenedSettings(
-                            currentSettings,
-                            report
-                        )
-                        settingsRepository.save(hardened)
-                        composeLeakStatusText =
-                            getString(R.string.v19_leak_fixed) +
-                                "\n" +
-                                report.compactSummary()
 
-                        val latest = ConnectionRuntime.current()
-                        val reconnectProfile = latest.profileId
-                        if (
-                            latest.state == ConnectionState.CONNECTED &&
-                            latest.mode == ConnectionMode.VPN &&
-                            !reconnectProfile.isNullOrBlank()
-                        ) {
-                            pendingSwitchProfileId = reconnectProfile
-                            pendingSwitchMode = ConnectionMode.VPN
-                            stopActiveConnection(latest)
+                val latestBeforeResult = ConnectionRuntime.current()
+                if (
+                    expectedSessionId != null &&
+                    (
+                        latestBeforeResult.sessionId != expectedSessionId ||
+                            latestBeforeResult.state != ConnectionState.CONNECTED ||
+                            latestBeforeResult.mode != ConnectionMode.VPN
+                        )
+                ) {
+                    notifyComposeChanged()
+                    return@runOnUiThreadIfAlive
+                }
+
+                result.onSuccess { report ->
+                    when {
+                        report.hasLeak -> {
+                            val hardened = manager.hardenedSettings(
+                                currentSettings,
+                                report
+                            )
+                            val changed =
+                                hardened.toJson().toString() !=
+                                    currentSettings.toJson().toString()
+
+                            if (changed) {
+                                settingsRepository.save(hardened)
+                                composeLeakStatusText =
+                                    getString(R.string.v19_leak_fixed) +
+                                        "
+" +
+                                        report.compactSummary()
+
+                                val latest = ConnectionRuntime.current()
+                                val reconnectProfile = latest.profileId
+                                if (
+                                    latest.state == ConnectionState.CONNECTED &&
+                                    latest.mode == ConnectionMode.VPN &&
+                                    !reconnectProfile.isNullOrBlank()
+                                ) {
+                                    pendingSwitchProfileId = reconnectProfile
+                                    pendingSwitchMode = ConnectionMode.VPN
+                                    stopActiveConnection(latest)
+                                }
+                            } else {
+                                composeLeakStatusText =
+                                    getString(R.string.v21_leak_unresolved) +
+                                        "
+" +
+                                        report.compactSummary()
+                            }
                         }
-                    } else {
-                        composeLeakStatusText =
-                            getString(R.string.v19_leak_safe) +
-                                "\n" +
-                                report.compactSummary()
+
+                        report.probeIncomplete -> {
+                            composeLeakStatusText =
+                                getString(R.string.v21_leak_inconclusive) +
+                                    "
+" +
+                                    report.compactSummary()
+                        }
+
+                        else -> {
+                            composeLeakStatusText =
+                                getString(R.string.v19_leak_safe) +
+                                    "
+" +
+                                    report.compactSummary()
+                        }
+                    }
+
+                    if (autoTriggered) {
+                        Diagnostics.info(
+                            "Automatic leak guard completed; " +
+                                "session=${snapshot.sessionId}, " +
+                                "leak=${report.hasLeak}, " +
+                                "incomplete=${report.probeIncomplete}"
+                        )
                     }
                 }.onFailure { error ->
                     composeLeakStatusText = getString(
                         R.string.v19_leak_check_failed,
                         error.message ?: getString(R.string.unknown_error)
                     )
-                    Diagnostics.recordThrowable("Leak protection check", error)
+                    Diagnostics.recordThrowable(
+                        if (autoTriggered) {
+                            "Automatic leak protection check"
+                        } else {
+                            "Leak protection check"
+                        },
+                        error
+                    )
                 }
                 notifyComposeChanged()
             }
@@ -4068,6 +4182,14 @@ class MainActivity : ThemedActivity(), MainComposeActions {
 
         settingsRepository.save(next)
         Diagnostics.debug("Settings auto-saved")
+
+        if (
+            !previous.autoLeakProtection &&
+            next.autoLeakProtection
+        ) {
+            lastAutoLeakSessionId.set(-1L)
+            scheduleAutomaticLeakCheck(runtime)
+        }
 
         if (::modeSpinner.isInitialized && previous.mode != next.mode) {
             modeSpinner.setSelection(
