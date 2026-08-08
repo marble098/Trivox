@@ -40,7 +40,7 @@ a9710bbc4c7d4b33ccd62de4a207fde07be3a8aa27f3c38c49c346f8fc04a65c  app/src/main/j
 5a90fedaeae899fecb34190536174df166bb7ea62b59d31e374c646164a1b6d3  app/src/main/java/com/trivox/client/core/XrayCoreAdapter.kt
 7f20416202beecd3d329ac0a8e2dc445d4fa58782cd7fdbc4b3a227f09ee1940  app/src/main/java/com/trivox/client/data/Models.kt
 156ea914b6b3e8296dcb2d5879bb7ff616a58adfe3294401f84d741e599e7585  app/src/main/java/com/trivox/client/data/Repositories.kt
-a84da581da4ab8b355a25fe8683b010265de0eea50148968967a207721f35da9  app/src/main/java/com/trivox/client/importing/SmartClipboardImporter.kt
+23281a11dac97c5056fe743085b6a5ad0034c4199f2757c6dd5e53811fbf66c5  app/src/main/java/com/trivox/client/importing/SmartClipboardImporter.kt
 a9237d4e5aea9d0bc09f26792fc5d8797982b32460db04e2cc74417a7ca2e8c2  app/src/main/java/com/trivox/client/network/BatchRealDelayRunner.kt
 ace70ed6790f3b7e25f44bea0f61339f06e727169d7bf0341fd5bb5b7fe8a7ce  app/src/main/java/com/trivox/client/network/ConnectionInfoManager.kt
 0dc694ca736e3a625b6f4b49cdf0fc618fcffc2659f9fd314337788558f5bd0e  app/src/main/java/com/trivox/client/network/NetworkBufferPool.kt
@@ -57,7 +57,7 @@ e3742666fe46efb588afe99dbfb2920b543b906aff706ccaee692d3bad714313  app/src/main/j
 e4391da9370fc267df9bb2adb548d06ae4c5fb1e5abba1eab49cce25ff8129b5  app/src/main/java/com/trivox/client/network/XrayProbeLogInspector.kt
 aec4cf44adb86ca9747897bf78282f8ed075903b73eb015f403e1a8bef47a89a  app/src/main/java/com/trivox/client/service/BootReceiver.kt
 67864d2e417a0db45d15a21c708f688e6e1cca69efd399c63e2855f56ad10c5d  app/src/main/java/com/trivox/client/service/ConnectionPauseController.kt
-5a511ff20e19f19afaea2054196be6c368762965c188a8b1080acbc2b36aa797  app/src/main/java/com/trivox/client/service/ConnectionService.kt
+ff6cb3fe4a001df011a6277cf6c7db46ca177615812661f96130fc939bcaad6c  app/src/main/java/com/trivox/client/service/ConnectionService.kt
 5a0a5fa2ec0438f3f9eb096759bf973fb00a5abd8ac05b6744ea6837abe15e8f  app/src/main/java/com/trivox/client/service/ConnectionSessionStore.kt
 f495853bbaba89e3a3115d3d9dd2737e259aa140811510a0201082946c5e081c  app/src/main/java/com/trivox/client/service/LocalProxyPortGuard.kt
 e888dde01ceb9229b0910eae127aab1c96d5de9371d9a60e4f63b1303fc9c06c  app/src/main/java/com/trivox/client/service/NotificationActionActivity.kt
@@ -66,7 +66,7 @@ e6baa328a00f7fcdcc3535f0b2372d04401d964b8b4e1d209eef1ae1abd99731  app/src/main/j
 1b575b88f1e7d7ae7743e935ca07f66ff802def94a2c375b67245cf1a5e53f16  app/src/main/java/com/trivox/client/service/QuickConnectActivity.kt
 203949d8abaa595c9a4e67ccf02d6ac6f85c35a8ec6ef8ba1b91cadfa6649b7d  app/src/main/java/com/trivox/client/service/QuickConnectStore.kt
 a2a5cb464b992365acfaedeb606859b80a370910f0f0345da179f23d43c10444  app/src/main/java/com/trivox/client/service/QuickConnectTileService.kt
-7edf1b604d72b7da2aca516aa9b75d0ab1a1ae77fd2cbd728e7d0211699cebb4  app/src/main/java/com/trivox/client/service/TrivoxVpnService.kt
+665aa1fbdb49c0035bd6e4d238f3fbc09208ee599f3d4e745c62c1acefb7f26c  app/src/main/java/com/trivox/client/service/TrivoxVpnService.kt
 bb823265a6a6a1e4aa0be6edca9b6de27bdcc95bc338bb30ee728730edb3a1f9  app/src/main/java/com/trivox/client/ssh/OpenSshBinaryManager.kt
 ca9f54e7c8759bdc64818268edd3c34b3a766539eeeae0fa9bae98c9cda8b27a  app/src/main/java/com/trivox/client/ssh/OpenSshCommand.kt
 dc879e75b4e8092ad7f7048d552e249857c28986660042f6d960fb14de6ac883  app/src/main/java/com/trivox/client/ssh/OpenSshTunnelBridge.kt

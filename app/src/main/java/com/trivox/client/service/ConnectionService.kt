@@ -480,6 +480,8 @@ class ConnectionService : Service() {
                 profileName.ifBlank {
                     "Trivox"
                 },
+            profileId =
+                profileId,
             mode =
                 ConnectionMode.PROXY,
             startedElapsed =

@@ -220,6 +220,7 @@ class TrivoxVpnService : VpnService() {
                 profileName.ifBlank {
                     "Trivox VPN"
                 },
+                requestedProfileId,
                 ConnectionMode.VPN,
                 restoredStartedElapsed,
                 Intent(
@@ -544,6 +545,7 @@ class TrivoxVpnService : VpnService() {
             NotificationSupport.build(
                 this,
                 profile.name,
+                profile.id,
                 ConnectionMode.VPN,
                 startedElapsed,
                 Intent(
@@ -870,6 +872,7 @@ class TrivoxVpnService : VpnService() {
                                 .build(
                                     this@TrivoxVpnService,
                                     current.profileName,
+                                    current.profileId,
                                     ConnectionMode.VPN,
                                     startedElapsed,
                                     Intent(
@@ -1101,6 +1104,7 @@ class TrivoxVpnService : VpnService() {
                 NotificationSupport.build(
                     this,
                     current.profileName,
+                    current.profileId,
                     ConnectionMode.VPN,
                     startedElapsed,
                     Intent(

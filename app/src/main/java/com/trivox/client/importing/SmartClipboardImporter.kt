@@ -129,7 +129,7 @@ object SmartClipboardImporter {
         sourceRepository: SubscriptionRepository
     ): Result {
         val normalized = SubscriptionManager.normalizeUrl(rawUrl)
-        val fetched = SubscriptionManager().fetch(normalized)
+        val fetched = SubscriptionManager().fetch(normalized.toASCIIString())
         check(fetched.profiles.isNotEmpty()) { "Subscription returned no supported configurations" }
 
         val existing = sourceRepository.all().firstOrNull { source ->
