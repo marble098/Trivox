@@ -171,6 +171,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     private var activeSubscriptionId: String? = null
     private var subscriptionTabsSignature = ""
     private var quickToolsExpanded = false
+    private var lastUiRuntimeState: ConnectionState? = null
 
     private val filePicker =
         registerForActivityResult(
@@ -787,6 +788,10 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             R.string
                 .live_ping_measuring
         )
+        Diagnostics.info(
+            "UI live ping requested; session=${snapshot.sessionId}, " +
+                "mode=${snapshot.mode}, profile=${snapshot.profileId.orEmpty()}"
+        )
         notifyComposeChanged()
         handler.removeCallbacks(
             livePingTick
@@ -975,6 +980,10 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             R.string
                 .real_delay_measuring
         )
+        Diagnostics.info(
+            "UI real delay requested; session=${snapshot.sessionId}, " +
+                "mode=${snapshot.mode}, profile=${snapshot.profileId.orEmpty()}"
+        )
         notifyComposeChanged()
         val sessionId =
             snapshot.sessionId
@@ -1017,6 +1026,10 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             }
 
             realDelayBusy.set(false)
+            Diagnostics.info(
+                "UI real delay completed; success=${result.success}, " +
+                    "latency=${result.latencyMs}, error=${result.errorCategory.orEmpty()}"
+            )
 
             runOnUiThread(
                 ::refresh
@@ -1898,6 +1911,10 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             return
         }
 
+        Diagnostics.info(
+            "Single profile test requested; method=${method.name}, " +
+                "profile=${profile.id}"
+        )
         cancelPingTasks()
         val generation =
             pingGeneration.incrementAndGet()
@@ -1944,6 +1961,11 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                         result
                     )
                 }
+                Diagnostics.info(
+                    "Single profile test completed; method=${method.name}, " +
+                        "profile=${profile.id}, success=${result.success}, " +
+                        "latency=${result.latencyMs}, error=${result.errorCategory.orEmpty()}"
+                )
                 runOnUiThread(::refresh)
             }
         }
@@ -1972,6 +1994,10 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             return
         }
 
+        Diagnostics.info(
+            "Batch profile test requested; method=${method.name}, " +
+                "subscription=${activeSubscriptionId.orEmpty()}"
+        )
         cancelPingTasks()
         val generation =
             pingGeneration.incrementAndGet()
@@ -2008,6 +2034,10 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             }
 
             composeBatchTotal.set(profiles.size)
+            Diagnostics.info(
+                "Batch profile test started; method=${method.name}, " +
+                    "generation=$generation, total=${profiles.size}"
+            )
             notifyComposeChanged()
 
             repository.updateMany(
@@ -2098,6 +2128,10 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                         schedulePingFlush(
                             generation,
                             immediate = true
+                        )
+                        Diagnostics.info(
+                            "Batch profile test completed; method=${method.name}, " +
+                                "generation=$generation, total=$totalProfiles"
                         )
                         runOnUiThread {
                             composeBatchRunning.set(false)
@@ -2965,6 +2999,8 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             R.string.disconnect
         )
         connectButton.isEnabled = true
+        Diagnostics.info("UI connection start requested for $profileName")
+        notifyComposeChanged()
 
         handler.postDelayed(
             connectionStartTimeout,
@@ -3067,6 +3103,14 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         snapshot:
             ConnectionRuntime.Snapshot
     ) {
+        if (lastUiRuntimeState != snapshot.state) {
+            Diagnostics.info(
+                "UI runtime state changed: ${lastUiRuntimeState?.name ?: "INITIAL"} -> " +
+                    "${snapshot.state.name}; session=${snapshot.sessionId}, " +
+                    "profile=${snapshot.profileId.orEmpty()}, mode=${snapshot.mode}"
+            )
+            lastUiRuntimeState = snapshot.state
+        }
         connectionStartPending.set(false)
         handler.removeCallbacks(
             connectionStartTimeout
@@ -3241,6 +3285,9 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                     return
                 }
 
+                livePingText.setText(R.string.live_ping_measuring)
+                notifyComposeChanged()
+
                 latencyWorker.execute {
                     val result = runCatching {
                         if (
@@ -3282,6 +3329,10 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                     }
 
                     livePingBusy.set(false)
+                    Diagnostics.info(
+                        "UI live ping completed; success=${result.success}, " +
+                            "latency=${result.latencyMs}, error=${result.errorCategory.orEmpty()}"
+                    )
                     runOnUiThread {
                         refresh()
                         val current = ConnectionRuntime.current()
@@ -3661,7 +3712,34 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     override fun composeSelectedId(): String? =
         if (::repository.isInitialized) repository.selectedId() else null
 
-    override fun composeRuntime(): ConnectionRuntime.Snapshot = ConnectionRuntime.current()
+    override fun composeRuntime(): ConnectionRuntime.Snapshot {
+        val current = ConnectionRuntime.current()
+        if (
+            connectionStartPending.get() &&
+            current.state in setOf(
+                ConnectionState.DISCONNECTED,
+                ConnectionState.ERROR
+            )
+        ) {
+            val selected = if (::repository.isInitialized) {
+                repository.find(repository.selectedId())
+            } else {
+                null
+            }
+            return current.copy(
+                state = ConnectionState.PREPARING,
+                profileId = selected?.id ?: current.profileId,
+                profileName = selected?.name ?: current.profileName,
+                error = "",
+                mode = if (::settingsRepository.isInitialized) {
+                    settingsRepository.load().mode
+                } else {
+                    current.mode
+                }
+            )
+        }
+        return current
+    }
 
     override fun composeSettings(): AppSettings =
         if (::settingsRepository.isInitialized) settingsRepository.load() else AppSettings()
@@ -3723,8 +3801,18 @@ class MainActivity : ThemedActivity(), MainComposeActions {
 
     override fun composeToggleGrid() {
         val settings = settingsRepository.load()
-        settings.gridMode = !settings.gridMode
+        composeSetGrid(!settings.gridMode)
+    }
+
+    override fun composeSetGrid(value: Boolean) {
+        val settings = settingsRepository.load()
+        if (settings.gridMode == value) {
+            notifyComposeChanged()
+            return
+        }
+        settings.gridMode = value
         settingsRepository.save(settings)
+        Diagnostics.info("UI grid mode changed: $value")
         applyLayout()
     }
 
@@ -3793,11 +3881,54 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         refresh()
     }
 
-    override fun composeLivePingLabel(): String =
-        if (::livePingText.isInitialized) livePingText.text?.toString().orEmpty() else ""
+    override fun composeLivePingLabel(): String {
+        val snapshot = ConnectionRuntime.current()
+        if (snapshot.state != ConnectionState.CONNECTED) {
+            return getString(R.string.live_ping_off)
+        }
+        val result = livePingResult
+        return when {
+            livePingBusy.get() && result == null ->
+                getString(R.string.live_ping_measuring)
 
-    override fun composeRealDelayLabel(): String =
-        if (::realDelayText.isInitialized) realDelayText.text?.toString().orEmpty() else ""
+            result?.success == true && result.latencyMs != null ->
+                getString(
+                    R.string.live_ping_value_method,
+                    result.latencyMs,
+                    pingMethodLabel(PingMethod.fromStored(result.method))
+                )
+
+            result != null ->
+                getString(R.string.live_ping_failed)
+
+            !settingsRepository.load().livePingEnabled ->
+                getString(R.string.live_ping_auto_disabled)
+
+            else ->
+                getString(R.string.live_ping_waiting)
+        }
+    }
+
+    override fun composeRealDelayLabel(): String {
+        val snapshot = ConnectionRuntime.current()
+        if (snapshot.state != ConnectionState.CONNECTED) {
+            return getString(R.string.real_delay_off)
+        }
+        val result = realDelayResult
+        return when {
+            realDelayBusy.get() && result == null ->
+                getString(R.string.real_delay_measuring)
+
+            result?.success == true && result.latencyMs != null ->
+                getString(R.string.real_delay_value, result.latencyMs)
+
+            result != null ->
+                getString(R.string.real_delay_failed)
+
+            else ->
+                getString(R.string.real_delay_waiting)
+        }
+    }
 
     companion object {
         private const val MENU_VIEW = 100

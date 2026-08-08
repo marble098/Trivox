@@ -71,7 +71,7 @@ dc879e75b4e8092ad7f7048d552e249857c28986660042f6d960fb14de6ac883  app/src/main/j
 74ff5b2702aa219b05be9a26c6ba3c4c6bf06646a1696dbd03d5f8f0f9c31b8a  app/src/main/java/com/trivox/client/ui/AppRoutingActivity.kt
 ad6d28dc0250e5488d031ec795bc50f7bfbfe60904f07201ff265e79e78e4b59  app/src/main/java/com/trivox/client/ui/ConfigEditorActivity.kt
 87d6ef8ca1afd60d560ca7164bea2967a5dbc42ecf9bb46f98cf53272631c338  app/src/main/java/com/trivox/client/ui/DiagnosticsActivity.kt
-575425040275726d50a4f04a316500694abd5da036e4dba11aa932b8e71fd406  app/src/main/java/com/trivox/client/ui/MainActivity.kt
+26f51558b20d93d88e44cac53acf629c12b73c53d860b6e934543dbaad31b2b7  app/src/main/java/com/trivox/client/ui/MainActivity.kt
 b3e355f0422a85f1170700f37ecd9b58c8a13594861116c5bc42ebb3f4563c58  app/src/main/java/com/trivox/client/ui/ManualConfigActivity.kt
 6f38d4731b10ced728c0a74958721a97e662ecdf157c5b9ebfb55b1162690ad8  app/src/main/java/com/trivox/client/ui/ProfileAdapter.kt
 ff3087ffbb877efe2b4beed9017e409eec693d1f017c5d9becb70c9cc2e7c6f1  app/src/main/java/com/trivox/client/ui/ProxyChainActivity.kt
@@ -80,7 +80,7 @@ ff3087ffbb877efe2b4beed9017e409eec693d1f017c5d9becb70c9cc2e7c6f1  app/src/main/j
 ac90290ded6f5c25887f62b5d722b08e5b057a1cc144ea71bbaac5b5f7a4acbc  app/src/main/java/com/trivox/client/ui/ThemedActivity.kt
 856eeb8e2c72ceb08be0651e9bde7e29bc503389c0a4bfaa17b03b8b878bb929  app/src/main/java/com/trivox/client/ui/UiInsets.kt
 a6dd44767d64edae8ec54895ddb524009b13034d450baff8d1aae5a3228b96e4  app/src/main/java/com/trivox/client/ui/compose/LegacyLayoutBridge.kt
-a3e724c35a9dd5480710a5ce2021a70f260dec7416a95084017bd82cc5789f58  app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt
+fda34b77f71ff9ae42c431471adca28448f31e83f79049116c04cea597056667  app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt
 d0af0b76e024009807055a3c35360470077b6512547d1ecc7657e51ed75bc587  app/src/main/java/com/trivox/client/ui/compose/RoutingComposeScreen.kt
 471e18887b77304ea7e5e67942da7549bba4b0074ba1b9bd58875d75f9e01c8c  app/src/main/java/com/trivox/client/ui/compose/TrivoxComposeUi.kt
 22fc2fea3013958e0f3950f89b1836eef3a950e78b4d49fc7f194828196a4d13  app/src/main/java/com/trivox/client/update/UpdateChecker.kt
@@ -192,4 +192,4 @@ d9775eefee793eb1a110e470ab92688a0a8f5040a619b2435e5ebb397e57b9ea  tools/openssh/
 03d4961aeb69ca9e3278ec4c3f1757a8a9237cf5ecf79825be386e19f70d949e  tools/validate-android-resources.py
 5e0eaf59e140118cf08891e912a2b945b09adbb3f823f4e6c4e82097742f2c93  tools/validate-api-guards.py
 94e56f1059f0981fad2db85aa1e43a8b93a93ebbf37479d016143e91d587fe37  tools/validate-string-formats.py
-d67ae567dd2956151731f5e8fb8d56a6fe83a663cfb19cb70eefc46444860d1f  tools/verify-compose-migration.sh
+0c0a5bb4bee37972665272e41bcc2bf8907fd50cdf230dcd223fbf0842c90365  tools/verify-compose-migration.sh

@@ -2,6 +2,10 @@ package com.trivox.client.ui.compose
 
 import android.app.Activity
 import android.os.SystemClock
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +30,8 @@ import androidx.compose.foundation.lazy.items as lazyItems
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -111,6 +117,7 @@ interface MainComposeActions {
     fun composeOpenDiagnostics()
     fun composeOpenSubscriptions(sourceId: String? = null)
     fun composeToggleGrid()
+    fun composeSetGrid(value: Boolean)
     fun composeSetHideIp(value: Boolean)
     fun composeSetLivePingEnabled(value: Boolean)
     fun composeRequestQuickTile()
@@ -131,7 +138,6 @@ private enum class MainTab(val iconRes: Int) {
 @Composable
 fun MainComposeScreen(activity: Activity, actions: MainComposeActions) {
     TrivoxTheme(activity) {
-        @Suppress("UNUSED_VARIABLE")
         val revision = actions.composeRevision()
         var tab by rememberSaveable { mutableStateOf(MainTab.HOME) }
 
@@ -166,11 +172,36 @@ fun MainComposeScreen(activity: Activity, actions: MainComposeActions) {
             }
         ) { padding ->
             when (tab) {
-                MainTab.HOME -> HomeTab(activity, actions, Modifier.padding(padding))
-                MainTab.CONFIGS -> ConfigsTab(activity, actions, Modifier.padding(padding))
-                MainTab.SUBSCRIPTIONS -> SubscriptionsTab(activity, actions, Modifier.padding(padding))
-                MainTab.TOOLS -> ToolsTab(activity, actions, Modifier.padding(padding))
-                MainTab.SETTINGS -> SettingsTab(activity, actions, Modifier.padding(padding))
+                MainTab.HOME -> HomeTab(
+                    activity = activity,
+                    actions = actions,
+                    uiRevision = revision,
+                    modifier = Modifier.padding(padding)
+                )
+                MainTab.CONFIGS -> ConfigsTab(
+                    activity = activity,
+                    actions = actions,
+                    uiRevision = revision,
+                    modifier = Modifier.padding(padding)
+                )
+                MainTab.SUBSCRIPTIONS -> SubscriptionsTab(
+                    activity = activity,
+                    actions = actions,
+                    uiRevision = revision,
+                    modifier = Modifier.padding(padding)
+                )
+                MainTab.TOOLS -> ToolsTab(
+                    activity = activity,
+                    actions = actions,
+                    uiRevision = revision,
+                    modifier = Modifier.padding(padding)
+                )
+                MainTab.SETTINGS -> SettingsTab(
+                    activity = activity,
+                    actions = actions,
+                    uiRevision = revision,
+                    modifier = Modifier.padding(padding)
+                )
             }
         }
     }
@@ -204,10 +235,15 @@ private fun MainTopBar(activity: Activity, tab: MainTab) {
 }
 
 @Composable
-private fun HomeTab(activity: Activity, actions: MainComposeActions, modifier: Modifier = Modifier) {
-    val runtime = actions.composeRuntime()
-    val settings = actions.composeSettings()
-    val profiles = actions.composeProfiles("", null, false)
+private fun HomeTab(
+    activity: Activity,
+    actions: MainComposeActions,
+    uiRevision: Int,
+    modifier: Modifier = Modifier
+) {
+    val runtime = remember(uiRevision) { actions.composeRuntime() }
+    val settings = remember(uiRevision) { actions.composeSettings() }
+    val profiles = remember(uiRevision) { actions.composeProfiles("", null, false) }
     val selectedId = runtime.profileId ?: actions.composeSelectedId()
     val selected = profiles.firstOrNull { it.id == selectedId }
     val connected = runtime.state !in setOf(ConnectionState.DISCONNECTED, ConnectionState.ERROR)
@@ -280,14 +316,54 @@ private fun HomeTab(activity: Activity, actions: MainComposeActions, modifier: M
                         )
                     }
 
+                    val connectionColor by animateColorAsState(
+                        targetValue = if (connected) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                        animationSpec = tween(durationMillis = 180),
+                        label = "connection-button-color"
+                    )
+                    val connectionContentColor = if (connected) {
+                        MaterialTheme.colorScheme.onError
+                    } else {
+                        MaterialTheme.colorScheme.onPrimary
+                    }
+                    val transitioning = runtime.state in setOf(
+                        ConnectionState.PREPARING,
+                        ConnectionState.CONNECTING,
+                        ConnectionState.RECONNECTING,
+                        ConnectionState.STOPPING
+                    )
                     Button(
                         onClick = actions::composeToggleConnection,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            if (connected) activity.getString(R.string.disconnect)
-                            else activity.getString(R.string.connect)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .animateContentSize(),
+                        enabled = runtime.state != ConnectionState.STOPPING,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = connectionColor,
+                            contentColor = connectionContentColor
                         )
+                    ) {
+                        if (transitioning) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(17.dp),
+                                strokeWidth = 2.dp,
+                                color = connectionContentColor
+                            )
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        AnimatedContent(
+                            targetState = connected,
+                            label = "connection-action"
+                        ) { isConnected ->
+                            Text(
+                                if (isConnected) activity.getString(R.string.disconnect)
+                                else activity.getString(R.string.connect)
+                            )
+                        }
                     }
 
                     if (runtime.state == ConnectionState.CONNECTED) {
@@ -408,15 +484,22 @@ private fun HomeTab(activity: Activity, actions: MainComposeActions, modifier: M
 }
 
 @Composable
-private fun ConfigsTab(activity: Activity, actions: MainComposeActions, modifier: Modifier = Modifier) {
+private fun ConfigsTab(
+    activity: Activity,
+    actions: MainComposeActions,
+    uiRevision: Int,
+    modifier: Modifier = Modifier
+) {
     var query by rememberSaveable { mutableStateOf("") }
     var favoritesOnly by rememberSaveable { mutableStateOf(false) }
     var selectedSource by rememberSaveable { mutableStateOf(actions.composeActiveSubscriptionId()) }
-    val sources = actions.composeSubscriptions()
-    val settings = actions.composeSettings()
-    val batch = actions.composeBatchState()
-    val profiles = actions.composeProfiles(query, selectedSource, favoritesOnly)
-    val selectedId = actions.composeSelectedId()
+    val sources = remember(uiRevision) { actions.composeSubscriptions() }
+    val settings = remember(uiRevision) { actions.composeSettings() }
+    val batch = remember(uiRevision) { actions.composeBatchState() }
+    val profiles = remember(query, selectedSource, favoritesOnly, uiRevision) {
+        actions.composeProfiles(query, selectedSource, favoritesOnly)
+    }
+    val selectedId = remember(uiRevision) { actions.composeSelectedId() }
 
     Column(
         modifier = modifier
@@ -445,14 +528,29 @@ private fun ConfigsTab(activity: Activity, actions: MainComposeActions, modifier
                 modifier = Modifier.weight(1f),
                 enabled = !batch.running
             ) {
-                Text(activity.getString(R.string.compose_tcp_all), maxLines = 1)
+                Text(
+                    if (batch.running && batch.method == PingMethod.TCP_CONNECT) {
+                        "TCP ${batch.completed}/${batch.total.coerceAtLeast(1)}"
+                    } else {
+                        activity.getString(R.string.compose_tcp_all)
+                    },
+                    maxLines = 1
+                )
             }
             OutlinedButton(
                 onClick = { actions.composeTestAll(PingMethod.XRAY_HTTP) },
                 modifier = Modifier.weight(1f),
                 enabled = !batch.running
             ) {
-                Text(activity.getString(R.string.compose_real_all), maxLines = 1)
+                Text(
+                    if (batch.running && batch.method == PingMethod.XRAY_HTTP) {
+                        "${activity.getString(R.string.compose_real_label)} " +
+                            "${batch.completed}/${batch.total.coerceAtLeast(1)}"
+                    } else {
+                        activity.getString(R.string.compose_real_all)
+                    },
+                    maxLines = 1
+                )
             }
         }
 
@@ -557,6 +655,7 @@ private fun ProfileCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .animateContentSize()
             .clickable { actions.composeSelectProfile(profile.id) },
         shape = RoundedCornerShape(17.dp),
         colors = CardDefaults.cardColors(
@@ -604,6 +703,13 @@ private fun ProfileCard(
                 )
             }
 
+            if (
+                profile.tcpTestStatus == TestStatus.TESTING ||
+                profile.realTestStatus == TestStatus.TESTING
+            ) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton(
                     onClick = { actions.composePingProfile(profile.id, PingMethod.TCP_CONNECT) },
@@ -611,7 +717,13 @@ private fun ProfileCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
-                        if (compact) "TCP" else activity.getString(R.string.compose_test_tcp),
+                        if (profile.tcpTestStatus == TestStatus.TESTING) {
+                            "TCP…"
+                        } else if (compact) {
+                            "TCP"
+                        } else {
+                            activity.getString(R.string.compose_test_tcp)
+                        },
                         fontSize = if (compact) 10.sp else 11.sp
                     )
                 }
@@ -621,8 +733,13 @@ private fun ProfileCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
-                        if (compact) activity.getString(R.string.compose_real_label)
-                        else activity.getString(R.string.compose_test_real),
+                        if (profile.realTestStatus == TestStatus.TESTING) {
+                            "${activity.getString(R.string.compose_real_label)}…"
+                        } else if (compact) {
+                            activity.getString(R.string.compose_real_label)
+                        } else {
+                            activity.getString(R.string.compose_test_real)
+                        },
                         fontSize = if (compact) 10.sp else 11.sp
                     )
                 }
@@ -642,9 +759,14 @@ private fun ProfileCard(
 }
 
 @Composable
-private fun SubscriptionsTab(activity: Activity, actions: MainComposeActions, modifier: Modifier = Modifier) {
-    val sources = actions.composeSubscriptions()
-    val refreshing = actions.composeSubscriptionRefreshing()
+private fun SubscriptionsTab(
+    activity: Activity,
+    actions: MainComposeActions,
+    uiRevision: Int,
+    modifier: Modifier = Modifier
+) {
+    val sources = remember(uiRevision) { actions.composeSubscriptions() }
+    val refreshing = remember(uiRevision) { actions.composeSubscriptionRefreshing() }
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
@@ -743,7 +865,13 @@ private fun SubscriptionCard(
 }
 
 @Composable
-private fun ToolsTab(activity: Activity, actions: MainComposeActions, modifier: Modifier = Modifier) {
+private fun ToolsTab(
+    activity: Activity,
+    actions: MainComposeActions,
+    uiRevision: Int,
+    modifier: Modifier = Modifier
+) {
+    val settings = remember(uiRevision) { actions.composeSettings() }
     val tools = listOf(
         ToolEntry(
             activity.getString(R.string.select_fastest),
@@ -781,7 +909,7 @@ private fun ToolsTab(activity: Activity, actions: MainComposeActions, modifier: 
             actions::composeRequestQuickTile
         ),
         ToolEntry(
-            if (actions.composeSettings().gridMode) activity.getString(R.string.list)
+            if (settings.gridMode) activity.getString(R.string.list)
             else activity.getString(R.string.grid),
             activity.getString(R.string.compose_tool_view_summary),
             actions::composeToggleGrid
@@ -802,8 +930,13 @@ private fun ToolsTab(activity: Activity, actions: MainComposeActions, modifier: 
 }
 
 @Composable
-private fun SettingsTab(activity: Activity, actions: MainComposeActions, modifier: Modifier = Modifier) {
-    val settings = actions.composeSettings()
+private fun SettingsTab(
+    activity: Activity,
+    actions: MainComposeActions,
+    uiRevision: Int,
+    modifier: Modifier = Modifier
+) {
+    val settings = remember(uiRevision) { actions.composeSettings() }
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
@@ -829,7 +962,7 @@ private fun SettingsTab(activity: Activity, actions: MainComposeActions, modifie
                 SettingToggle(
                     label = activity.getString(R.string.compose_grid_layout),
                     checked = settings.gridMode,
-                    onCheckedChange = { actions.composeToggleGrid() }
+                    onCheckedChange = actions::composeSetGrid
                 )
                 SettingSummary(
                     activity.getString(R.string.profile_sorting_section),
@@ -880,7 +1013,19 @@ private fun BatchStateBanner(activity: Activity, state: ComposeBatchState) {
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold
             )
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            val progress = if (state.total > 0) {
+                (state.completed.toFloat() / state.total.toFloat()).coerceIn(0f, 1f)
+            } else {
+                0f
+            }
+            if (state.total > 0) {
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
         }
     }
 }
@@ -1059,7 +1204,7 @@ private fun EmptyCard(text: String) {
 
 @Composable
 private fun StatusDot(state: ConnectionState) {
-    val color = when (state) {
+    val targetColor = when (state) {
         ConnectionState.CONNECTED -> MaterialTheme.colorScheme.secondary
         ConnectionState.ERROR -> MaterialTheme.colorScheme.error
         ConnectionState.PREPARING,
@@ -1068,6 +1213,11 @@ private fun StatusDot(state: ConnectionState) {
         ConnectionState.STOPPING -> MaterialTheme.colorScheme.tertiary
         ConnectionState.DISCONNECTED -> MaterialTheme.colorScheme.outline
     }
+    val color by animateColorAsState(
+        targetValue = targetColor,
+        animationSpec = tween(durationMillis = 180),
+        label = "connection-status-dot"
+    )
     Surface(modifier = Modifier.size(10.dp), shape = CircleShape, color = color) {}
 }
 

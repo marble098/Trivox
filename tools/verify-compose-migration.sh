@@ -107,6 +107,22 @@ grep -Fq 'contentWindowInsets = WindowInsets(0, 0, 0, 0)' "$main_compose" || \
 grep -Fq 'NavigationBar(windowInsets = WindowInsets(0, 0, 0, 0))' "$main_compose" || \
   fail "bottom navigation may double-apply navigation-bar insets"
 grep -Fq 'composeBatchState' "$main_compose" || fail "Compose batch-test progress state missing"
+grep -Fq 'uiRevision = revision' "$main_compose" || \
+  fail "Compose revision is not propagated into tab content"
+grep -Fq 'remember(uiRevision)' "$main_compose" || \
+  fail "tab state is not keyed to the UI revision"
+grep -Fq 'composeSetGrid(value: Boolean)' "$main_compose" || \
+  fail "settings grid switch is not value-driven"
+grep -Fq 'override fun composeSetGrid(value: Boolean)' "$main_activity" || \
+  fail "settings grid state setter is missing"
+grep -Fq 'ButtonDefaults.buttonColors' "$main_compose" || \
+  fail "connection action does not publish its active/destructive color"
+grep -Fq 'connectionStartPending.get()' "$main_activity" || \
+  fail "pending VPN starts are not exposed to Compose"
+grep -Fq 'UI live ping completed' "$main_activity" || \
+  fail "live ping runtime diagnostics missing"
+! grep -Fq 'livePingText.text?.toString()' "$main_activity" || \
+  fail "Compose live ping label still depends on the hidden legacy button"
 grep -Fq 'composeSubscriptionActions' "$main_compose" || fail "subscription actions are not exposed in Compose"
 grep -Fq 'GridCells.Adaptive' "$main_compose" || fail "Compose grid mode is not implemented"
 ! grep -Fq 'R.string.status_alive' "$main_compose" || fail "formatted legacy alive label used without arguments"
