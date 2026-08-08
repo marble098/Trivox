@@ -35,7 +35,18 @@ internal class BatchRealDelayRunner(
         callback: (ConfigProfile, PingResult) -> Unit,
         fallback: (ConfigProfile) -> PingResult
     ) {
-        val policy = RealDelayPolicy.from(settings)
+        val policy =
+            RealDelayPolicy
+                .from(settings)
+                .forBatch(profiles.size)
+        if (profiles.size >= 64) {
+            Diagnostics.info(
+                "Large Real Delay batch constrained; " +
+                    "total=${profiles.size}, " +
+                    "group=${policy.groupSize}, " +
+                    "workers=${policy.workers}"
+            )
+        }
         profiles.chunked(policy.groupSize).forEach { group ->
             if (Thread.currentThread().isInterrupted) return
 

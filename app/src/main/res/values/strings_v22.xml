@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v22_world_map_title">World route</string>
+    <string name="v22_world_map_waiting">Connect to place the server flag on the map</string>
+    <string name="v22_world_map_resolving">Resolving connected country…</string>
+    <string name="v22_world_map_live">LIVE</string>
+    <string name="v22_world_map_idle">IDLE</string>
+    <string name="v22_world_map_offline">Offline vector map • no map SDK or network request</string>
+</resources>

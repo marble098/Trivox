@@ -11,6 +11,25 @@ internal data class RealDelayPolicy(
     val targets: List<VerifiedHttpProbe.Target>,
     val requiredProofs: Int
 ) {
+    fun forBatch(totalProfiles: Int): RealDelayPolicy {
+        val total = totalProfiles.coerceAtLeast(0)
+        return when {
+            total >= 160 ->
+                copy(
+                    groupSize = minOf(groupSize, 6),
+                    workers = minOf(workers, 2),
+                    startGraceMs = maxOf(startGraceMs, 100)
+                )
+            total >= 64 ->
+                copy(
+                    groupSize = minOf(groupSize, 8),
+                    workers = minOf(workers, 3),
+                    startGraceMs = maxOf(startGraceMs, 90)
+                )
+            else -> this
+        }
+    }
+
     companion object {
         fun from(settings: AppSettings): RealDelayPolicy {
             val allTargets = listOf(VerifiedHttpProbe.strongTraceTarget) +

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v22_world_map_title">مسیر جهانی</string>
+    <string name="v22_world_map_waiting">متصل شوید تا پرچم سرور روی نقشه نمایش داده شود</string>
+    <string name="v22_world_map_resolving">در حال تشخیص کشور اتصال…</string>
+    <string name="v22_world_map_live">متصل</string>
+    <string name="v22_world_map_idle">آماده</string>
+    <string name="v22_world_map_offline">نقشه برداری آفلاین • بدون SDK نقشه و درخواست شبکه</string>
+</resources>

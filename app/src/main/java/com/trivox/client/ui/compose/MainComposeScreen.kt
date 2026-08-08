@@ -437,6 +437,37 @@ private fun HomeTab(
         }
 
         item {
+            WorldMapCard(
+                activity = activity,
+                connected =
+                    runtime.state ==
+                        ConnectionState.CONNECTED,
+                countryCode =
+                    selected
+                        ?.exitCountryCode
+                        .orEmpty(),
+                countryName =
+                    selected
+                        ?.exitCountry
+                        .orEmpty(),
+                flagText =
+                    buildString {
+                        append(
+                            selected
+                                ?.exitFlag
+                                .orEmpty()
+                        )
+                        append(' ')
+                        append(
+                            selected
+                                ?.name
+                                .orEmpty()
+                        )
+                    }
+            )
+        }
+
+        item {
             SectionCard(activity.getString(R.string.compose_latency_section)) {
                 if (selected != null) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

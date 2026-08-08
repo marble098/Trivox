@@ -1,5 +1,6 @@
 package com.trivox.client.service
 
+// TRIVOX_V22_NATIVE_CRASH_GUARD
 // TRIVOX_V21_STABILITY_AUTO_LEAK_UI
 
 import android.content.Context
@@ -14,15 +15,15 @@ import com.wireguard.android.backend.Tunnel
 import com.wireguard.config.Config
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Native WireGuard lifecycle controller.
  *
- * Startup verification is intentionally not protected by one long synchronized
- * block. Stop/new-start requests invalidate an epoch immediately, detach the
- * active candidate, and let stale workers observe cancellation without blocking
- * the next VPN session.
+ * Every GoBackend call for one tunnel is serialized by that tunnel handle.
+ * Cleanup is exactly-once even when UI stop, service cleanup and the startup
+ * worker all observe cancellation at nearly the same time.
  */
 object NativeWireGuardManager {
     data class StartResult(
@@ -34,15 +35,18 @@ object NativeWireGuardManager {
         val detail: String = ""
     )
 
-    private data class ActiveTunnel(
+    private class ActiveTunnel(
         val backend: GoBackend,
         val tunnel: ManagedTunnel
-    )
+    ) {
+        val nativeLock = Any()
+        val downStarted = AtomicBoolean(false)
+    }
 
     private val stateLock = Any()
     private val epoch = AtomicLong(0L)
-    private var backend: GoBackend? = null
-    private var tunnel: ManagedTunnel? = null
+    private val nativeReadyAtNanos = AtomicLong(0L)
+    private var activeTunnel: ActiveTunnel? = null
 
     fun supports(profile: ConfigProfile): Boolean =
         NativeWireGuardConfig.supports(profile)
@@ -55,6 +59,10 @@ object NativeWireGuardManager {
     ): StartResult {
         val token = epoch.incrementAndGet()
         bringDown(detachCurrent())
+
+        if (!waitForBackendReady(token, isCancelled)) {
+            return cancelledResult(false, null)
+        }
 
         val candidates = runCatching {
             NativeWireGuardConfig.candidates(
@@ -96,6 +104,9 @@ object NativeWireGuardManager {
             if (cancelled(token, isCancelled)) {
                 return cancelledResult(activatedAny, lastMtu)
             }
+            if (!waitForBackendReady(token, isCancelled)) {
+                return cancelledResult(activatedAny, lastMtu)
+            }
 
             val candidateBackend = runCatching {
                 GoBackend(context.applicationContext)
@@ -108,7 +119,11 @@ object NativeWireGuardManager {
                     detail = it.message.orEmpty()
                 )
             }
-            val candidateTunnel = ManagedTunnel("trivoxwg")
+            val handle =
+                ActiveTunnel(
+                    backend = candidateBackend,
+                    tunnel = ManagedTunnel("trivoxwg")
+                )
             val config = runCatching {
                 Config.parse(
                     ByteArrayInputStream(
@@ -126,24 +141,41 @@ object NativeWireGuardManager {
             }
 
             lastMtu = candidate.mtu
-            val up = runCatching {
-                candidateBackend.setState(
-                    candidateTunnel,
-                    Tunnel.State.UP,
-                    config
-                )
+            Diagnostics.nativeCheckpoint(
+                "wireGuardSetStateUp",
+                "begin",
+                "candidate=${index + 1}/${candidates.size}; mtu=${candidate.mtu}"
+            )
+            val up = synchronized(handle.nativeLock) {
+                runCatching {
+                    handle.backend.setState(
+                        handle.tunnel,
+                        Tunnel.State.UP,
+                        config
+                    )
+                }
             }
+            Diagnostics.nativeCheckpoint(
+                "wireGuardSetStateUp",
+                if (up.isSuccess && up.getOrNull() == Tunnel.State.UP) {
+                    "completed"
+                } else {
+                    "failed"
+                },
+                up.exceptionOrNull()?.message.orEmpty()
+            )
+
             if (up.isFailure || up.getOrNull() != Tunnel.State.UP) {
                 lastCategory = "native_wireguard_activation"
                 lastDetail = up.exceptionOrNull()?.message.orEmpty()
-                bringDown(ActiveTunnel(candidateBackend, candidateTunnel))
+                bringDown(handle)
                 continue
             }
 
             activatedAny = true
 
             if (cancelled(token, isCancelled)) {
-                bringDown(ActiveTunnel(candidateBackend, candidateTunnel))
+                bringDown(handle)
                 return cancelledResult(true, candidate.mtu)
             }
 
@@ -151,19 +183,18 @@ object NativeWireGuardManager {
                 if (epoch.get() != token || isCancelled()) {
                     false
                 } else {
-                    backend = candidateBackend
-                    tunnel = candidateTunnel
+                    activeTunnel = handle
                     true
                 }
             }
             if (!installed) {
-                bringDown(ActiveTunnel(candidateBackend, candidateTunnel))
+                bringDown(handle)
                 return cancelledResult(true, candidate.mtu)
             }
 
             if (!waitCancellable(180L, token, isCancelled)) {
-                detachIfCurrent(candidateBackend, candidateTunnel)
-                bringDown(ActiveTunnel(candidateBackend, candidateTunnel))
+                detachIfCurrent(handle)
+                bringDown(handle)
                 return cancelledResult(true, candidate.mtu)
             }
 
@@ -178,22 +209,60 @@ object NativeWireGuardManager {
                 }
             )
 
-            val stats = runCatching {
-                candidateBackend.getStatistics(candidateTunnel)
-            }.getOrNull()
+            val stats =
+                if (!cancelled(token, isCancelled)) {
+                    synchronized(handle.nativeLock) {
+                        if (handle.downStarted.get()) {
+                            null
+                        } else {
+                            Diagnostics.nativeCheckpoint(
+                                "wireGuardGetStatistics",
+                                "begin",
+                                "candidate=${index + 1}/${candidates.size}"
+                            )
+                            runCatching {
+                                handle.backend.getStatistics(handle.tunnel)
+                            }.also {
+                                Diagnostics.nativeCheckpoint(
+                                    "wireGuardGetStatistics",
+                                    if (it.isSuccess) "completed" else "failed",
+                                    it.exceptionOrNull()?.message.orEmpty()
+                                )
+                            }.getOrNull()
+                        }
+                    }
+                } else {
+                    null
+                }
+
             val rx = stats?.totalRx() ?: 0L
             val tx = stats?.totalTx() ?: 0L
 
             if (cancelled(token, isCancelled)) {
-                detachIfCurrent(candidateBackend, candidateTunnel)
-                bringDown(ActiveTunnel(candidateBackend, candidateTunnel))
+                detachIfCurrent(handle)
+                bringDown(handle)
                 return cancelledResult(true, candidate.mtu)
             }
 
             if (proof.success) {
-                val version = runCatching {
-                    candidateBackend.version
-                }.getOrDefault("")
+                val stillOwned = synchronized(stateLock) {
+                    activeTunnel === handle &&
+                        epoch.get() == token &&
+                        !isCancelled()
+                }
+                if (!stillOwned) {
+                    detachIfCurrent(handle)
+                    bringDown(handle)
+                    return cancelledResult(true, candidate.mtu)
+                }
+
+                val version = synchronized(handle.nativeLock) {
+                    if (handle.downStarted.get()) {
+                        ""
+                    } else {
+                        runCatching { handle.backend.version }.getOrDefault("")
+                    }
+                }
                 Diagnostics.info(
                     "Native WireGuard verified; mtu=${candidate.mtu}, rx=$rx, tx=$tx"
                 )
@@ -218,8 +287,8 @@ object NativeWireGuardManager {
                 "Native WireGuard candidate failed: $lastCategory ($lastDetail)"
             )
 
-            detachIfCurrent(candidateBackend, candidateTunnel)
-            bringDown(ActiveTunnel(candidateBackend, candidateTunnel))
+            detachIfCurrent(handle)
+            bringDown(handle)
 
             if (lastCategory == "cancelled") {
                 return cancelledResult(true, candidate.mtu)
@@ -248,14 +317,20 @@ object NativeWireGuardManager {
 
     fun isRunning(): Boolean {
         val active = synchronized(stateLock) {
-            val b = backend ?: return@synchronized null
-            val t = tunnel ?: return@synchronized null
-            ActiveTunnel(b, t)
+            activeTunnel
         } ?: return false
 
-        return runCatching {
-            active.backend.getState(active.tunnel) == Tunnel.State.UP
-        }.getOrDefault(false)
+        if (active.downStarted.get()) return false
+
+        return synchronized(active.nativeLock) {
+            if (active.downStarted.get()) {
+                false
+            } else {
+                runCatching {
+                    active.backend.getState(active.tunnel) == Tunnel.State.UP
+                }.getOrDefault(false)
+            }
+        }
     }
 
     fun stop() {
@@ -263,38 +338,81 @@ object NativeWireGuardManager {
         bringDown(detachCurrent())
     }
 
-    private fun detachCurrent(): ActiveTunnel? = synchronized(stateLock) {
-        val b = backend
-        val t = tunnel
-        backend = null
-        tunnel = null
-        if (b != null && t != null) ActiveTunnel(b, t) else null
-    }
-
-    private fun detachIfCurrent(
-        expectedBackend: GoBackend,
-        expectedTunnel: ManagedTunnel
-    ) {
+    private fun detachCurrent(): ActiveTunnel? =
         synchronized(stateLock) {
-            if (backend === expectedBackend && tunnel === expectedTunnel) {
-                backend = null
-                tunnel = null
+            activeTunnel.also {
+                activeTunnel = null
+            }
+        }
+
+    private fun detachIfCurrent(expected: ActiveTunnel) {
+        synchronized(stateLock) {
+            if (activeTunnel === expected) {
+                activeTunnel = null
             }
         }
     }
 
     private fun bringDown(active: ActiveTunnel?) {
         if (active == null) return
-        runCatching {
-            active.backend.setState(
-                active.tunnel,
-                Tunnel.State.DOWN,
-                null
-            )
-        }.onFailure {
+        if (!active.downStarted.compareAndSet(false, true)) return
+
+        Diagnostics.nativeCheckpoint(
+            "wireGuardSetStateDown",
+            "begin",
+            "exactly-once cleanup"
+        )
+        val result = synchronized(active.nativeLock) {
+            runCatching {
+                active.backend.setState(
+                    active.tunnel,
+                    Tunnel.State.DOWN,
+                    null
+                )
+            }
+        }
+        Diagnostics.nativeCheckpoint(
+            "wireGuardSetStateDown",
+            if (result.isSuccess) "completed" else "failed",
+            result.exceptionOrNull()?.message.orEmpty()
+        )
+        result.exceptionOrNull()?.let {
             Diagnostics.warning(
                 "Native WireGuard cleanup failed: ${it.message}"
             )
+        }
+        scheduleBackendSettle()
+    }
+
+    private fun scheduleBackendSettle() {
+        val readyAt =
+            System.nanoTime() +
+                NATIVE_BACKEND_SETTLE_MS * 1_000_000L
+        while (true) {
+            val current = nativeReadyAtNanos.get()
+            if (current >= readyAt) return
+            if (nativeReadyAtNanos.compareAndSet(current, readyAt)) return
+        }
+    }
+
+    private fun waitForBackendReady(
+        token: Long,
+        isCancelled: () -> Boolean
+    ): Boolean {
+        while (true) {
+            if (cancelled(token, isCancelled)) return false
+            val remaining =
+                nativeReadyAtNanos.get() - System.nanoTime()
+            if (remaining <= 0L) return true
+            val sleepMs =
+                ((remaining + 999_999L) / 1_000_000L)
+                    .coerceIn(1L, 40L)
+            try {
+                Thread.sleep(sleepMs)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            }
         }
     }
 
@@ -343,4 +461,6 @@ object NativeWireGuardManager {
         override fun getName(): String = tunnelName
         override fun onStateChange(newState: Tunnel.State) = Unit
     }
+
+    private const val NATIVE_BACKEND_SETTLE_MS = 140L
 }

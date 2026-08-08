@@ -1,5 +1,6 @@
 package com.trivox.client.core
 
+// TRIVOX_V22_NATIVE_CRASH_GUARD
 // TRIVOX_V20_SAFE_NATIVE_LIFECYCLE
 
 import android.content.Context
@@ -7,6 +8,7 @@ import com.trivox.client.util.Diagnostics
 import org.json.JSONObject
 import java.lang.reflect.Proxy
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 class XrayCoreAdapter(
@@ -69,6 +71,18 @@ class XrayCoreAdapter(
                 return@synchronized unavailable()
             }
 
+            validateWireGuardLocally(configJson)
+                ?.let {
+                    return@synchronized it
+                }
+
+            if (!awaitNativeReadyUnsafe()) {
+                return@synchronized CoreResult(
+                    false,
+                    "Xray native settle was interrupted"
+                )
+            }
+
             val file =
                 context.cacheDir.resolve(
                     "trivox-validate-" +
@@ -77,13 +91,29 @@ class XrayCoreAdapter(
 
             try {
                 file.writeText(configJson)
-                invoke(
+                Diagnostics.nativeCheckpoint(
                     "testXray",
-                    JSONObject().put(
-                        "configPath",
-                        file.absolutePath
-                    )
+                    "begin",
+                    "config=${file.name}"
                 )
+                val result =
+                    invoke(
+                        "testXray",
+                        JSONObject().put(
+                            "configPath",
+                            file.absolutePath
+                        )
+                    )
+                Diagnostics.nativeCheckpoint(
+                    "testXray",
+                    if (result.success) {
+                        "completed"
+                    } else {
+                        "failed"
+                    },
+                    result.error
+                )
+                result
             } finally {
                 file.delete()
             }
@@ -112,6 +142,13 @@ class XrayCoreAdapter(
                             staleStop.error
                     )
                 }
+            }
+
+            if (!awaitNativeReadyUnsafe()) {
+                return@synchronized CoreResult(
+                    false,
+                    "Xray native settle was interrupted"
+                )
             }
 
             val registered =
@@ -284,14 +321,135 @@ class XrayCoreAdapter(
         releaseSessionUnsafe()
 
         if (result.success) {
-            try {
-                Thread.sleep(CLEANUP_COOLDOWN_MS)
-            } catch (_: InterruptedException) {
-                Thread.currentThread().interrupt()
-            }
+            scheduleNativeSettleUnsafe()
         }
 
         return result
+    }
+
+    private fun validateWireGuardLocally(
+        configJson: String
+    ): CoreResult? {
+        val root = runCatching {
+            JSONObject(configJson)
+        }.getOrElse {
+            return CoreResult(
+                false,
+                "Invalid Xray JSON: " +
+                    rootMessage(it)
+            )
+        }
+        val outbounds =
+            root.optJSONArray("outbounds")
+                ?: return null
+        var foundWireGuard = false
+
+        for (index in 0 until outbounds.length()) {
+            val outbound =
+                outbounds.optJSONObject(index)
+                    ?: continue
+            if (
+                !outbound
+                    .optString("protocol")
+                    .equals(
+                        "wireguard",
+                        ignoreCase = true
+                    )
+            ) {
+                continue
+            }
+
+            foundWireGuard = true
+            val settings =
+                outbound.optJSONObject("settings")
+                    ?: return CoreResult(
+                        false,
+                        "WireGuard outbound has no settings"
+                    )
+            if (
+                settings
+                    .optString("secretKey")
+                    .isBlank()
+            ) {
+                return CoreResult(
+                    false,
+                    "WireGuard secretKey is missing"
+                )
+            }
+            if (!settings.has("address")) {
+                return CoreResult(
+                    false,
+                    "WireGuard address is missing"
+                )
+            }
+            val peers =
+                settings.optJSONArray("peers")
+            if (
+                peers == null ||
+                peers.length() == 0
+            ) {
+                return CoreResult(
+                    false,
+                    "WireGuard peer is missing"
+                )
+            }
+        }
+
+        if (!foundWireGuard) return null
+
+        Diagnostics.debug(
+            "WireGuard config passed local preflight; " +
+                "native testXray was intentionally skipped"
+        )
+        return CoreResult(true)
+    }
+
+    private fun scheduleNativeSettleUnsafe() {
+        val readyAt =
+            System.nanoTime() +
+                CLEANUP_COOLDOWN_MS *
+                    1_000_000L
+        while (true) {
+            val current =
+                NATIVE_READY_AT_NANOS.get()
+            if (current >= readyAt) return
+            if (
+                NATIVE_READY_AT_NANOS
+                    .compareAndSet(
+                        current,
+                        readyAt
+                    )
+            ) {
+                return
+            }
+        }
+    }
+
+    private fun awaitNativeReadyUnsafe(): Boolean {
+        while (true) {
+            val remaining =
+                NATIVE_READY_AT_NANOS.get() -
+                    System.nanoTime()
+            if (remaining <= 0L) {
+                return true
+            }
+
+            val sleepMs =
+                (
+                    (remaining + 999_999L) /
+                        1_000_000L
+                    ).coerceIn(
+                        1L,
+                        40L
+                    )
+            try {
+                Thread.sleep(sleepMs)
+            } catch (_: InterruptedException) {
+                Thread.currentThread()
+                    .interrupt()
+                return false
+            }
+        }
     }
 
     private fun registerStableControllerUnsafe(
@@ -546,6 +704,9 @@ class XrayCoreAdapter(
         private val NATIVE_RUNNING =
             AtomicBoolean(false)
 
+        private val NATIVE_READY_AT_NANOS =
+            AtomicLong(0L)
+
         private val ACTIVE_PROTECT =
             AtomicReference<
                 ((Int) -> Boolean)?
@@ -560,6 +721,6 @@ class XrayCoreAdapter(
             false
 
         private const val
-            CLEANUP_COOLDOWN_MS = 90L
+            CLEANUP_COOLDOWN_MS = 180L
     }
 }
