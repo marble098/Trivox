@@ -152,7 +152,7 @@ dde4ccaeb499442eccd67a9e2c22b851e0cfe82e45b1ebbf3d85caf89f3119bc  ./app/src/test
 80ba3ca0b6292c8aade6486c5dd0df6d2f29eac4a33cd2b717b1ff6063b2f4a8  ./app/src/test/java/com/trivox/client/config/ConfigParserV10CompatibilityTest.kt
 e11a7fa0b47e421f2ef8cb9ab91443e1e7891afc6256961ef9a720b3676c767c  ./app/src/test/java/com/trivox/client/config/ConfigParserWireGuardQuickV7Test.kt
 6cbac5914938b253d9505fb8f7ed37deebe8dc9449ecfe4cc2f3e0b511bf019c  ./app/src/test/java/com/trivox/client/config/ManualConfigFactoryWireGuardV9Test.kt
-ea1d8c8609c24a72859c5c71a0ffcf2ef96e7955782d67a51e752c5392a4abbe  ./app/src/test/java/com/trivox/client/config/XrayConfigBuilderNetworkTuningV9Test.kt
+750ead33ba18fa2a53d6d672c176f06b6c885ddd6a72b19f0768760c322c6aa2  ./app/src/test/java/com/trivox/client/config/XrayConfigBuilderNetworkTuningV9Test.kt
 f9a54dad6ed041fae59f87a27b195e213e4bd3f64e98aa03e802dc392a005d8e  ./app/src/test/java/com/trivox/client/config/XrayConfigBuilderV8ReliabilityTest.kt
 4de51f26052699f0d68e14893131ca3ef1b3f806308a047a714090d4fa7552dd  ./app/src/test/java/com/trivox/client/config/XrayConfigBuilderWireGuardTest.kt
 5c03b5d4bf35bb1cc9796da13d7b3cde78e8f6c76ee695af902360c3b94e45a3  ./app/src/test/java/com/trivox/client/config/XrayConfigBuilderWireGuardV6Test.kt

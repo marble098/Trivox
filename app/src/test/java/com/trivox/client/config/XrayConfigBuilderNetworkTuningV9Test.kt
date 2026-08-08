@@ -68,7 +68,7 @@ class XrayConfigBuilderNetworkTuningV9Test {
     }
 
     @Test
-    fun wireGuardExplicitZeroKeepAliveIsPreserved() {
+    fun wireGuardExplicitZeroKeepAliveIsPreservedForIpv4OnlyProfile() {
         val outbound = JSONObject()
             .put("protocol", "wireguard")
             .put(
@@ -107,7 +107,9 @@ class XrayConfigBuilderNetworkTuningV9Test {
         assertFalse(settings.has("workers"))
         assertEquals(1300, settings.getInt("mtu"))
         assertEquals("ForceIPv4", settings.getString("domainStrategy"))
-        assertEquals(2, peer.getJSONArray("allowedIPs").length())
+        val allowedIps = peer.getJSONArray("allowedIPs")
+        assertEquals(1, allowedIps.length())
+        assertEquals("0.0.0.0/0", allowedIps.getString(0))
     }
 
     @Test
