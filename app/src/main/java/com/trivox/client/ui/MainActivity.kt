@@ -4085,8 +4085,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                                 settingsRepository.save(hardened)
                                 composeLeakStatusText =
                                     getString(R.string.v19_leak_fixed) +
-                                        "
-" +
+                                        "\n" +
                                         report.compactSummary()
 
                                 val latest = ConnectionRuntime.current()
@@ -4103,8 +4102,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                             } else {
                                 composeLeakStatusText =
                                     getString(R.string.v21_leak_unresolved) +
-                                        "
-" +
+                                        "\n" +
                                         report.compactSummary()
                             }
                         }
@@ -4112,16 +4110,14 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                         report.probeIncomplete -> {
                             composeLeakStatusText =
                                 getString(R.string.v21_leak_inconclusive) +
-                                    "
-" +
+                                    "\n" +
                                     report.compactSummary()
                         }
 
                         else -> {
                             composeLeakStatusText =
                                 getString(R.string.v19_leak_safe) +
-                                    "
-" +
+                                    "\n" +
                                     report.compactSummary()
                         }
                     }

@@ -4,7 +4,7 @@ f749b65c06428a30b7b0e92399828a3280243717da6ce586bca8245ba514a873  ./.github/work
 d8ec8dba85d2043681dc6e3e3cd9f4e2b866e1c0d6b8749d40306d5f23b22b68  ./BUILDING.md
 d93082972250fdf863d09c997e028c5756882c4ae573c17552f1368e2f64ff84  ./BUILD_VERIFICATION.md
 7f8fe1e83d74288d6b93b1278d2ebcc9c46df73443c1fd33df8ed478f70c5025  ./CHANGELOG.md
-1de09087d9414f3c49d96dddf31032e5a935e61d52da3f3ae3111e35acac0809  ./CHECKSUMS.sha256
+19ce064df3cc4e710125ed287d7c584661d3aa257888fd50023ee6767ef46ba1  ./CHECKSUMS.sha256
 cce7454948b1913477dbf4f268bd06aac3f85e4d65d10f573711331d3e30d67e  ./COMPOSE_MIGRATION_REPORT_FA.md
 10a1789e052b3e46910fce8b3ae2842f9724eb3299f7ad12e600a1a8fd146e0b  ./CORE_INTEGRATION.md
 8c4e557268f3966bdc5ff1732feb89895a1a19db1a316ba312d008c45622e962  ./LICENSE
@@ -80,7 +80,7 @@ dc879e75b4e8092ad7f7048d552e249857c28986660042f6d960fb14de6ac883  ./app/src/main
 74ff5b2702aa219b05be9a26c6ba3c4c6bf06646a1696dbd03d5f8f0f9c31b8a  ./app/src/main/java/com/trivox/client/ui/AppRoutingActivity.kt
 ad6d28dc0250e5488d031ec795bc50f7bfbfe60904f07201ff265e79e78e4b59  ./app/src/main/java/com/trivox/client/ui/ConfigEditorActivity.kt
 87d6ef8ca1afd60d560ca7164bea2967a5dbc42ecf9bb46f98cf53272631c338  ./app/src/main/java/com/trivox/client/ui/DiagnosticsActivity.kt
-ce27e048f0c3f0f77c9a6f79fd3deba3e638483865937db53e7dbc52d24e8890  ./app/src/main/java/com/trivox/client/ui/MainActivity.kt
+ac79e6875edc48cd06f523c00181af2d0598bc29f2b7bef8dfaa84fd40ead069  ./app/src/main/java/com/trivox/client/ui/MainActivity.kt
 b3e355f0422a85f1170700f37ecd9b58c8a13594861116c5bc42ebb3f4563c58  ./app/src/main/java/com/trivox/client/ui/ManualConfigActivity.kt
 6f38d4731b10ced728c0a74958721a97e662ecdf157c5b9ebfb55b1162690ad8  ./app/src/main/java/com/trivox/client/ui/ProfileAdapter.kt
 ff3087ffbb877efe2b4beed9017e409eec693d1f017c5d9becb70c9cc2e7c6f1  ./app/src/main/java/com/trivox/client/ui/ProxyChainActivity.kt
