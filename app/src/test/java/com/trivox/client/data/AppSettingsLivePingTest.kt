@@ -19,8 +19,27 @@ class AppSettingsLivePingTest {
 
     @Test
     fun livePingIntervalIsBounded() {
-        assertEquals(3, AppSettings(livePingIntervalSeconds = 0).normalize().livePingIntervalSeconds)
-        assertEquals(300, AppSettings(livePingIntervalSeconds = 999).normalize().livePingIntervalSeconds)
+        assertEquals(
+            12,
+            AppSettings(
+                livePingIntervalSeconds = 0
+            ).normalize().livePingIntervalSeconds
+        )
+        assertEquals(
+            300,
+            AppSettings(
+                livePingIntervalSeconds = 999
+            ).normalize().livePingIntervalSeconds
+        )
+        assertEquals(15, AppSettings().livePingIntervalSeconds)
         assertTrue(AppSettings().livePingEnabled)
+    }
+
+    @Test
+    fun systemThemeIsTheFreshInstallDefault() {
+        assertEquals(
+            ThemeMode.SYSTEM,
+            AppSettings().themeMode
+        )
     }
 }
