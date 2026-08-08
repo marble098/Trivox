@@ -1,5 +1,7 @@
 package com.trivox.client.ui
 
+// TRIVOX_V19_NATIVE_WIREGUARD_LEAK_GUARD
+
 import android.Manifest
 import android.app.StatusBarManager
 import androidx.appcompat.app.AlertDialog
@@ -67,6 +69,7 @@ import com.trivox.client.data.SubscriptionRepository
 import com.trivox.client.data.SubscriptionSource
 import com.trivox.client.data.TestStatus
 import com.trivox.client.network.ConnectionInfoManager
+import com.trivox.client.network.LeakProtectionManager
 import com.trivox.client.network.PingManager
 import com.trivox.client.network.SubscriptionManager
 import com.trivox.client.network.SubscriptionRefreshCoordinator
@@ -132,6 +135,8 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         AtomicBoolean(false)
     private val realDelayBusy =
         AtomicBoolean(false)
+    private val leakCheckBusy =
+        AtomicBoolean(false)
     private val connectionActionBusy =
         AtomicBoolean(false)
     private val connectionStartPending =
@@ -177,6 +182,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     private var lastUiRuntimeState: ConnectionState? = null
     private val magicClipboardBusy = AtomicBoolean(false)
     @Volatile private var composeUpdateStatusText = ""
+    @Volatile private var composeLeakStatusText = ""
     @Volatile private var composeProfileStatsCache = ComposeProfileStats()
 
     private val filePicker =
@@ -3923,12 +3929,82 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     override fun composePause() = showPauseOptions()
     override fun composeLivePing() = requestLivePingNow()
     override fun composeRealDelay() = requestRealDelayNow()
+    override fun composeLeakStatus(): String = composeLeakStatusText
+    override fun composeLeakCheckBusy(): Boolean = leakCheckBusy.get()
+    override fun composeCheckLeaksAndRepair() = checkLeaksAndRepair()
     override fun composeRefreshExit() = refreshExitInfo(force = true, showError = true)
     override fun composeCopySummary() = copyConnectionSummary()
     override fun composeSelectFastest() = selectFastestProfile()
     override fun composeCopyProxy() = copyLocalProxyEndpoint()
     override fun composeExportBackup() = exportCompleteBackup()
     override fun composeClearDead() = confirmClearDeadProfiles()
+
+
+    private fun checkLeaksAndRepair() {
+        val snapshot = ConnectionRuntime.current()
+        if (
+            snapshot.state != ConnectionState.CONNECTED ||
+            snapshot.mode != ConnectionMode.VPN
+        ) {
+            toast(getString(R.string.v19_leak_connect_first))
+            return
+        }
+        if (!leakCheckBusy.compareAndSet(false, true)) {
+            return
+        }
+
+        composeLeakStatusText = getString(R.string.v19_leak_checking)
+        notifyComposeChanged()
+
+        worker.execute {
+            val manager = LeakProtectionManager(this@MainActivity)
+            val currentSettings = settingsRepository.load()
+            val result = runCatching {
+                manager.check(currentSettings)
+            }
+
+            runOnUiThreadIfAlive {
+                leakCheckBusy.set(false)
+                result.onSuccess { report ->
+                    if (report.hasLeak) {
+                        val hardened = manager.hardenedSettings(
+                            currentSettings,
+                            report
+                        )
+                        settingsRepository.save(hardened)
+                        composeLeakStatusText =
+                            getString(R.string.v19_leak_fixed) +
+                                "\n" +
+                                report.compactSummary()
+
+                        val latest = ConnectionRuntime.current()
+                        val reconnectProfile = latest.profileId
+                        if (
+                            latest.state == ConnectionState.CONNECTED &&
+                            latest.mode == ConnectionMode.VPN &&
+                            !reconnectProfile.isNullOrBlank()
+                        ) {
+                            pendingSwitchProfileId = reconnectProfile
+                            pendingSwitchMode = ConnectionMode.VPN
+                            stopActiveConnection(latest)
+                        }
+                    } else {
+                        composeLeakStatusText =
+                            getString(R.string.v19_leak_safe) +
+                                "\n" +
+                                report.compactSummary()
+                    }
+                }.onFailure { error ->
+                    composeLeakStatusText = getString(
+                        R.string.v19_leak_check_failed,
+                        error.message ?: getString(R.string.unknown_error)
+                    )
+                    Diagnostics.recordThrowable("Leak protection check", error)
+                }
+                notifyComposeChanged()
+            }
+        }
+    }
 
     override fun composeSelectedProfile(): ConfigProfile? {
         if (!::repository.isInitialized) return null
@@ -4058,8 +4134,10 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         }
         val listenerExpected =
             runtime.mode == ConnectionMode.PROXY ||
-                settings.localProxyInVpn ||
-                profile?.protocol.equals("wireguard", ignoreCase = true)
+                (
+                    settings.localProxyInVpn &&
+                        !profile?.protocol.equals("wireguard", ignoreCase = true)
+                    )
 
         return when {
             runtime.state in setOf(

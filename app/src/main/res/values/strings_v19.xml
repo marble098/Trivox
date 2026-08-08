@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v19_leak_guard_title">Leak protection</string>
+    <string name="v19_leak_guard_toggle">Automatic DNS / IP leak protection</string>
+    <string name="v19_leak_guard_hint">Checks VPN route coverage, DNS assignment and the VPN exit IP against the underlying network.</string>
+    <string name="v19_leak_check">Check DNS &amp; IP leaks</string>
+    <string name="v19_leak_checking">Checking VPN routes and exit IP…</string>
+    <string name="v19_leak_safe">No DNS or IP leak detected</string>
+    <string name="v19_leak_fixed">Leak protection was tightened; reconnecting…</string>
+    <string name="v19_leak_check_failed">Leak check failed: %1$s</string>
+    <string name="v19_leak_connect_first">Connect a Device VPN before running the leak check.</string>
+    <string name="v19_native_wireguard">Use native WireGuard VPN backend</string>
+    <string name="v19_native_wireguard_hint">Uses the official WireGuard Android tunnel backend for standard WireGuard profiles and keeps Xray as a compatibility fallback.</string>
+    <string name="v19_wireguard_verify_failed">WireGuard was created but traffic verification failed: %1$s</string>
+</resources>

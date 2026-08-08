@@ -1,5 +1,7 @@
 package com.trivox.client.config
 
+// TRIVOX_V19_NATIVE_WIREGUARD_LEAK_GUARD
+
 import com.trivox.client.data.AppSettings
 import com.trivox.client.data.ConfigProfile
 import com.trivox.client.data.ConnectionMode
@@ -79,10 +81,20 @@ object XrayConfigBuilder {
          * safely carry an IPv6 default route. Keep the user's global IPv6
          * preference untouched, but build this one profile as IPv4-only.
          */
+        val leakSafeSettings =
+            if (
+                settings.autoLeakProtection &&
+                settings.dnsMode in setOf(DnsMode.SYSTEM, DnsMode.DIRECT)
+            ) {
+                settings.copy(dnsMode = DnsMode.THROUGH_PROXY).normalize()
+            } else {
+                settings
+            }
+
         val effectiveSettings = if (isIpv4OnlyWireGuard(profile)) {
-            settings.copy(ipv6 = false).normalize()
+            leakSafeSettings.copy(ipv6 = false).normalize()
         } else {
-            settings
+            leakSafeSettings
         }
 
         val root = JSONObject().put("log", log)
@@ -111,7 +123,10 @@ object XrayConfigBuilder {
          */
         if (
             mode == ConnectionMode.PROXY ||
-            settings.localProxyInVpn
+            (
+                settings.localProxyInVpn &&
+                    !profile.protocol.equals("wireguard", ignoreCase = true)
+                )
         ) {
             result.put(mixedInbound(settings))
         }
@@ -796,6 +811,16 @@ object XrayConfigBuilder {
                     .put("inboundTag", JSONArray().put(DNS_ROUTING_TAG))
                     .put("outboundTag", dnsRouteTag)
             )
+            .apply {
+                if (settings.autoLeakProtection && !settings.ipv6) {
+                    put(
+                        JSONObject()
+                            .put("type", "field")
+                            .put("ip", JSONArray().put("::/0"))
+                            .put("outboundTag", "block")
+                    )
+                }
+            }
             .put(
                 JSONObject()
                     .put("type", "field")

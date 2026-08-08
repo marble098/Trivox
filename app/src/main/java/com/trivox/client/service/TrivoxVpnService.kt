@@ -1,5 +1,7 @@
 package com.trivox.client.service
 
+// TRIVOX_V19_NATIVE_WIREGUARD_LEAK_GUARD
+
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
@@ -44,6 +46,8 @@ class TrivoxVpnService : VpnService() {
     private val cleanupStarted =
         AtomicBoolean(false)
     private val ownsCore =
+        AtomicBoolean(false)
+    private val nativeWireGuardActive =
         AtomicBoolean(false)
     private val reconnectQueued =
         AtomicBoolean(false)
@@ -278,14 +282,6 @@ class TrivoxVpnService : VpnService() {
                     restoredStartedElapsed
             )
 
-        if (!core.adapter.isAvailable()) {
-            fail(
-                "Xray Android core is " +
-                    "missing or corrupted"
-            )
-            return
-        }
-
         val settings =
             SettingsRepository(this)
                 .load()
@@ -302,12 +298,74 @@ class TrivoxVpnService : VpnService() {
                         wireGuardHasIpv6Address(profile)
                     )
 
+        if (
+            isWireGuard &&
+            settings.nativeWireGuardVpn &&
+            NativeWireGuardManager.supports(profile)
+        ) {
+            ConnectionRuntime.update(
+                ConnectionRuntime.Snapshot(
+                    state = ConnectionState.PREPARING,
+                    profileId = profile.id,
+                    profileName = profile.name,
+                    mode = ConnectionMode.VPN,
+                    sessionId = sessionId
+                )
+            )
+            ConnectionRuntime.updateSession(sessionId) {
+                it.copy(state = ConnectionState.CONNECTING)
+            }
+
+            val nativeResult = NativeWireGuardManager.start(
+                context = this,
+                profile = profile,
+                settings = settings,
+                isCancelled = stopRequested::get
+            )
+
+            if (nativeResult.success) {
+                completeNativeWireGuardStart(
+                    profile = profile,
+                    result = nativeResult
+                )
+                return
+            }
+
+            Diagnostics.warning(
+                "Native WireGuard start failed: " +
+                    "${nativeResult.errorCategory} ${nativeResult.detail}"
+            )
+
+            if (nativeResult.activated) {
+                fail(
+                    getString(
+                        com.trivox.client.R.string.v19_wireguard_verify_failed,
+                        nativeResult.errorCategory
+                    )
+                )
+                return
+            }
+
+            Diagnostics.warning(
+                "Native WireGuard could not activate; trying Xray compatibility path"
+            )
+        }
+
+        if (!core.adapter.isAvailable()) {
+            fail(
+                "Xray Android core is " +
+                    "missing or corrupted"
+            )
+            return
+        }
+
         /*
          * WireGuard itself does not need Trivox's localhost mixed listener.
          * Only expose/reserve that port when the user explicitly enabled it.
          */
         val needsMixedListener =
-            settings.localProxyInVpn
+            settings.localProxyInVpn &&
+                !isWireGuard
         mixedListenerPort =
             settings.socksPort.takeIf { needsMixedListener }
         if (
@@ -359,7 +417,11 @@ class TrivoxVpnService : VpnService() {
                 0
             )
 
-        if (effectiveIpv6) {
+        val captureIpv6 =
+            effectiveIpv6 ||
+                settings.autoLeakProtection
+
+        if (captureIpv6) {
             builder
                 .addAddress(
                     "fd00:7472:6976:6f78::1",
@@ -385,7 +447,14 @@ class TrivoxVpnService : VpnService() {
                         }
 
                 DnsMode.SYSTEM ->
-                    emptyList()
+                    if (settings.autoLeakProtection) {
+                        listOf(
+                            "1.1.1.1",
+                            "8.8.8.8"
+                        )
+                    } else {
+                        emptyList()
+                    }
 
                 else ->
                     listOf(
@@ -616,6 +685,82 @@ class TrivoxVpnService : VpnService() {
             settings
                 .reconnectOnNetworkChange,
             request
+        )
+
+        scheduleMonitor()
+    }
+
+
+    private fun completeNativeWireGuardStart(
+        profile: ConfigProfile,
+        result: NativeWireGuardManager.StartResult
+    ) {
+        nativeWireGuardActive.set(true)
+        ownsCore.set(false)
+
+        startedElapsed =
+            restoredStartedElapsed
+                .takeIf {
+                    it > 0L &&
+                        it <= SystemClock.elapsedRealtime()
+                }
+                ?: SystemClock.elapsedRealtime()
+
+        ConnectionRuntime.updateSession(sessionId) {
+            it.copy(
+                state = ConnectionState.CONNECTED,
+                startedElapsed = startedElapsed,
+                error = ""
+            )
+        }
+
+        ConnectionSessionStore.markConnected(
+            context = this,
+            mode = ConnectionMode.VPN,
+            profileId = profile.id,
+            profileName = profile.name,
+            startedElapsed = startedElapsed
+        )
+
+        QuickConnectStore.save(
+            this,
+            ConnectionMode.VPN,
+            profile.id,
+            profile.name
+        )
+        QuickConnectTileService.requestUpdate(this)
+
+        startForeground(
+            NotificationSupport.ID,
+            NotificationSupport.build(
+                this,
+                profile.name,
+                profile.id,
+                ConnectionMode.VPN,
+                startedElapsed,
+                Intent(
+                    this,
+                    TrivoxVpnService::class.java
+                ).setAction(ACTION_STOP)
+            )
+        )
+
+        Diagnostics.info(
+            "VPN started for ${profile.name} via native WireGuard " +
+                "(mtu=${result.mtu ?: 0}, backend=${result.backendVersion})"
+        )
+
+        handler.postDelayed(
+            {
+                val current = ConnectionRuntime.current()
+                if (
+                    current.sessionId == sessionId &&
+                    current.state == ConnectionState.CONNECTED
+                ) {
+                    Diagnostics.markNativeSessionStable()
+                }
+            },
+            NATIVE_STABILITY_WINDOW_MS
         )
 
         scheduleMonitor()
@@ -884,8 +1029,16 @@ class TrivoxVpnService : VpnService() {
                             if (!stopRequested.get() && ssh != null && !ssh.isAlive()) {
                                 fail("OpenSSH tunnel stopped unexpectedly: " + ssh.failureText())
                             } else if (
-                                !stopRequested
-                                    .get() &&
+                                !stopRequested.get() &&
+                                nativeWireGuardActive.get() &&
+                                !NativeWireGuardManager.isRunning()
+                            ) {
+                                fail(
+                                    "Native WireGuard tunnel stopped unexpectedly"
+                                )
+                            } else if (
+                                !stopRequested.get() &&
+                                !nativeWireGuardActive.get() &&
                                 !core.isRunning()
                             ) {
                                 fail(
@@ -975,6 +1128,16 @@ class TrivoxVpnService : VpnService() {
                     null
                 )
             unregisterNetworkCallback()
+
+            if (nativeWireGuardActive.getAndSet(false)) {
+                runCatching {
+                    NativeWireGuardManager.stop()
+                }.onFailure {
+                    Diagnostics.warning(
+                        "Native WireGuard stop failed: " + it.message
+                    )
+                }
+            }
 
             ownsCore.set(false)
             runCatching { core.stop() }
@@ -1231,6 +1394,16 @@ class TrivoxVpnService : VpnService() {
             .removeCallbacksAndMessages(
                 null
             )
+
+        if (nativeWireGuardActive.getAndSet(false)) {
+            runCatching {
+                NativeWireGuardManager.stop()
+            }.onFailure {
+                Diagnostics.warning(
+                    "Native WireGuard destroy cleanup failed: " + it.message
+                )
+            }
+        }
 
         if (
             ownsCore.compareAndSet(

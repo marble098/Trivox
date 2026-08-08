@@ -1,5 +1,7 @@
 package com.trivox.client.ui.compose
 
+// TRIVOX_V19_NATIVE_WIREGUARD_LEAK_GUARD
+
 import android.app.Activity
 import android.os.SystemClock
 import androidx.compose.animation.AnimatedContent
@@ -128,6 +130,9 @@ interface MainComposeActions {
     fun composePause()
     fun composeLivePing()
     fun composeRealDelay()
+    fun composeLeakStatus(): String
+    fun composeLeakCheckBusy(): Boolean
+    fun composeCheckLeaksAndRepair()
     fun composeRefreshExit()
     fun composeCopySummary()
     fun composeSelectFastest()
@@ -267,6 +272,8 @@ private fun HomeTab(
     val settings = remember(uiRevision) { actions.composeSettings() }
     val selected = remember(uiRevision) { actions.composeSelectedProfile() }
     val stats = remember(uiRevision) { actions.composeProfileStats() }
+    val leakStatus = remember(uiRevision) { actions.composeLeakStatus() }
+    val leakBusy = remember(uiRevision) { actions.composeLeakCheckBusy() }
     val connected = runtime.state !in setOf(ConnectionState.DISCONNECTED, ConnectionState.ERROR)
 
     LazyColumn(
@@ -500,6 +507,73 @@ private fun HomeTab(
         }
 
         item {
+            SectionCard(activity.getString(R.string.v19_leak_guard_title)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            activity.getString(R.string.v19_leak_guard_toggle),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            activity.getString(R.string.v19_leak_guard_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.autoLeakProtection,
+                        onCheckedChange = {
+                            actions.composeSaveSettings(
+                                settings.copy(autoLeakProtection = it)
+                            )
+                        }
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = actions::composeCheckLeaksAndRepair,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = runtime.state == ConnectionState.CONNECTED &&
+                        runtime.mode == ConnectionMode.VPN &&
+                        !leakBusy
+                ) {
+                    if (leakBusy) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(
+                        if (leakBusy) {
+                            activity.getString(R.string.v19_leak_checking)
+                        } else {
+                            activity.getString(R.string.v19_leak_check)
+                        }
+                    )
+                }
+
+                if (leakStatus.isNotBlank()) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh
+                    ) {
+                        Text(
+                            leakStatus,
+                            modifier = Modifier.padding(10.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
             SectionCard(activity.getString(R.string.profile_details)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MetricChip(
@@ -626,26 +700,33 @@ private fun ConfigsTab(
 
         val allProfileCount = actions.composeProfiles("", null, false).size
         val favoriteProfileCount = actions.composeProfiles("", null, true).size
-        androidx.compose.foundation.layout.FlowRow(
+        LazyRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            contentPadding = PaddingValues(horizontal = 1.dp)
         ) {
-            ConfigScopeChip(
-                label = activity.getString(R.string.subscription_all_count, allProfileCount),
-                selected = selectedSource == null,
-                onClick = {
-                    selectedSource = null
-                    actions.composeSelectSubscription(null)
-                }
-            )
-            ConfigScopeChip(
-                label = "★ ${activity.getString(R.string.compose_favorites_only)}",
-                count = favoriteProfileCount,
-                selected = favoritesOnly,
-                onClick = { favoritesOnly = !favoritesOnly }
-            )
-            sources.forEach { source ->
+            item {
+                ConfigScopeChip(
+                    label = activity.getString(
+                        R.string.subscription_all_count,
+                        allProfileCount
+                    ),
+                    selected = selectedSource == null,
+                    onClick = {
+                        selectedSource = null
+                        actions.composeSelectSubscription(null)
+                    }
+                )
+            }
+            item {
+                ConfigScopeChip(
+                    label = "★ ${activity.getString(R.string.compose_favorites_only)}",
+                    count = favoriteProfileCount,
+                    selected = favoritesOnly,
+                    onClick = { favoritesOnly = !favoritesOnly }
+                )
+            }
+            lazyItems(sources, key = { it.id }) { source ->
                 ConfigScopeChip(
                     label = source.name,
                     count = actions.composeProfiles("", source.id, false).size,

@@ -1,5 +1,7 @@
 package com.trivox.client.data
 
+// TRIVOX_V19_NATIVE_WIREGUARD_LEAK_GUARD
+
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -302,6 +304,7 @@ data class AppSettings(
     var darkMode: Boolean = false,
     var themeMode: ThemeMode = ThemeMode.LIGHT,
     var localProxyInVpn: Boolean = true,
+    var autoLeakProtection: Boolean = false,
     var autoUpdateCheck: Boolean = true,
     var testUrl: String = DEFAULT_TEST_URL,
     var testAttempts: Int = 3,
@@ -323,7 +326,8 @@ data class AppSettings(
     var wireGuardWorkers: Int = 2,
     var wireGuardKeepAliveSeconds: Int = 25,
     var wireGuardHandshakeTimeoutMs: Int = 18_000,
-    var wireGuardDomainStrategy: String = DEFAULT_WIREGUARD_DOMAIN_STRATEGY
+    var wireGuardDomainStrategy: String = DEFAULT_WIREGUARD_DOMAIN_STRATEGY,
+    var nativeWireGuardVpn: Boolean = true
 ) {
     fun normalize(): AppSettings {
         if (socksPort == LEGACY_SOCKS_PORT || socksPort !in 1..65535) {
@@ -385,6 +389,7 @@ data class AppSettings(
         .put("darkMode", darkMode)
         .put("themeMode", themeMode.name)
         .put("localProxyInVpn", localProxyInVpn)
+        .put("autoLeakProtection", autoLeakProtection)
         .put("autoUpdateCheck", autoUpdateCheck)
         .put("testUrl", testUrl)
         .put("testAttempts", testAttempts)
@@ -407,6 +412,7 @@ data class AppSettings(
         .put("wireGuardKeepAliveSeconds", wireGuardKeepAliveSeconds)
         .put("wireGuardHandshakeTimeoutMs", wireGuardHandshakeTimeoutMs)
         .put("wireGuardDomainStrategy", wireGuardDomainStrategy)
+        .put("nativeWireGuardVpn", nativeWireGuardVpn)
 
     companion object {
         const val DEFAULT_MIXED_PORT = 10202
@@ -468,6 +474,7 @@ data class AppSettings(
                 darkMode = legacyDark,
                 themeMode = ThemeMode.fromStored(json.optString("themeMode"), legacyDark),
                 localProxyInVpn = json.optBoolean("localProxyInVpn", true),
+                autoLeakProtection = json.optBoolean("autoLeakProtection", false),
                 autoUpdateCheck = json.optBoolean("autoUpdateCheck", true),
                 testUrl = json.optString("testUrl", DEFAULT_TEST_URL),
                 testAttempts = json.optInt("testAttempts", 3),
@@ -497,6 +504,10 @@ data class AppSettings(
                 wireGuardDomainStrategy = json.optString(
                     "wireGuardDomainStrategy",
                     DEFAULT_WIREGUARD_DOMAIN_STRATEGY
+                ),
+                nativeWireGuardVpn = json.optBoolean(
+                    "nativeWireGuardVpn",
+                    true
                 )
             ).normalize()
         }

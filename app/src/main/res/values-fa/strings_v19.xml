@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v19_leak_guard_title">محافظ نشتی</string>
+    <string name="v19_leak_guard_toggle">محافظت خودکار در برابر نشتی DNS و IP</string>
+    <string name="v19_leak_guard_hint">پوشش مسیر VPN، دی‌ان‌اس و IP خروجی VPN را با شبکه اصلی مقایسه می‌کند.</string>
+    <string name="v19_leak_check">بررسی نشتی DNS و IP</string>
+    <string name="v19_leak_checking">در حال بررسی مسیرهای VPN و IP خروجی…</string>
+    <string name="v19_leak_safe">هیچ نشتی DNS یا IP شناسایی نشد</string>
+    <string name="v19_leak_fixed">محافظت نشتی سخت‌گیرانه‌تر شد؛ در حال اتصال مجدد…</string>
+    <string name="v19_leak_check_failed">بررسی نشتی ناموفق بود: %1$s</string>
+    <string name="v19_leak_connect_first">برای بررسی نشتی ابتدا Device VPN را متصل کنید.</string>
+    <string name="v19_native_wireguard">استفاده از هسته بومی WireGuard برای VPN</string>
+    <string name="v19_native_wireguard_hint">برای کانفیگ‌های استاندارد WireGuard از کتابخانه رسمی WireGuard اندروید استفاده می‌کند و Xray را برای سازگاری نگه می‌دارد.</string>
+    <string name="v19_wireguard_verify_failed">تونل WireGuard ساخته شد اما عبور واقعی ترافیک تأیید نشد: %1$s</string>
+</resources>

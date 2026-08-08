@@ -1,5 +1,7 @@
 package com.trivox.client.ui.compose
 
+// TRIVOX_V19_NATIVE_WIREGUARD_LEAK_GUARD
+
 import android.app.Activity
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -301,6 +303,14 @@ internal fun UnifiedSettingsScreen(
 
         item {
             SettingsSection(activity.getString(R.string.v15_settings_dns)) {
+                BooleanSetting(
+                    activity.getString(R.string.v19_leak_guard_toggle),
+                    settings.autoLeakProtection
+                ) {
+                    actions.composeSaveSettings(
+                        settings.copy(autoLeakProtection = it)
+                    )
+                }
                 ChoiceSetting(
                     label = activity.getString(R.string.v15_dns_mode),
                     value = settings.dnsMode,
@@ -390,6 +400,19 @@ internal fun UnifiedSettingsScreen(
 
         item {
             SettingsSection(activity.getString(R.string.v15_settings_wireguard)) {
+                BooleanSetting(
+                    activity.getString(R.string.v19_native_wireguard),
+                    settings.nativeWireGuardVpn
+                ) {
+                    actions.composeSaveSettings(
+                        settings.copy(nativeWireGuardVpn = it)
+                    )
+                }
+                Text(
+                    activity.getString(R.string.v19_native_wireguard_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 NumberSetting(
                     activity.getString(R.string.v15_wireguard_mtu),
                     settings.wireGuardMtu,
