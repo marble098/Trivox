@@ -18,6 +18,7 @@ import android.widget.Spinner
 import android.widget.TextView
 import androidx.appcompat.widget.SwitchCompat
 import androidx.appcompat.widget.Toolbar
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +37,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button as M3Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -62,6 +64,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.text.TextStyle
@@ -74,6 +77,7 @@ import androidx.compose.ui.unit.sp
 import com.trivox.client.R
 import com.trivox.client.data.SettingsRepository
 import com.trivox.client.data.ThemeMode
+import com.trivox.client.data.VisualTheme
 import kotlinx.coroutines.delay
 
 private val TrivoxFont = FontFamily(
@@ -103,15 +107,52 @@ private val TrivoxShapes = Shapes(
 )
 
 @Composable
+@Composable
 fun TrivoxTheme(activity: Activity, content: @Composable () -> Unit) {
-    val themeMode = SettingsRepository(activity).load().themeMode
-    val systemDark = isSystemInDarkTheme()
-    val dark = when (themeMode) {
+    val settings = SettingsRepository(activity).load()
+    val dark = resolveTrivoxDark(settings.themeMode, isSystemInDarkTheme())
+    val scheme = trivoxColorScheme(dark, settings.visualTheme)
+
+    MaterialTheme(
+        colorScheme = scheme,
+        typography = TrivoxTypography,
+        shapes = TrivoxShapes,
+        content = content
+    )
+}
+
+@Composable
+fun TrivoxGradientBackground(
+    activity: Activity,
+    content: @Composable () -> Unit
+) {
+    val settings = SettingsRepository(activity).load()
+    val dark = resolveTrivoxDark(settings.themeMode, isSystemInDarkTheme())
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    trivoxGradient(settings.visualTheme, dark)
+                )
+            )
+    ) {
+        content()
+    }
+}
+
+private fun resolveTrivoxDark(themeMode: ThemeMode, systemDark: Boolean): Boolean =
+    when (themeMode) {
         ThemeMode.SYSTEM -> systemDark
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
     }
-    val scheme = if (dark) {
+
+private fun trivoxColorScheme(
+    dark: Boolean,
+    visual: VisualTheme
+): ColorScheme {
+    val base = if (dark) {
         darkColorScheme(
             primary = Color(0xFF9AB7FF),
             onPrimary = Color(0xFF002E6D),
@@ -159,18 +200,116 @@ fun TrivoxTheme(activity: Activity, content: @Composable () -> Unit) {
         )
     }
 
-    MaterialTheme(
-        colorScheme = scheme,
-        typography = TrivoxTypography,
-        shapes = TrivoxShapes,
-        content = content
-    )
+    return when (visual) {
+        VisualTheme.CLASSIC -> base
+        VisualTheme.OCEAN -> if (dark) {
+            base.copy(
+                primary = Color(0xFF70C7FF), secondary = Color(0xFF59E5D5),
+                background = Color(0xFF061621), surface = Color(0xFF0B1C28),
+                surfaceContainer = Color(0xFF102633), surfaceContainerHigh = Color(0xFF17313F)
+            )
+        } else {
+            base.copy(
+                primary = Color(0xFF00658B), secondary = Color(0xFF006B62),
+                background = Color(0xFFF1FBFF), surface = Color(0xFFF9FDFF),
+                surfaceContainer = Color(0xFFE5F5FA), surfaceContainerHigh = Color(0xFFDCEFF5)
+            )
+        }
+        VisualTheme.AURORA -> if (dark) {
+            base.copy(
+                primary = Color(0xFFB9A3FF), secondary = Color(0xFF6EE7B7),
+                background = Color(0xFF111023), surface = Color(0xFF18152E),
+                surfaceContainer = Color(0xFF211C39), surfaceContainerHigh = Color(0xFF2A2444)
+            )
+        } else {
+            base.copy(
+                primary = Color(0xFF6650A4), secondary = Color(0xFF16785B),
+                background = Color(0xFFF9F5FF), surface = Color(0xFFFFFBFF),
+                surfaceContainer = Color(0xFFF2EAFB), surfaceContainerHigh = Color(0xFFEAE1F4)
+            )
+        }
+        VisualTheme.SUNSET -> if (dark) {
+            base.copy(
+                primary = Color(0xFFFFA07A), secondary = Color(0xFFFFD166),
+                background = Color(0xFF21100F), surface = Color(0xFF2A1715),
+                surfaceContainer = Color(0xFF35201D), surfaceContainerHigh = Color(0xFF422925)
+            )
+        } else {
+            base.copy(
+                primary = Color(0xFFA64624), secondary = Color(0xFF8B5A00),
+                background = Color(0xFFFFF7F2), surface = Color(0xFFFFFBF8),
+                surfaceContainer = Color(0xFFFFEDE3), surfaceContainerHigh = Color(0xFFFFE3D4)
+            )
+        }
+        VisualTheme.FOREST -> if (dark) {
+            base.copy(
+                primary = Color(0xFF7DDBA5), secondary = Color(0xFFB8D978),
+                background = Color(0xFF09180F), surface = Color(0xFF102017),
+                surfaceContainer = Color(0xFF17291E), surfaceContainerHigh = Color(0xFF203426)
+            )
+        } else {
+            base.copy(
+                primary = Color(0xFF1F6B43), secondary = Color(0xFF526900),
+                background = Color(0xFFF3FBF5), surface = Color(0xFFFAFFFA),
+                surfaceContainer = Color(0xFFE7F4E9), surfaceContainerHigh = Color(0xFFDDECDD)
+            )
+        }
+        VisualTheme.GRAPHITE -> if (dark) {
+            base.copy(
+                primary = Color(0xFFC0CAD7), secondary = Color(0xFF91A5BA),
+                background = Color(0xFF0D0F12), surface = Color(0xFF15181D),
+                surfaceContainer = Color(0xFF1B1F25), surfaceContainerHigh = Color(0xFF242A31)
+            )
+        } else {
+            base.copy(
+                primary = Color(0xFF465462), secondary = Color(0xFF566879),
+                background = Color(0xFFF6F7F9), surface = Color(0xFFFCFCFD),
+                surfaceContainer = Color(0xFFECEFF2), surfaceContainerHigh = Color(0xFFE3E7EB)
+            )
+        }
+    }
 }
+
+private fun trivoxGradient(visual: VisualTheme, dark: Boolean): List<Color> =
+    when (visual) {
+        VisualTheme.CLASSIC -> if (dark) {
+            listOf(Color(0xFF080C13), Color(0xFF0D1520), Color(0xFF101820))
+        } else {
+            listOf(Color(0xFFF7FAFF), Color(0xFFEEF4FF), Color(0xFFF7FBFA))
+        }
+        VisualTheme.OCEAN -> if (dark) {
+            listOf(Color(0xFF04131D), Color(0xFF08304A), Color(0xFF082D2D))
+        } else {
+            listOf(Color(0xFFF1FBFF), Color(0xFFDDF4FF), Color(0xFFE4FFF8))
+        }
+        VisualTheme.AURORA -> if (dark) {
+            listOf(Color(0xFF100D20), Color(0xFF261A46), Color(0xFF0C342B))
+        } else {
+            listOf(Color(0xFFFBF6FF), Color(0xFFF0E8FF), Color(0xFFE7FFF5))
+        }
+        VisualTheme.SUNSET -> if (dark) {
+            listOf(Color(0xFF1D0D0D), Color(0xFF402018), Color(0xFF39270E))
+        } else {
+            listOf(Color(0xFFFFF8F3), Color(0xFFFFE9DC), Color(0xFFFFF1C9))
+        }
+        VisualTheme.FOREST -> if (dark) {
+            listOf(Color(0xFF07150C), Color(0xFF113421), Color(0xFF263514))
+        } else {
+            listOf(Color(0xFFF5FCF6), Color(0xFFE3F7EA), Color(0xFFF0F6D9))
+        }
+        VisualTheme.GRAPHITE -> if (dark) {
+            listOf(Color(0xFF090B0E), Color(0xFF171C22), Color(0xFF20262D))
+        } else {
+            listOf(Color(0xFFF8F9FA), Color(0xFFECEFF2), Color(0xFFF3F5F7))
+        }
+    }
 
 fun ComposeView.showLegacyMirror(activity: Activity, legacy: ViewGroup, fallbackTitle: String) {
     setContent {
         TrivoxTheme(activity) {
-            LegacyMirrorScreen(activity, legacy, fallbackTitle)
+            TrivoxGradientBackground(activity) {
+                LegacyMirrorScreen(activity, legacy, fallbackTitle)
+            }
         }
     }
 }
@@ -194,6 +333,7 @@ fun LegacyMirrorScreen(activity: Activity, legacy: ViewGroup, fallbackTitle: Str
         .firstOrNull { it.id == R.id.saveButton && it.visibility == View.VISIBLE }
 
     Scaffold(
+        containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(

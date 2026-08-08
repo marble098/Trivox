@@ -45,11 +45,15 @@ import com.trivox.client.R
 import com.trivox.client.config.Validators
 import com.trivox.client.data.AppSettings
 import com.trivox.client.data.ConnectionMode
+import com.trivox.client.data.ExperienceMode
+import com.trivox.client.data.LauncherIconStyle
+import com.trivox.client.data.NotificationActionChoice
 import com.trivox.client.data.DnsMode
 import com.trivox.client.data.PingMethod
 import com.trivox.client.data.ProfileSortMode
 import com.trivox.client.data.RealDelayProfile
 import com.trivox.client.data.ThemeMode
+import com.trivox.client.data.VisualTheme
 import java.net.URI
 
 @Composable
@@ -81,6 +85,27 @@ internal fun UnifiedSettingsScreen(
                     onSelected = actions::composeSetLanguage
                 )
                 ChoiceSetting(
+                    label = activity.getString(R.string.v26_experience_mode),
+                    value = settings.experienceMode,
+                    choices = listOf(
+                        ExperienceMode.SIMPLE to activity.getString(R.string.v26_mode_simple),
+                        ExperienceMode.ADVANCED to activity.getString(R.string.v26_mode_advanced)
+                    )
+                ) { selected ->
+                    actions.composeSaveSettings(settings.copy(experienceMode = selected))
+                }
+                Text(
+                    activity.getString(
+                        if (settings.experienceMode == ExperienceMode.SIMPLE) {
+                            R.string.v26_simple_hint
+                        } else {
+                            R.string.v26_advanced_hint
+                        }
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                ChoiceSetting(
                     label = activity.getString(R.string.v15_theme),
                     value = settings.themeMode,
                     choices = listOf(
@@ -95,6 +120,32 @@ internal fun UnifiedSettingsScreen(
                             darkMode = selected == ThemeMode.DARK
                         )
                     )
+                }
+                ChoiceSetting(
+                    label = activity.getString(R.string.v26_visual_theme),
+                    value = settings.visualTheme,
+                    choices = listOf(
+                        VisualTheme.CLASSIC to activity.getString(R.string.v26_theme_classic),
+                        VisualTheme.OCEAN to activity.getString(R.string.v26_theme_ocean),
+                        VisualTheme.AURORA to activity.getString(R.string.v26_theme_aurora),
+                        VisualTheme.SUNSET to activity.getString(R.string.v26_theme_sunset),
+                        VisualTheme.FOREST to activity.getString(R.string.v26_theme_forest),
+                        VisualTheme.GRAPHITE to activity.getString(R.string.v26_theme_graphite)
+                    )
+                ) { selected ->
+                    actions.composeSaveSettings(settings.copy(visualTheme = selected))
+                }
+                ChoiceSetting(
+                    label = activity.getString(R.string.v26_launcher_icon),
+                    value = settings.launcherIconStyle,
+                    choices = listOf(
+                        LauncherIconStyle.DEFAULT to activity.getString(R.string.v26_icon_default),
+                        LauncherIconStyle.OCEAN to activity.getString(R.string.v26_icon_ocean),
+                        LauncherIconStyle.AURORA to activity.getString(R.string.v26_icon_aurora),
+                        LauncherIconStyle.MONO to activity.getString(R.string.v26_icon_mono)
+                    )
+                ) { selected ->
+                    actions.composeSaveSettings(settings.copy(launcherIconStyle = selected))
                 }
                 BooleanSetting(
                     activity.getString(R.string.hide_ip_on_main),
@@ -297,6 +348,99 @@ internal fun UnifiedSettingsScreen(
             }
         }
 
+
+        item {
+            SettingsSection(activity.getString(R.string.v26_notification_section)) {
+                val actionChoices = notificationActionChoices(activity)
+                ChoiceSetting(
+                    label = activity.getString(R.string.v26_notification_action_1),
+                    value = settings.notificationAction1,
+                    choices = actionChoices
+                ) {
+                    actions.composeSaveSettings(settings.copy(notificationAction1 = it))
+                }
+                ChoiceSetting(
+                    label = activity.getString(R.string.v26_notification_action_2),
+                    value = settings.notificationAction2,
+                    choices = actionChoices
+                ) {
+                    actions.composeSaveSettings(settings.copy(notificationAction2 = it))
+                }
+                ChoiceSetting(
+                    label = activity.getString(R.string.v26_notification_action_3),
+                    value = settings.notificationAction3,
+                    choices = actionChoices
+                ) {
+                    actions.composeSaveSettings(settings.copy(notificationAction3 = it))
+                }
+                NumberSetting(
+                    label = activity.getString(R.string.v26_pause_minutes),
+                    value = settings.notificationPauseMinutes,
+                    range = 1..180
+                ) {
+                    actions.composeSaveSettings(settings.copy(notificationPauseMinutes = it))
+                }
+                Text(
+                    activity.getString(R.string.v26_notification_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        item {
+            SettingsSection(activity.getString(R.string.v26_community_section)) {
+                BooleanSetting(
+                    activity.getString(R.string.v26_community_enabled),
+                    settings.communitySourceEnabled
+                ) {
+                    actions.composeSaveSettings(settings.copy(communitySourceEnabled = it))
+                }
+                BooleanSetting(
+                    activity.getString(R.string.v26_community_auto_sync),
+                    settings.communityAutoSync
+                ) {
+                    actions.composeSaveSettings(settings.copy(communityAutoSync = it))
+                }
+                StringSetting(
+                    label = activity.getString(R.string.v26_community_channel),
+                    value = settings.communityChannelUsername,
+                    validator = ::validTelegramChannel
+                ) { value ->
+                    actions.composeSaveSettings(
+                        settings.copy(communityChannelUsername = value)
+                    )
+                }
+                Text(
+                    activity.getString(R.string.v26_community_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = actions::composeCommunitySync,
+                        enabled = settings.communitySourceEnabled && !actions.composeCommunitySyncBusy(),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(activity.getString(R.string.v26_community_sync))
+                    }
+                    OutlinedButton(
+                        onClick = actions::composeOpenCommunityChannel,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(activity.getString(R.string.v26_community_open))
+                    }
+                }
+                actions.composeCommunityStatus().takeIf(String::isNotBlank)?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
         item {
             SettingsSection(activity.getString(R.string.v15_settings_updates)) {
                 BooleanSetting(
@@ -465,6 +609,27 @@ private fun StringSetting(
         minLines = if (singleLine) 1 else 3,
         modifier = Modifier.fillMaxWidth()
     )
+}
+
+
+private fun notificationActionChoices(
+    activity: Activity
+): List<Pair<NotificationActionChoice, String>> = listOf(
+    NotificationActionChoice.SWITCH to activity.getString(R.string.v26_notify_switch),
+    NotificationActionChoice.NEXT to activity.getString(R.string.v26_notify_next),
+    NotificationActionChoice.PAUSE to activity.getString(R.string.v26_notify_pause),
+    NotificationActionChoice.STOP to activity.getString(R.string.v26_notify_stop),
+    NotificationActionChoice.NONE to activity.getString(R.string.v26_notify_none)
+)
+
+private fun validTelegramChannel(value: String): Boolean {
+    val normalized = value.trim()
+        .removePrefix("https://t.me/")
+        .removePrefix("http://t.me/")
+        .removePrefix("t.me/")
+        .removePrefix("@")
+        .substringBefore('/')
+    return normalized.matches(Regex("[A-Za-z0-9_]{5,32}"))
 }
 
 private fun validHttpUrl(value: String): Boolean =

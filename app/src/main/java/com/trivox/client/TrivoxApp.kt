@@ -11,13 +11,15 @@ import com.trivox.client.data.ThemeMode
 import com.trivox.client.network.NetworkBufferPool
 import com.trivox.client.service.ConnectionSwitchCoordinator
 import com.trivox.client.ui.UiInsets
+import com.trivox.client.ui.LauncherIconManager
 import com.trivox.client.util.Diagnostics
 
 class TrivoxApp : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        val themeMode = SettingsRepository(this).load().themeMode
+        val startupSettings = SettingsRepository(this).load()
+        val themeMode = startupSettings.themeMode
         AppCompatDelegate.setDefaultNightMode(
             when (themeMode) {
                 ThemeMode.SYSTEM ->
@@ -30,6 +32,7 @@ class TrivoxApp : Application() {
         )
 
         Diagnostics.initialize(this)
+        LauncherIconManager.ensureApplied(this, startupSettings.launcherIconStyle)
         ConnectionSwitchCoordinator.recoverPending(this)
         registerActivityLifecycleCallbacks(
             object : ActivityLifecycleCallbacks {

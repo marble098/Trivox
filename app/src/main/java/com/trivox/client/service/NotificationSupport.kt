@@ -18,6 +18,8 @@ import com.trivox.client.core.ConnectionRuntime
 import com.trivox.client.data.ConfigRepository
 import com.trivox.client.data.ConnectionMode
 import com.trivox.client.data.ConnectionState
+import com.trivox.client.data.NotificationActionChoice
+import com.trivox.client.data.SettingsRepository
 import com.trivox.client.data.SubscriptionRepository
 import com.trivox.client.ui.MainActivity
 import java.util.Locale
@@ -98,18 +100,25 @@ internal object NotificationSupport {
         val detail = listOfNotNull(
             modeText, subscription?.takeIf(String::isNotBlank)
         ).joinToString(" • ")
+        val usage = ConnectionUsageStore.snapshot(service)
+        val usageText = if (startedElapsed > 0L) {
+            "↓ ${formatBytes(usage.sessionRxBytes)} • ↑ ${formatBytes(usage.sessionTxBytes)}"
+        } else {
+            ""
+        }
 
         val b = NotificationCompat.Builder(service, CHANNEL)
             .setSmallIcon(R.drawable.ic_launcher)
             .setContentTitle(title.ifBlank { service.getString(R.string.app_name) })
-            .setContentText(detail)
+            .setContentText(listOf(detail, usageText).filter(String::isNotBlank).joinToString(" • "))
             .setStyle(
                 NotificationCompat.BigTextStyle().bigText(
                     listOfNotNull(
                         detail,
                         profile?.let {
                             "${it.protocol.uppercase(Locale.ROOT)} • ${it.server}:${it.port}"
-                        }
+                        },
+                        usageText.takeIf(String::isNotBlank)
                     ).joinToString("\n")
                 )
             )
@@ -127,16 +136,32 @@ internal object NotificationSupport {
 
         val quick = NotificationQuickSwitchStore.current(service)
         if (quick == null) {
-            // Keep Stop visible; Next is available inside quick-switch mode.
-            b.addAction(
-                0, service.getString(R.string.notification_switch),
-                receiver(NotificationQuickSwitchReceiver.BEGIN, 31101)
-            ).addAction(
-                0, service.getString(R.string.notification_pause_15),
-                activity(NotificationActionActivity.ACTION_PAUSE_15, 31102)
-            ).addAction(
-                0, service.getString(R.string.stop), stop
-            )
+            val settings = SettingsRepository(service).load()
+            val choices = listOf(
+                settings.notificationAction1,
+                settings.notificationAction2,
+                settings.notificationAction3
+            ).distinct()
+            choices.forEachIndexed { index, choice ->
+                when (choice) {
+                    NotificationActionChoice.SWITCH -> b.addAction(
+                        0, service.getString(R.string.notification_switch),
+                        receiver(NotificationQuickSwitchReceiver.BEGIN, 31210 + index)
+                    )
+                    NotificationActionChoice.NEXT -> b.addAction(
+                        0, service.getString(R.string.v26_notify_next),
+                        receiver(NotificationQuickSwitchReceiver.NEXT_CONNECT, 31220 + index)
+                    )
+                    NotificationActionChoice.PAUSE -> b.addAction(
+                        0, service.getString(R.string.v26_notify_pause),
+                        receiver(NotificationQuickSwitchReceiver.PAUSE, 31230 + index)
+                    )
+                    NotificationActionChoice.STOP -> b.addAction(
+                        0, service.getString(R.string.stop), stop
+                    )
+                    NotificationActionChoice.NONE -> Unit
+                }
+            }
         } else if (quick.stage == NotificationQuickSwitchStore.Stage.SUBSCRIPTION) {
             b.setContentTitle(
                 service.getString(R.string.v16_notification_choose_subscription)
@@ -186,10 +211,7 @@ internal object NotificationSupport {
                     )
                     .addAction(
                         0, service.getString(R.string.v16_notification_use),
-                        activity(
-                            NotificationActionActivity.ACTION_APPLY_PROFILE,
-                            31107, candidate.id
-                        )
+                        receiver(NotificationQuickSwitchReceiver.USE, 31107)
                     )
                     .addAction(
                         0, service.getString(R.string.v16_notification_next),
@@ -257,6 +279,19 @@ internal object NotificationSupport {
                     service, Manifest.permission.POST_NOTIFICATIONS
                 ) == PackageManager.PERMISSION_GRANTED
         if (granted) NotificationManagerCompat.from(service).notify(ID, notification)
+    }
+
+    private fun formatBytes(value: Long): String {
+        val bytes = value.coerceAtLeast(0L).toDouble()
+        return when {
+            bytes >= 1024.0 * 1024.0 * 1024.0 ->
+                String.format(Locale.US, "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
+            bytes >= 1024.0 * 1024.0 ->
+                String.format(Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
+            bytes >= 1024.0 ->
+                String.format(Locale.US, "%.1f KB", bytes / 1024.0)
+            else -> "${value.coerceAtLeast(0L)} B"
+        }
     }
 
     fun formatDuration(ms: Long): String {

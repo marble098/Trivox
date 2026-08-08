@@ -67,6 +67,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -79,10 +80,15 @@ import com.trivox.client.data.AppSettings
 import com.trivox.client.data.ConfigProfile
 import com.trivox.client.data.ConnectionMode
 import com.trivox.client.data.ConnectionState
+import com.trivox.client.data.ExperienceMode
 import com.trivox.client.data.PingMethod
 import com.trivox.client.data.SubscriptionSource
 import com.trivox.client.data.TestStatus
+import com.trivox.client.network.CommunityConfigManager
+import com.trivox.client.service.ConnectionUsageStore
 import kotlinx.coroutines.delay
+import java.text.DateFormat
+import java.util.Date
 import java.util.Locale
 
 data class ComposeBatchState(
@@ -151,6 +157,13 @@ interface MainComposeActions {
     fun composeSetMode(mode: ConnectionMode)
     fun composeLivePingLabel(): String
     fun composeRealDelayLabel(): String
+    fun composeSimpleToggleConnection()
+    fun composeCommunitySync()
+    fun composeCommunitySyncBusy(): Boolean
+    fun composeCommunityStatus(): String
+    fun composeOpenCommunityChannel()
+    fun composeUsageSnapshot(): ConnectionUsageStore.UsageSnapshot
+    fun composeUsageHistory(): List<ConnectionUsageStore.SessionRecord>
 }
 
 private enum class MainTab(val iconRes: Int) {
@@ -165,75 +178,394 @@ private enum class MainTab(val iconRes: Int) {
 fun MainComposeScreen(activity: Activity, actions: MainComposeActions) {
     TrivoxTheme(activity) {
         val revision = actions.composeRevision()
-        var tab by rememberSaveable { mutableStateOf(MainTab.HOME) }
+        val settings = remember(revision) { actions.composeSettings() }
+        var simpleSettings by rememberSaveable { mutableStateOf(false) }
 
-        Scaffold(
-            contentWindowInsets = WindowInsets(0, 0, 0, 0),
-            topBar = { MainTopBar(activity, tab) },
-            bottomBar = {
-                NavigationBar(
-                    windowInsets = WindowInsets(0, 0, 0, 0),
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    tonalElevation = 2.dp
-                ) {
-                    MainTab.entries.forEach { item ->
-                        val selected = tab == item
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick = { tab = item },
-                            icon = {
-                                Icon(
-                                    painter = painterResource(item.iconRes),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(21.dp)
-                                )
-                            },
-                            label = {
+        TrivoxGradientBackground(activity) {
+            if (settings.experienceMode == ExperienceMode.SIMPLE) {
+                if (simpleSettings) {
+                    Column(Modifier.fillMaxSize()) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+                        ) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TextButton(onClick = { simpleSettings = false }) {
+                                    Text(activity.getString(R.string.v26_back))
+                                }
                                 Text(
-                                    tabLabel(activity, item),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    fontSize = 10.sp
+                                    activity.getString(R.string.settings),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
                                 )
                             }
+                        }
+                        UnifiedSettingsScreen(
+                            activity = activity,
+                            actions = actions,
+                            uiRevision = revision,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                } else {
+                    SimpleHomeScreen(
+                        activity = activity,
+                        actions = actions,
+                        uiRevision = revision,
+                        onSettings = { simpleSettings = true }
+                    )
+                }
+                return@TrivoxGradientBackground
+            }
+
+            var tab by rememberSaveable { mutableStateOf(MainTab.HOME) }
+            Scaffold(
+                containerColor = Color.Transparent,
+                contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                topBar = { MainTopBar(activity, tab) },
+                bottomBar = {
+                    NavigationBar(
+                        windowInsets = WindowInsets(0, 0, 0, 0),
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.94f),
+                        tonalElevation = 2.dp
+                    ) {
+                        MainTab.entries.forEach { item ->
+                            val selected = tab == item
+                            NavigationBarItem(
+                                selected = selected,
+                                onClick = { tab = item },
+                                icon = {
+                                    Icon(
+                                        painter = painterResource(item.iconRes),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(21.dp)
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        tabLabel(activity, item),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+            ) { padding ->
+                when (tab) {
+                    MainTab.HOME -> HomeTab(
+                        activity = activity,
+                        actions = actions,
+                        uiRevision = revision,
+                        modifier = Modifier.padding(padding)
+                    )
+                    MainTab.CONFIGS -> ConfigsTab(
+                        activity = activity,
+                        actions = actions,
+                        uiRevision = revision,
+                        modifier = Modifier.padding(padding)
+                    )
+                    MainTab.SUBSCRIPTIONS -> SubscriptionsTab(
+                        activity = activity,
+                        actions = actions,
+                        uiRevision = revision,
+                        modifier = Modifier.padding(padding)
+                    )
+                    MainTab.TOOLS -> ToolsTab(
+                        activity = activity,
+                        actions = actions,
+                        uiRevision = revision,
+                        modifier = Modifier.padding(padding)
+                    )
+                    MainTab.SETTINGS -> SettingsTab(
+                        activity = activity,
+                        actions = actions,
+                        uiRevision = revision,
+                        modifier = Modifier.padding(padding)
+                    )
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun SimpleHomeScreen(
+    activity: Activity,
+    actions: MainComposeActions,
+    uiRevision: Int,
+    onSettings: () -> Unit
+) {
+    val runtime = remember(uiRevision) { actions.composeRuntime() }
+    val settings = remember(uiRevision) { actions.composeSettings() }
+    val selected = remember(uiRevision) { actions.composeSelectedProfile() }
+    val busy = actions.composeCommunitySyncBusy()
+    val status = actions.composeCommunityStatus()
+    val active = runtime.state !in setOf(ConnectionState.DISCONNECTED, ConnectionState.ERROR)
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item {
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(28.dp),
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    StatusDot(runtime.state)
+                    Text(
+                        activity.getString(R.string.v26_simple_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        if (active) {
+                            selected?.name ?: stateLabel(activity, runtime.state)
+                        } else {
+                            activity.getString(R.string.v26_simple_subtitle)
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Button(
+                        onClick = actions::composeSimpleToggleConnection,
+                        modifier = Modifier.fillMaxWidth().height(68.dp),
+                        shape = RoundedCornerShape(22.dp),
+                        enabled = runtime.state != ConnectionState.STOPPING
+                    ) {
+                        if (runtime.state in setOf(
+                                ConnectionState.PREPARING,
+                                ConnectionState.CONNECTING,
+                                ConnectionState.RECONNECTING,
+                                ConnectionState.STOPPING
+                            )
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(Modifier.width(9.dp))
+                        }
+                        Text(
+                            if (active) {
+                                activity.getString(R.string.v26_simple_disconnect)
+                            } else {
+                                activity.getString(R.string.v26_simple_connect)
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    if (runtime.error.isNotBlank()) {
+                        Text(
+                            runtime.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
                         )
                     }
                 }
             }
-        ) { padding ->
-            when (tab) {
-                MainTab.HOME -> HomeTab(
-                    activity = activity,
-                    actions = actions,
-                    uiRevision = revision,
-                    modifier = Modifier.padding(padding)
+        }
+
+        item {
+            SectionCard(activity.getString(R.string.v26_community_section)) {
+                Text(
+                    activity.getString(
+                        R.string.v26_source_attribution,
+                        settings.communityChannelUsername
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
                 )
-                MainTab.CONFIGS -> ConfigsTab(
-                    activity = activity,
-                    actions = actions,
-                    uiRevision = revision,
-                    modifier = Modifier.padding(padding)
+                Text(
+                    activity.getString(R.string.v26_community_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                MainTab.SUBSCRIPTIONS -> SubscriptionsTab(
-                    activity = activity,
-                    actions = actions,
-                    uiRevision = revision,
-                    modifier = Modifier.padding(padding)
-                )
-                MainTab.TOOLS -> ToolsTab(
-                    activity = activity,
-                    actions = actions,
-                    uiRevision = revision,
-                    modifier = Modifier.padding(padding)
-                )
-                MainTab.SETTINGS -> SettingsTab(
-                    activity = activity,
-                    actions = actions,
-                    uiRevision = revision,
-                    modifier = Modifier.padding(padding)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = actions::composeCommunitySync,
+                        enabled = settings.communitySourceEnabled && !busy,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        if (busy) {
+                            CircularProgressIndicator(Modifier.size(15.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        Text(activity.getString(R.string.v26_community_sync))
+                    }
+                    OutlinedButton(
+                        onClick = actions::composeOpenCommunityChannel,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(activity.getString(R.string.v26_community_open))
+                    }
+                }
+                if (status.isNotBlank()) {
+                    Text(
+                        status,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        item {
+            UsageHistoryCard(activity, actions, runtime)
+        }
+
+        item {
+            OutlinedButton(
+                onClick = onSettings,
+                modifier = Modifier.fillMaxWidth().height(50.dp)
+            ) {
+                Text(activity.getString(R.string.v26_simple_settings))
+            }
+        }
+    }
+}
+
+@Composable
+private fun UsageHistoryCard(
+    activity: Activity,
+    actions: MainComposeActions,
+    runtime: ConnectionRuntime.Snapshot
+) {
+    var usage by remember(runtime.sessionId) {
+        mutableStateOf(actions.composeUsageSnapshot())
+    }
+    var history by remember(runtime.sessionId) {
+        mutableStateOf(actions.composeUsageHistory())
+    }
+    LaunchedEffect(runtime.sessionId, runtime.state) {
+        while (true) {
+            usage = actions.composeUsageSnapshot()
+            delay(
+                if (runtime.state == ConnectionState.CONNECTED) 1_000L else 5_000L
+            )
+        }
+    }
+    LaunchedEffect(runtime.sessionId) {
+        while (true) {
+            history = actions.composeUsageHistory()
+            delay(15_000L)
+        }
+    }
+
+    SectionCard(activity.getString(R.string.v26_usage_title)) {
+        UsageRow(
+            activity.getString(R.string.v26_usage_session),
+            usage.sessionRxBytes,
+            usage.sessionTxBytes
+        )
+        UsageRow(
+            activity.getString(R.string.v26_usage_today),
+            usage.todayRxBytes,
+            usage.todayTxBytes
+        )
+        UsageRow(
+            activity.getString(R.string.v26_usage_yesterday),
+            usage.yesterdayRxBytes,
+            usage.yesterdayTxBytes
+        )
+        UsageRow(
+            activity.getString(R.string.v26_usage_month),
+            usage.monthRxBytes,
+            usage.monthTxBytes
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+        Text(
+            activity.getString(R.string.v26_history_title),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        if (history.isEmpty()) {
+            Text(
+                activity.getString(R.string.v26_history_empty),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            history.take(5).forEach { record ->
+                Text(
+                    buildString {
+                        append(record.profileName)
+                        append(" • ")
+                        append(
+                            DateFormat.getDateTimeInstance(
+                                DateFormat.SHORT,
+                                DateFormat.SHORT
+                            ).format(Date(record.endedAt))
+                        )
+                        append("\n↓ ")
+                        append(formatDataBytes(record.rxBytes))
+                        append("   ↑ ")
+                        append(formatDataBytes(record.txBytes))
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
+        Text(
+            activity.getString(R.string.v26_usage_estimate_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f)
+        )
+    }
+}
+
+@Composable
+private fun UsageRow(label: String, rx: Long, tx: Long) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            label,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium
+        )
+        Text(
+            "↓ ${formatDataBytes(rx)}   ↑ ${formatDataBytes(tx)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+private fun formatDataBytes(value: Long): String {
+    val bytes = value.coerceAtLeast(0L).toDouble()
+    return when {
+        bytes >= 1024.0 * 1024.0 * 1024.0 ->
+            String.format(Locale.US, "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
+        bytes >= 1024.0 * 1024.0 ->
+            String.format(Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
+        bytes >= 1024.0 ->
+            String.format(Locale.US, "%.1f KB", bytes / 1024.0)
+        else -> "${value.coerceAtLeast(0L)} B"
     }
 }
 
@@ -436,6 +768,10 @@ private fun HomeTab(
         }
 
         
+        item {
+            UsageHistoryCard(activity, actions, runtime)
+        }
+
         item {
             WorldMapCard(
                 connected =
@@ -754,6 +1090,19 @@ private fun ConfigsTab(
                     selected = favoritesOnly,
                     onClick = { favoritesOnly = !favoritesOnly }
                 )
+            }
+            if ((sourceCounts[CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID] ?: 0) > 0) {
+                item {
+                    ConfigScopeChip(
+                        label = "@" + settings.communityChannelUsername,
+                        count = sourceCounts[CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID] ?: 0,
+                        selected = selectedSource == CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID,
+                        onClick = {
+                            selectedSource = CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID
+                            actions.composeSelectSubscription(CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID)
+                        }
+                    )
+                }
             }
             lazyItems(sources, key = { it.id }) { source ->
                 ConfigScopeChip(

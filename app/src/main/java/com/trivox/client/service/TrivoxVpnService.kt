@@ -616,6 +616,9 @@ class TrivoxVpnService : VpnService() {
         )
         QuickConnectTileService
             .requestUpdate(this)
+        ConnectionUsageStore.begin(
+            this, sessionId, profile.id, profile.name, ConnectionMode.VPN
+        )
 
         startForeground(
             NotificationSupport.ID,
@@ -942,6 +945,7 @@ class TrivoxVpnService : VpnService() {
                         }
                     }
 
+                    ConnectionUsageStore.sample(this@TrivoxVpnService, sessionId)
                     NotificationSupport
                         .notifyIfAllowed(
                             this@TrivoxVpnService,
@@ -1060,6 +1064,9 @@ class TrivoxVpnService : VpnService() {
             }
             tun = null
 
+            ConnectionUsageStore.finish(
+                this, sessionId, if (error == null) "stopped" else "error"
+            )
             storeDuration()
 
             val current =
@@ -1325,6 +1332,7 @@ class TrivoxVpnService : VpnService() {
         sshHandle?.close()
         sshHandle = null
         sshSourceProfile = null
+        ConnectionUsageStore.finish(this, sessionId, "service_destroyed")
         cleanupExecutor.shutdownNow()
         executor.shutdown()
         ConnectionSwitchCoordinator.onServiceDestroyed(

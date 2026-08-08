@@ -16,6 +16,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.drawable.Icon
+import android.net.Uri
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
@@ -72,6 +73,7 @@ import com.trivox.client.data.SubscriptionKind
 import com.trivox.client.data.SubscriptionRepository
 import com.trivox.client.data.SubscriptionSource
 import com.trivox.client.data.TestStatus
+import com.trivox.client.network.CommunityConfigManager
 import com.trivox.client.network.ConnectionInfoManager
 import com.trivox.client.network.LeakProtectionManager
 import com.trivox.client.network.PingManager
@@ -81,6 +83,7 @@ import com.trivox.client.network.TunnelHealthVerifier
 import com.trivox.client.update.UpdateChecker
 import com.trivox.client.service.ConnectionPauseController
 import com.trivox.client.service.ConnectionSwitchCoordinator
+import com.trivox.client.service.ConnectionUsageStore
 import com.trivox.client.service.ConnectionService
 import com.trivox.client.service.NotificationSupport
 import com.trivox.client.service.QuickConnectTileService
@@ -154,6 +157,8 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         mutableListOf<Future<*>>()
     private val subscriptionRefreshBusy =
         AtomicBoolean(false)
+    private val communitySyncBusy =
+        AtomicBoolean(false)
     private val activityDestroyed =
         AtomicBoolean(false)
     private val uiResumed =
@@ -191,6 +196,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     private var lastUiRuntimeState: ConnectionState? = null
     private val magicClipboardBusy = AtomicBoolean(false)
     @Volatile private var composeUpdateStatusText = ""
+    @Volatile private var composeCommunityStatusText = ""
     @Volatile private var composeLeakStatusText = ""
     @Volatile private var composeProfileStatsCache = ComposeProfileStats()
 
@@ -1027,6 +1033,9 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                 ) {
                     it.id
                 }
+                .apply {
+                    add(CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID)
+                }
 
         val selectedSourceId =
             activeSubscriptionId
@@ -1087,6 +1096,14 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                     profiles.size
                 )
         )
+
+        if ((counts[CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID] ?: 0) > 0) {
+            addSubscriptionTab(
+                id = CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID,
+                label = "@${settingsRepository.load().communityChannelUsername} " +
+                    "(${counts[CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID] ?: 0})"
+            )
+        }
 
         sources.forEach { source ->
             addSubscriptionTab(
@@ -3830,6 +3847,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         )
         refresh()
         UpdateChecker.checkIfDue(this)
+        scheduleCommunitySyncIfDue()
 
         val current = ConnectionRuntime.current()
         if (
@@ -4199,6 +4217,10 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         settingsRepository.save(next)
         Diagnostics.debug("Settings auto-saved")
 
+        if (previous.launcherIconStyle != next.launcherIconStyle) {
+            LauncherIconManager.apply(this, next.launcherIconStyle)
+        }
+
         if (
             !previous.autoLeakProtection &&
             next.autoLeakProtection
@@ -4398,6 +4420,153 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         }
         refresh()
     }
+
+
+    private fun chooseSimpleProfile(): ConfigProfile? {
+        val communityEnabled = settingsRepository.load().communitySourceEnabled
+        fun allowed(profile: ConfigProfile): Boolean =
+            profile.enabled &&
+                (communityEnabled ||
+                    profile.subscriptionId != CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID)
+
+        repository.find(repository.selectedId())
+            ?.takeIf(::allowed)
+            ?.let { return it }
+
+        val enabled = repository.all().filter(::allowed)
+        val tested = enabled
+            .filter { dualLatencyTier(it) < 3 }
+            .minWithOrNull(
+                compareBy<ConfigProfile>(::dualLatencyTier)
+                    .thenBy(::dualLatencyScore)
+                    .thenBy { it.name.lowercase(Locale.ROOT) }
+            )
+        if (tested != null) return tested
+
+        return enabled.firstOrNull {
+            it.subscriptionId == CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID
+        } ?: enabled.firstOrNull()
+    }
+
+    private fun scheduleCommunitySyncIfDue() {
+        if (!::settingsRepository.isInitialized || communitySyncBusy.get()) return
+        val settings = settingsRepository.load()
+        if (!settings.communitySourceEnabled || !settings.communityAutoSync) return
+        val manager = CommunityConfigManager(this)
+        if (manager.needsSync(settings.communityChannelUsername)) {
+            syncCommunityConfigs(silent = true, connectAfter = false)
+        }
+    }
+
+    private fun syncCommunityConfigs(
+        silent: Boolean,
+        connectAfter: Boolean
+    ) {
+        if (!communitySyncBusy.compareAndSet(false, true)) return
+        val settings = settingsRepository.load()
+        if (!settings.communitySourceEnabled) {
+            communitySyncBusy.set(false)
+            composeCommunityStatusText = getString(R.string.v26_community_disabled)
+            notifyComposeChanged()
+            return
+        }
+
+        composeCommunityStatusText = getString(R.string.v26_community_syncing)
+        notifyComposeChanged()
+        worker.execute {
+            val result = CommunityConfigManager(this).sync(
+                settings.communityChannelUsername
+            )
+            runOnUiThreadIfAlive {
+                communitySyncBusy.set(false)
+                composeCommunityStatusText = if (result.success) {
+                    getString(
+                        R.string.v26_community_synced,
+                        result.imported,
+                        result.source
+                    )
+                } else {
+                    getString(
+                        R.string.v26_community_failed,
+                        result.error.ifBlank { getString(R.string.unknown_error) }
+                    )
+                }
+                subscriptionTabsSignature = ""
+                renderSubscriptionTabs(force = true)
+                refresh()
+
+                if (!silent && !result.success) {
+                    toast(composeCommunityStatusText)
+                }
+                if (connectAfter && result.success) {
+                    val profile = chooseSimpleProfile()
+                    if (profile != null) {
+                        repository.select(profile.id)
+                        refresh()
+                        toggleConnection()
+                    } else {
+                        toast(getString(R.string.v26_simple_no_config))
+                    }
+                }
+            }
+        }
+    }
+
+    override fun composeSimpleToggleConnection() {
+        val runtime = ConnectionRuntime.current()
+        if (
+            connectionStartPending.get() ||
+            runtime.state !in setOf(ConnectionState.DISCONNECTED, ConnectionState.ERROR)
+        ) {
+            toggleConnection()
+            return
+        }
+
+        val profile = chooseSimpleProfile()
+        if (profile != null) {
+            repository.select(profile.id)
+            refresh()
+            toggleConnection()
+            return
+        }
+
+        val settings = settingsRepository.load()
+        if (settings.communitySourceEnabled) {
+            syncCommunityConfigs(silent = false, connectAfter = true)
+        } else {
+            toast(getString(R.string.v26_simple_no_config))
+        }
+    }
+
+    override fun composeCommunitySync() {
+        syncCommunityConfigs(silent = false, connectAfter = false)
+    }
+
+    override fun composeCommunitySyncBusy(): Boolean = communitySyncBusy.get()
+
+    override fun composeCommunityStatus(): String = composeCommunityStatusText
+
+    override fun composeOpenCommunityChannel() {
+        val username = CommunityConfigManager.normalizeUsername(
+            settingsRepository.load().communityChannelUsername
+        ) ?: CommunityConfigManager.DEFAULT_CHANNEL
+        runCatching {
+            startActivity(
+                Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("https://t.me/$username")
+                )
+            )
+        }.onFailure {
+            Diagnostics.recordThrowable("Open community channel", it)
+        }
+    }
+
+    override fun composeUsageSnapshot(): ConnectionUsageStore.UsageSnapshot =
+        ConnectionUsageStore.snapshot(this)
+
+    override fun composeUsageHistory(): List<ConnectionUsageStore.SessionRecord> =
+        ConnectionUsageStore.recentSessions(this, 8)
 
     override fun composeRequestQuickTile() {
         requestQuickSettingsTile()

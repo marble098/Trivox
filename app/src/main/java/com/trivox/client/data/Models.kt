@@ -76,6 +76,46 @@ enum class ThemeMode {
     }
 }
 
+
+enum class ExperienceMode {
+    SIMPLE, ADVANCED;
+
+    companion object {
+        fun fromStored(value: String?): ExperienceMode =
+            entries.firstOrNull { it.name.equals(value, true) } ?: ADVANCED
+    }
+}
+
+enum class VisualTheme {
+    CLASSIC, OCEAN, AURORA, SUNSET, FOREST, GRAPHITE;
+
+    companion object {
+        fun fromStored(value: String?): VisualTheme =
+            entries.firstOrNull { it.name.equals(value, true) } ?: CLASSIC
+    }
+}
+
+enum class LauncherIconStyle {
+    DEFAULT, OCEAN, AURORA, MONO;
+
+    companion object {
+        fun fromStored(value: String?): LauncherIconStyle =
+            entries.firstOrNull { it.name.equals(value, true) } ?: DEFAULT
+    }
+}
+
+enum class NotificationActionChoice {
+    SWITCH, NEXT, PAUSE, STOP, NONE;
+
+    companion object {
+        fun fromStored(
+            value: String?,
+            fallback: NotificationActionChoice
+        ): NotificationActionChoice =
+            entries.firstOrNull { it.name.equals(value, true) } ?: fallback
+    }
+}
+
 data class ConfigProfile(
     val id: String = UUID.randomUUID().toString(),
     var name: String,
@@ -307,6 +347,16 @@ data class AppSettings(
     var sortMode: ProfileSortMode = ProfileSortMode.SMART,
     var darkMode: Boolean = false,
     var themeMode: ThemeMode = ThemeMode.SYSTEM,
+    var experienceMode: ExperienceMode = ExperienceMode.ADVANCED,
+    var visualTheme: VisualTheme = VisualTheme.CLASSIC,
+    var launcherIconStyle: LauncherIconStyle = LauncherIconStyle.DEFAULT,
+    var notificationAction1: NotificationActionChoice = NotificationActionChoice.SWITCH,
+    var notificationAction2: NotificationActionChoice = NotificationActionChoice.PAUSE,
+    var notificationAction3: NotificationActionChoice = NotificationActionChoice.STOP,
+    var notificationPauseMinutes: Int = 15,
+    var communitySourceEnabled: Boolean = true,
+    var communityAutoSync: Boolean = true,
+    var communityChannelUsername: String = "farahvpn",
     var localProxyInVpn: Boolean = false,
     var autoLeakProtection: Boolean = false,
     var autoUpdateCheck: Boolean = true,
@@ -358,6 +408,17 @@ data class AppSettings(
         wireGuardDomainStrategy = wireGuardDomainStrategy
             .takeIf { it in WIREGUARD_DOMAIN_STRATEGIES }
             ?: DEFAULT_WIREGUARD_DOMAIN_STRATEGY
+        notificationPauseMinutes = notificationPauseMinutes.coerceIn(1, 180)
+        communityChannelUsername = communityChannelUsername
+            .trim()
+            .removePrefix("https://t.me/")
+            .removePrefix("http://t.me/")
+            .removePrefix("t.me/")
+            .removePrefix("@")
+            .substringBefore('/')
+            .lowercase(java.util.Locale.ROOT)
+            .takeIf { it.matches(Regex("[A-Za-z0-9_]{5,32}")) }
+            ?: "farahvpn"
 
         /*
          * v24 removed the separate WireGuard Android Go backend after a
@@ -399,6 +460,16 @@ data class AppSettings(
         .put("sortMode", sortMode.name)
         .put("darkMode", darkMode)
         .put("themeMode", themeMode.name)
+        .put("experienceMode", experienceMode.name)
+        .put("visualTheme", visualTheme.name)
+        .put("launcherIconStyle", launcherIconStyle.name)
+        .put("notificationAction1", notificationAction1.name)
+        .put("notificationAction2", notificationAction2.name)
+        .put("notificationAction3", notificationAction3.name)
+        .put("notificationPauseMinutes", notificationPauseMinutes)
+        .put("communitySourceEnabled", communitySourceEnabled)
+        .put("communityAutoSync", communityAutoSync)
+        .put("communityChannelUsername", communityChannelUsername)
         .put("localProxyInVpn", localProxyInVpn)
         .put("autoLeakProtection", autoLeakProtection)
         .put("autoUpdateCheck", autoUpdateCheck)
@@ -483,7 +554,23 @@ data class AppSettings(
                 sortMode = ProfileSortMode.fromStored(json.optString("sortMode")),
                 darkMode = legacyDark,
                 themeMode = ThemeMode.fromStored(json.optString("themeMode"), legacyDark),
-                localProxyInVpn = json.optBoolean("localProxyInVpn", true),
+                experienceMode = ExperienceMode.fromStored(json.optString("experienceMode")),
+                visualTheme = VisualTheme.fromStored(json.optString("visualTheme")),
+                launcherIconStyle = LauncherIconStyle.fromStored(json.optString("launcherIconStyle")),
+                notificationAction1 = NotificationActionChoice.fromStored(
+                    json.optString("notificationAction1"), NotificationActionChoice.SWITCH
+                ),
+                notificationAction2 = NotificationActionChoice.fromStored(
+                    json.optString("notificationAction2"), NotificationActionChoice.PAUSE
+                ),
+                notificationAction3 = NotificationActionChoice.fromStored(
+                    json.optString("notificationAction3"), NotificationActionChoice.STOP
+                ),
+                notificationPauseMinutes = json.optInt("notificationPauseMinutes", 15),
+                communitySourceEnabled = json.optBoolean("communitySourceEnabled", true),
+                communityAutoSync = json.optBoolean("communityAutoSync", true),
+                communityChannelUsername = json.optString("communityChannelUsername", "farahvpn"),
+                localProxyInVpn = json.optBoolean("localProxyInVpn", false),
                 autoLeakProtection = json.optBoolean("autoLeakProtection", false),
                 autoUpdateCheck = json.optBoolean("autoUpdateCheck", true),
                 testUrl = json.optString("testUrl", DEFAULT_TEST_URL),

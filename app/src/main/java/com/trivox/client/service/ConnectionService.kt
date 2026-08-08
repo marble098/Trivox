@@ -406,6 +406,9 @@ class ConnectionService : Service() {
         )
         QuickConnectTileService
             .requestUpdate(this)
+        ConnectionUsageStore.begin(
+            this, sessionId, profile.id, profile.name, ConnectionMode.PROXY
+        )
 
         startForeground(
             NotificationSupport.ID,
@@ -474,6 +477,7 @@ class ConnectionService : Service() {
                         }
                     }
 
+                    ConnectionUsageStore.sample(this@ConnectionService, sessionId)
                     NotificationSupport
                         .notifyIfAllowed(
                             this@ConnectionService,
@@ -602,6 +606,9 @@ class ConnectionService : Service() {
                 )
             }
 
+            ConnectionUsageStore.finish(
+                this, sessionId, if (error == null) "stopped" else "error"
+            )
             storeDuration()
 
             val current =
@@ -792,6 +799,7 @@ class ConnectionService : Service() {
         // Proxy destroy OpenSSH cleanup
         sshHandle?.close()
         sshHandle = null
+        ConnectionUsageStore.finish(this, sessionId, "service_destroyed")
         cleanupExecutor.shutdownNow()
         executor.shutdownNow()
         ConnectionSwitchCoordinator.onServiceDestroyed(

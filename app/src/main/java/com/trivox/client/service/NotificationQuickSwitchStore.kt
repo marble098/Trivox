@@ -6,6 +6,8 @@ import com.trivox.client.core.ConnectionRuntime
 import com.trivox.client.data.ConfigProfile
 import com.trivox.client.data.ConfigRepository
 import com.trivox.client.data.SubscriptionRepository
+import com.trivox.client.data.SettingsRepository
+import com.trivox.client.network.CommunityConfigManager
 
 internal object NotificationQuickSwitchStore {
     enum class Stage { SUBSCRIPTION, PROFILE }
@@ -32,6 +34,7 @@ internal object NotificationQuickSwitchStore {
     private const val KEY_PROFILE = "profile"
     private const val KEY_UPDATED = "updated"
     private const val LOCAL = "__local__"
+    private const val COMMUNITY = "__community__"
     private const val OTHER = "__other__"
     private const val TTL_MS = 60_000L
 
@@ -137,6 +140,14 @@ internal object NotificationQuickSwitchStore {
             result += Group(
                 LOCAL, context.getString(R.string.notification_local_configs), local
             )
+        }
+
+        val community = enabled
+            .filter { it.subscriptionId == CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID }
+            .sortedBy { it.name.lowercase() }
+        if (community.isNotEmpty()) {
+            val username = SettingsRepository(context).load().communityChannelUsername
+            result += Group(COMMUNITY, "@$username", community)
         }
 
         SubscriptionRepository(context).all()
