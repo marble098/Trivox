@@ -126,6 +126,11 @@
         </service>
 
         <receiver
+            android:name=".service.NotificationQuickSwitchReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <receiver
             android:name=".service.PauseResumeReceiver"
             android:enabled="true"
             android:exported="false" />

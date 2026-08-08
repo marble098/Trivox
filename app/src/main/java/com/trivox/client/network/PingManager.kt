@@ -19,6 +19,7 @@ import java.net.Inet6Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Proxy
+import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketTimeoutException
 import java.net.URI
@@ -73,12 +74,10 @@ class PingManager(
         settings: AppSettings,
         workDir: File
     ): PingResult = when {
-        profile.protocol.equals("wireguard", ignoreCase = true) -> realXray(
-            profile,
-            settings,
-            workDir,
-            settings.testAttempts
-        )
+        profile.protocol.equals("wireguard", ignoreCase = true) &&
+            settings.pingMethod == PingMethod.TCP_CONNECT -> wireGuardTcp(
+                profile, settings, workDir, settings.testAttempts
+            )
         settings.pingMethod == PingMethod.TCP_CONNECT -> tcp(
             profile,
             settings.testAttempts,
@@ -90,6 +89,121 @@ class PingManager(
             workDir,
             settings.testAttempts
         )
+    }
+
+    /**
+     * WireGuard endpoints are UDP. A raw TCP connect to the endpoint is not a
+     * valid test. Start Xray on an isolated local mixed proxy and measure a
+     * SOCKS CONNECT that must cross the real WireGuard route.
+     */
+    @Synchronized
+    fun wireGuardTcp(
+        profile: ConfigProfile,
+        settings: AppSettings,
+        workDir: File,
+        attempts: Int = settings.testAttempts,
+        timeoutMs: Int = DEFAULT_TCP_TIMEOUT_MS
+    ): PingResult {
+        val timestamp = System.currentTimeMillis()
+        val adapter = core ?: return basicFailure(
+            PingMethod.TCP_CONNECT.name, timestamp, "core_unavailable"
+        )
+        if (Thread.currentThread().isInterrupted) {
+            return cancelled(PingMethod.TCP_CONNECT.name, timestamp)
+        }
+        if (isLiveConnectionActive(adapter)) {
+            return basicFailure(
+                PingMethod.TCP_CONNECT.name, timestamp, "live_core_busy"
+            )
+        }
+
+        val count = attempts.coerceIn(2, 5)
+        val timeout = timeoutMs.coerceIn(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS)
+        val probeSettings = isolatedProbeSettings(settings)
+        workDir.mkdirs()
+        val safeId = profile.id.replace(Regex("[^A-Za-z0-9._-]"), "_").take(48)
+        val configFile = File(
+            workDir, "trivox-wg-tcp-$safeId-${System.nanoTime()}.json"
+        )
+        val logFile = File(
+            workDir, "trivox-wg-tcp-$safeId-${System.nanoTime()}.log"
+        )
+        val mark = XrayProbeLogInspector.mark(logFile)
+        var started = false
+
+        return try {
+            val config = XrayConfigBuilder.build(
+                profile, probeSettings, ConnectionMode.PROXY,
+                errorLogPath = logFile.absolutePath
+            )
+            configFile.writeText(config, Charsets.UTF_8)
+            val validation = adapter.validate(config)
+            if (!validation.success) {
+                return basicFailure(
+                    PingMethod.TCP_CONNECT.name, timestamp,
+                    classifyXrayFailure(validation.error).ifBlank {
+                        "invalid_wireguard_config"
+                    }
+                )
+            }
+            val start = adapter.start(config, null)
+            if (!start.success) {
+                return basicFailure(
+                    PingMethod.TCP_CONNECT.name, timestamp,
+                    XrayProbeLogInspector.classifySince(mark)
+                        ?: classifyXrayFailure(start.error)
+                )
+            }
+            started = true
+            if (!waitCancellable(WIREGUARD_PROBE_START_GRACE_MS)) {
+                return cancelled(PingMethod.TCP_CONNECT.name, timestamp)
+            }
+
+            val samples = mutableListOf<Long>()
+            var lastFailure: Throwable? = null
+            var lastTarget: InetAddress? = null
+            repeat(count) { index ->
+                if (Thread.currentThread().isInterrupted) {
+                    return cancelled(PingMethod.TCP_CONNECT.name, timestamp)
+                }
+                val target = WIREGUARD_TCP_TARGETS[
+                    index % WIREGUARD_TCP_TARGETS.size
+                ]
+                runCatching {
+                    socksConnectOnce(
+                        probeSettings.socksPort, target, 443, timeout
+                    )
+                }.onSuccess {
+                    samples += it
+                    lastTarget = target
+                }.onFailure { lastFailure = it }
+            }
+            val summary = PingStatistics.summarize(samples, count)
+            PingResult(
+                method = PingMethod.TCP_CONNECT.name,
+                success = summary.success,
+                latencyMs = summary.latencyMs,
+                jitterMs = summary.jitterMs,
+                successRatio = summary.successRatio,
+                resolvedIp = lastTarget?.hostAddress,
+                timestamp = timestamp,
+                errorCategory = if (summary.success) null
+                else XrayProbeLogInspector.classifySince(mark)
+                    ?: classify(
+                        lastFailure ?: SocketTimeoutException(
+                            "WireGuard route did not establish TCP"
+                        )
+                    )
+            )
+        } catch (t: Throwable) {
+            failure(PingMethod.TCP_CONNECT.name, timestamp, t)
+        } finally {
+            if (started) runCatching { adapter.stop() }.onFailure {
+                Diagnostics.warning("WireGuard TCP cleanup failed: ${it.message}")
+            }
+            runCatching { configFile.delete() }
+            runCatching { logFile.delete() }
+        }
     }
 
     fun tcp(
@@ -175,6 +289,7 @@ class PingManager(
         )
     }
 
+    @Synchronized
     fun realXray(
         profile: ConfigProfile,
         settings: AppSettings,
@@ -212,7 +327,7 @@ class PingManager(
         var started = false
 
         return try {
-            val probeSettings = settings.copy().normalize()
+            val probeSettings = isolatedProbeSettings(settings)
             val config = XrayConfigBuilder.build(
                 profile = profile,
                 settings = probeSettings,
@@ -515,25 +630,59 @@ class PingManager(
         if (real && core != null && profiles.isNotEmpty()) {
             return listOf(
                 xrayExecutor.submit(Callable {
-                    BatchRealDelayRunner(core).run(
-                        profiles = profiles,
-                        settings = settings,
-                        workDir = workDir,
-                        callback = callback,
-                        fallback = { profile ->
-                            realXray(
-                                profile = profile,
-                                settings = settings,
-                                workDir = workDir,
-                                attempts = BATCH_XRAY_ATTEMPTS,
-                                timeoutSeconds = BATCH_XRAY_TIMEOUT_SECONDS,
-                                allowSingleSample = false,
-                                maxTargetsPerSample = BATCH_XRAY_MAX_TARGETS
-                            )
-                        }
-                    )
+                    synchronized(this@PingManager) {
+                        BatchRealDelayRunner(core).run(
+                            profiles = profiles,
+                            settings = settings,
+                            workDir = workDir,
+                            callback = callback,
+                            fallback = { profile ->
+                                realXray(
+                                    profile = profile,
+                                    settings = settings,
+                                    workDir = workDir,
+                                    attempts = BATCH_XRAY_ATTEMPTS,
+                                    timeoutSeconds = BATCH_XRAY_TIMEOUT_SECONDS,
+                                    allowSingleSample = false,
+                                    maxTargetsPerSample = BATCH_XRAY_MAX_TARGETS
+                                )
+                            }
+                        )
+                    }
                 })
             )
+        }
+
+        if (!real && core != null) {
+            val wireGuardProfiles = profiles.filter {
+                it.protocol.equals("wireguard", ignoreCase = true)
+            }
+            if (wireGuardProfiles.isNotEmpty()) {
+                val normalProfiles = profiles.filterNot {
+                    it.protocol.equals("wireguard", ignoreCase = true)
+                }
+                val tasks = ArrayList<Future<*>>()
+                tasks += submitBounded(
+                    normalProfiles, tcpExecutor, MAX_TCP_WORKERS
+                ) { profile ->
+                    callback(
+                        profile,
+                        tcp(profile, settings.testAttempts, DEFAULT_TCP_TIMEOUT_MS)
+                    )
+                }
+                tasks += xrayExecutor.submit(Callable {
+                    for (profile in wireGuardProfiles) {
+                        if (Thread.currentThread().isInterrupted) break
+                        callback(
+                            profile,
+                            wireGuardTcp(
+                                profile, settings, workDir, settings.testAttempts
+                            )
+                        )
+                    }
+                })
+                return tasks
+            }
         }
 
         return submitBounded(
@@ -711,6 +860,80 @@ class PingManager(
         return (System.nanoTime() - started).coerceAtLeast(1L)
     }
 
+    private fun isolatedProbeSettings(settings: AppSettings): AppSettings {
+        val port = ServerSocket(
+            0, 1, InetAddress.getByName("127.0.0.1")
+        ).use { it.localPort }
+        return settings.copy(socksPort = port, httpPort = port).normalize()
+    }
+
+    private fun socksConnectOnce(
+        proxyPort: Int,
+        target: InetAddress,
+        targetPort: Int,
+        timeoutMs: Int
+    ): Long {
+        Socket().use { socket ->
+            socket.tcpNoDelay = true
+            socket.soTimeout = timeoutMs
+            socket.connect(
+                InetSocketAddress("127.0.0.1", proxyPort),
+                timeoutMs.coerceAtMost(1_500)
+            )
+            val input = socket.getInputStream()
+            val output = socket.getOutputStream()
+            output.write(byteArrayOf(0x05, 0x01, 0x00))
+            output.flush()
+            val greeting = readFully(input, 2)
+            if (
+                (greeting[0].toInt() and 0xff) != 0x05 ||
+                (greeting[1].toInt() and 0xff) != 0x00
+            ) throw ConnectException("SOCKS no-auth negotiation failed")
+
+            val addr = target.address
+            val request = ByteArray(4 + addr.size + 2)
+            request[0] = 0x05.toByte()
+            request[1] = 0x01.toByte()
+            request[2] = 0x00.toByte()
+            request[3] = (if (addr.size == 4) 0x01 else 0x04).toByte()
+            addr.copyInto(request, 4)
+            val pi = 4 + addr.size
+            request[pi] = ((targetPort ushr 8) and 0xff).toByte()
+            request[pi + 1] = (targetPort and 0xff).toByte()
+
+            val started = System.nanoTime()
+            output.write(request)
+            output.flush()
+            val head = readFully(input, 4)
+            if ((head[0].toInt() and 0xff) != 0x05)
+                throw ConnectException("Invalid SOCKS response")
+            val reply = head[1].toInt() and 0xff
+            if (reply != 0) throw ConnectException("SOCKS CONNECT reply $reply")
+            when (head[3].toInt() and 0xff) {
+                0x01 -> readFully(input, 4)
+                0x04 -> readFully(input, 16)
+                0x03 -> {
+                    val n = readFully(input, 1)[0].toInt() and 0xff
+                    readFully(input, n)
+                }
+                else -> throw ConnectException("Invalid SOCKS address type")
+            }
+            readFully(input, 2)
+            return (System.nanoTime() - started).coerceAtLeast(1L)
+        }
+    }
+
+    private fun readFully(input: java.io.InputStream, count: Int): ByteArray {
+        val data = ByteArray(count)
+        var offset = 0
+        while (offset < count) {
+            val n = input.read(data, offset, count - offset)
+            if (n < 0) throw java.io.EOFException("Short SOCKS response")
+            offset += n
+        }
+        return data
+    }
+
     private fun waitCancellable(delayMs: Int): Boolean {
         var remaining = delayMs
         while (remaining > 0) {
@@ -831,7 +1054,12 @@ class PingManager(
         private const val BATCH_XRAY_MAX_TARGETS = 2
         private const val MAX_HTTP_TARGETS_PER_SAMPLE = 4
         private const val PROBE_START_GRACE_MS = 90
+        private const val WIREGUARD_PROBE_START_GRACE_MS = 220
         private const val NANOS_PER_MILLISECOND = 1_000_000L
+        private val WIREGUARD_TCP_TARGETS = listOf(
+            InetAddress.getByAddress(byteArrayOf(1, 1, 1, 1)),
+            InetAddress.getByAddress(byteArrayOf(8, 8, 8, 8))
+        )
 
         /* Retained as a documented compatibility pool for diagnostics/audits. */
         private val FALLBACK_CONNECTIVITY_URLS = listOf(

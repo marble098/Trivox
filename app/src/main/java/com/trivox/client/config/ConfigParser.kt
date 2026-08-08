@@ -426,7 +426,7 @@ object ConfigParser {
             .put("settings", settings)
         return parsed.profile("wireguard", outbound, raw).copy(
             probeServer = parsed.host,
-            probePort = 443
+            probePort = parsed.port
         )
     }
 
@@ -826,7 +826,7 @@ object ConfigParser {
             outboundJson = outbound.toString(),
             originalDnsJson = originalDns,
             probeServer = endpoint.first,
-            probePort = 443
+            probePort = endpoint.second
         )
     }
 

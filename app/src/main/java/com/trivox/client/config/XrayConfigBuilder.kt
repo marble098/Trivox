@@ -94,14 +94,13 @@ object XrayConfigBuilder {
         if (mode == ConnectionMode.VPN) result.put(tunInbound(settings))
 
         /*
-         * WireGuard keeps a localhost-only mixed listener even in VPN mode for
-         * diagnostics and proxy-mode tests. Runtime VPN health is still verified
-         * only through Android's active VPN route.
+         * WireGuard does not require a local mixed listener in VPN mode.
+         * Opening it unconditionally made WireGuard startup depend on an
+         * unrelated localhost TCP port and caused avoidable port races.
          */
         if (
             mode == ConnectionMode.PROXY ||
-            settings.localProxyInVpn ||
-            profile.protocol.equals("wireguard", ignoreCase = true)
+            settings.localProxyInVpn
         ) {
             result.put(mixedInbound(settings))
         }
@@ -304,10 +303,6 @@ object XrayConfigBuilder {
                 .coerceAtLeast(576)
         )
         wireGuard.put("noKernelTun", true)
-        if (wireGuard.optInt("workers", 0) <= 0) {
-            wireGuard.put("workers", settings.wireGuardWorkers)
-        }
-
         val addressValues = mutableListOf<String>()
         when (val rawAddress = wireGuard.opt("address")) {
             is JSONArray -> {
@@ -343,7 +338,6 @@ object XrayConfigBuilder {
         }
 
         val validStrategies = setOf(
-            "AsIs",
             "ForceIP",
             "ForceIPv4",
             "ForceIPv6",
@@ -351,19 +345,18 @@ object XrayConfigBuilder {
             "ForceIPv6v4"
         )
         val existingStrategy = wireGuard.optString("domainStrategy")
-        if (existingStrategy !in validStrategies) {
-            val configured = settings.wireGuardDomainStrategy
-                .takeIf { it in validStrategies }
-            wireGuard.put(
-                "domainStrategy",
-                configured ?: when {
-                    hasIpv4Address && hasIpv6Address && settings.ipv6 ->
-                        "ForceIPv4v6"
-                    hasIpv6Address && settings.ipv6 -> "ForceIPv6"
-                    else -> "ForceIPv4"
-                }
-            )
+        val configured = settings.wireGuardDomainStrategy
+            .takeIf { it in validStrategies }
+        val familySafeStrategy = when {
+            hasIpv4Address && !hasIpv6Address -> "ForceIPv4"
+            hasIpv6Address && !hasIpv4Address -> "ForceIPv6"
+            existingStrategy in validStrategies -> existingStrategy
+            configured != null -> configured
+            hasIpv4Address && hasIpv6Address && settings.ipv6 -> "ForceIPv4v6"
+            hasIpv6Address && settings.ipv6 -> "ForceIPv6"
+            else -> "ForceIPv4"
         }
+        wireGuard.put("domainStrategy", familySafeStrategy)
 
         val peers = wireGuard.optJSONArray("peers") ?: JSONArray()
         var promotedReserved: Any? = wireGuard.opt("reserved")

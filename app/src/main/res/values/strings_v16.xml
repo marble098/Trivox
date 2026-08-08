@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v16_notification_choose_subscription">Switch subscription</string>
+    <string name="v16_notification_group_summary">%1$s • %2$d configs • %3$d/%4$d</string>
+    <string name="v16_notification_group_help">%1$s
+%2$d available configs. Choose Profiles to browse inside the notification.</string>
+    <string name="v16_notification_profiles">Profiles</string>
+    <string name="v16_notification_previous">‹ Prev</string>
+    <string name="v16_notification_next">Next ›</string>
+    <string name="v16_notification_use">Use</string>
+    <string name="v16_notification_profile_summary">%1$s • %2$d/%3$d</string>
+</resources>

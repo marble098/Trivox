@@ -41,7 +41,8 @@ internal class BatchRealDelayRunner(
 
             val compatible = group.filterNot {
                 it.protocol.equals("chain", ignoreCase = true) ||
-                    it.protocol.equals("openssh", ignoreCase = true)
+                    it.protocol.equals("openssh", ignoreCase = true) ||
+                    it.protocol.equals("wireguard", ignoreCase = true)
             }
             val incompatible = group - compatible.toSet()
 

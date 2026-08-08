@@ -8,6 +8,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -62,6 +64,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -287,10 +290,26 @@ private fun HomeTab(
                         StatusDot(runtime.state)
                         Spacer(Modifier.width(9.dp))
                         Column(Modifier.weight(1f)) {
+                            val isConnected =
+                                runtime.state == ConnectionState.CONNECTED
+                            val connectedGreen = if (isSystemInDarkTheme()) {
+                                Color(0xFF56D99A)
+                            } else {
+                                Color(0xFF087A4E)
+                            }
                             Text(
                                 stateLabel(activity, runtime.state),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
+                                style = if (isConnected) {
+                                    MaterialTheme.typography.headlineSmall
+                                } else {
+                                    MaterialTheme.typography.titleMedium
+                                },
+                                fontWeight = FontWeight.Bold,
+                                color = if (isConnected) {
+                                    connectedGreen
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                }
                             )
                             Text(
                                 selected?.name ?: activity.getString(R.string.select_profile),
@@ -620,7 +639,8 @@ private fun ConfigsTab(
             }
             lazyItems(sources, key = { it.id }) { source ->
                 SubscriptionSourceChip(
-                    label = "${source.name} (${actions.composeProfiles("", source.id, false).size})",
+                    name = source.name,
+                    count = actions.composeProfiles("", source.id, false).size,
                     selected = selectedSource == source.id,
                     onClick = {
                         selectedSource = source.id
@@ -647,7 +667,7 @@ private fun ConfigsTab(
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 if (settings.gridMode) {
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(164.dp),
+                        columns = GridCells.Adaptive(172.dp),
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -701,103 +721,182 @@ private fun ProfileCard(
             .fillMaxWidth()
             .animateContentSize()
             .clickable { actions.composeSelectProfile(profile.id) },
-        shape = RoundedCornerShape(17.dp),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(
+            if (selected) 1.5.dp else 1.dp,
+            if (selected) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.outlineVariant
+        ),
         colors = CardDefaults.cardColors(
-            containerColor = if (selected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainer
-            }
+            containerColor = if (selected)
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.58f)
+            else MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
-        Column(
-            Modifier.padding(if (compact) 11.dp else 13.dp),
-            verticalArrangement = Arrangement.spacedBy(7.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        (if (profile.favorite) "★ " else "") + profile.name,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        profileEndpoint(profile, hideIp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = if (compact) 2 else 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                TextButton(onClick = { actions.composeProfileActions(profile.id) }) {
-                    Text("⋮", fontSize = 18.sp)
-                }
-            }
+        if (compact) CompactProfileCard(activity, profile, hideIp, actions)
+        else ListProfileCard(activity, profile, hideIp, actions)
+    }
+}
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                LatencyPill("TCP", profile.tcpLatencyMs, profile.tcpTestStatus)
-                LatencyPill(
-                    activity.getString(R.string.compose_real_label),
-                    profile.realLatencyMs,
-                    profile.realTestStatus
-                )
-            }
-
-            if (
-                profile.tcpTestStatus == TestStatus.TESTING ||
-                profile.realTestStatus == TestStatus.TESTING
-            ) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(
-                    onClick = { actions.composePingProfile(profile.id, PingMethod.TCP_CONNECT) },
-                    enabled = profile.tcpTestStatus != TestStatus.TESTING,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        if (profile.tcpTestStatus == TestStatus.TESTING) {
-                            "TCP…"
-                        } else if (compact) {
-                            "TCP"
-                        } else {
-                            activity.getString(R.string.compose_test_tcp)
-                        },
-                        fontSize = if (compact) 10.sp else 11.sp
-                    )
-                }
-                TextButton(
-                    onClick = { actions.composePingProfile(profile.id, PingMethod.XRAY_HTTP) },
-                    enabled = profile.realTestStatus != TestStatus.TESTING,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        if (profile.realTestStatus == TestStatus.TESTING) {
-                            "${activity.getString(R.string.compose_real_label)}…"
-                        } else if (compact) {
-                            activity.getString(R.string.compose_real_label)
-                        } else {
-                            activity.getString(R.string.compose_test_real)
-                        },
-                        fontSize = if (compact) 10.sp else 11.sp
-                    )
-                }
-            }
-
-            if (profile.exitCountry.isNotBlank() || (!hideIp && profile.exitIp.isNotBlank())) {
+@Composable
+private fun CompactProfileCard(
+    activity: Activity,
+    profile: ConfigProfile,
+    hideIp: Boolean,
+    actions: MainComposeActions
+) {
+    Column(
+        Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(9.dp)
+    ) {
+        Row(verticalAlignment = Alignment.Top) {
+            Column(Modifier.weight(1f)) {
                 Text(
-                    buildExitLine(profile, hideIp),
+                    (if (profile.favorite) "★ " else "") + profile.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    profileEndpoint(profile, hideIp),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
+            Box(
+                Modifier.size(32.dp).clickable {
+                    actions.composeProfileActions(profile.id)
+                },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("⋮", fontSize = 20.sp, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            LatencyPill("TCP", profile.tcpLatencyMs, profile.tcpTestStatus)
+            LatencyPill(
+                activity.getString(R.string.compose_real_label),
+                profile.realLatencyMs, profile.realTestStatus
+            )
+        }
+        if (
+            profile.tcpTestStatus == TestStatus.TESTING ||
+            profile.realTestStatus == TestStatus.TESTING
+        ) LinearProgressIndicator(Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            TextButton(
+                onClick = { actions.composePingProfile(profile.id, PingMethod.TCP_CONNECT) },
+                enabled = profile.tcpTestStatus != TestStatus.TESTING,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    if (profile.tcpTestStatus == TestStatus.TESTING) "TCP…"
+                    else activity.getString(R.string.compose_test_tcp),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 10.sp
+                )
+            }
+            TextButton(
+                onClick = { actions.composePingProfile(profile.id, PingMethod.XRAY_HTTP) },
+                enabled = profile.realTestStatus != TestStatus.TESTING,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    if (profile.realTestStatus == TestStatus.TESTING)
+                        "${activity.getString(R.string.compose_real_label)}…"
+                    else activity.getString(R.string.compose_test_real),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 10.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ListProfileCard(
+    activity: Activity,
+    profile: ConfigProfile,
+    hideIp: Boolean,
+    actions: MainComposeActions
+) {
+    Column(
+        Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
+        verticalArrangement = Arrangement.spacedBy(9.dp)
+    ) {
+        Row(verticalAlignment = Alignment.Top) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    (if (profile.favorite) "★ " else "") + profile.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    profileEndpoint(profile, hideIp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+            }
+            Box(
+                Modifier.size(36.dp).clickable {
+                    actions.composeProfileActions(profile.id)
+                },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("⋮", fontSize = 22.sp, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            LatencyPill("TCP", profile.tcpLatencyMs, profile.tcpTestStatus)
+            LatencyPill(
+                activity.getString(R.string.compose_real_label),
+                profile.realLatencyMs, profile.realTestStatus
+            )
+        }
+        if (
+            profile.tcpTestStatus == TestStatus.TESTING ||
+            profile.realTestStatus == TestStatus.TESTING
+        ) LinearProgressIndicator(Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = { actions.composePingProfile(profile.id, PingMethod.TCP_CONNECT) },
+                enabled = profile.tcpTestStatus != TestStatus.TESTING,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    if (profile.tcpTestStatus == TestStatus.TESTING) "TCP…"
+                    else activity.getString(R.string.compose_test_tcp),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+            }
+            OutlinedButton(
+                onClick = { actions.composePingProfile(profile.id, PingMethod.XRAY_HTTP) },
+                enabled = profile.realTestStatus != TestStatus.TESTING,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    if (profile.realTestStatus == TestStatus.TESTING)
+                        "${activity.getString(R.string.compose_real_label)}…"
+                    else activity.getString(R.string.compose_test_real),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        if (
+            profile.exitCountry.isNotBlank() ||
+            (!hideIp && profile.exitIp.isNotBlank())
+        ) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Text(
+                buildExitLine(profile, hideIp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -991,43 +1090,52 @@ private fun SettingsTab(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SubscriptionSourceChip(
-    label: String,
+    name: String,
+    count: Int,
     selected: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
     Surface(
-        modifier = Modifier.combinedClickable(
-            onClick = onClick,
-            onLongClick = onLongClick
-        ),
-        shape = RoundedCornerShape(50),
-        color = if (selected) {
-            MaterialTheme.colorScheme.secondaryContainer
-        } else {
-            MaterialTheme.colorScheme.surface
-        },
-        contentColor = if (selected) {
-            MaterialTheme.colorScheme.onSecondaryContainer
-        } else {
-            MaterialTheme.colorScheme.onSurface
-        },
+        modifier = Modifier
+            .widthIn(min = 112.dp, max = 190.dp)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        shape = RoundedCornerShape(16.dp),
+        color = if (selected) MaterialTheme.colorScheme.secondaryContainer
+        else MaterialTheme.colorScheme.surfaceContainerLow,
         border = BorderStroke(
-            1.dp,
-            if (selected) {
-                MaterialTheme.colorScheme.secondaryContainer
-            } else {
-                MaterialTheme.colorScheme.outlineVariant
-            }
+            if (selected) 1.5.dp else 1.dp,
+            if (selected) MaterialTheme.colorScheme.secondary
+            else MaterialTheme.colorScheme.outlineVariant
         )
     ) {
-        Text(
-            label,
-            modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp),
-            style = MaterialTheme.typography.labelLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Row(
+            Modifier.padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Text(
+                name,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+            Surface(
+                shape = CircleShape,
+                color = if (selected) MaterialTheme.colorScheme.secondary
+                else MaterialTheme.colorScheme.surfaceContainerHigh,
+                contentColor = if (selected) MaterialTheme.colorScheme.onSecondary
+                else MaterialTheme.colorScheme.onSurfaceVariant
+            ) {
+                Text(
+                    count.toString(),
+                    Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
     }
 }
 

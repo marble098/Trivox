@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v16_notification_choose_subscription">تغییر ساب</string>
+    <string name="v16_notification_group_summary">%1$s • %2$d کانفیگ • %3$d/%4$d</string>
+    <string name="v16_notification_group_help">%1$s
+%2$d کانفیگ آماده است. «کانفیگ‌ها» را بزنید تا داخل همان اعلان انتخاب کنید.</string>
+    <string name="v16_notification_profiles">کانفیگ‌ها</string>
+    <string name="v16_notification_previous">‹ قبلی</string>
+    <string name="v16_notification_next">بعدی ›</string>
+    <string name="v16_notification_use">انتخاب</string>
+    <string name="v16_notification_profile_summary">%1$s • %2$d/%3$d</string>
+</resources>

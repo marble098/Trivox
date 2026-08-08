@@ -48,8 +48,21 @@ class NotificationActionActivity : AppCompatActivity() {
             ACTION_PICK -> showSubscriptionPicker()
             ACTION_NEXT -> switchToNext()
             ACTION_PAUSE_15 -> pauseCurrent(15)
+            ACTION_APPLY_PROFILE -> applyQuickSwitchProfile()
             else -> finish()
         }
+    }
+
+    private fun applyQuickSwitchProfile() {
+        val id = intent.getStringExtra(EXTRA_PROFILE_ID)
+        val profile = id?.let { ConfigRepository(this).find(it) }
+        if (profile == null) {
+            NotificationQuickSwitchStore.clear(this)
+            finishWithMessage(R.string.quick_tile_no_profile)
+            return
+        }
+        NotificationQuickSwitchStore.clear(this)
+        switchTo(profile, activeMode())
     }
 
     private fun showSubscriptionPicker() {
@@ -276,6 +289,9 @@ class NotificationActionActivity : AppCompatActivity() {
             "com.trivox.client.NOTIFICATION_NEXT_PROFILE"
         const val ACTION_PAUSE_15 =
             "com.trivox.client.NOTIFICATION_PAUSE_15"
+        const val ACTION_APPLY_PROFILE =
+            "com.trivox.client.NOTIFICATION_APPLY_PROFILE"
+        const val EXTRA_PROFILE_ID = "profile_id"
 
         private const val SWITCH_TIMEOUT_MS = 6_000L
         private const val POLL_INTERVAL_MS = 120L

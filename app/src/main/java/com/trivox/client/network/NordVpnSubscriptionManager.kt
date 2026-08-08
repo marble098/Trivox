@@ -395,12 +395,20 @@ class NordVpnSubscriptionManager {
                                             "endpoint",
                                             endpoint
                                         )
+                                        .put(
+                                            "allowedIPs",
+                                            JSONArray().put("0.0.0.0/0")
+                                        )
+                                        .put(
+                                            "keepAlive",
+                                            25
+                                        )
                                 )
                         )
                         .put("mtu", 1420)
                         .put(
                             "domainStrategy",
-                            "ForceIP"
+                            "ForceIPv4"
                         )
                         .put(
                             "noKernelTun",
@@ -464,11 +472,9 @@ class NordVpnSubscriptionManager {
             outboundJson =
                 outbound.toString(),
             probeServer =
-                server.hostname
-                    .ifBlank {
-                        server.station
-                    },
-            probePort = 443
+                server.station,
+            probePort =
+                NORDLYNX_PORT
         )
     }
 
