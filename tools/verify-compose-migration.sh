@@ -14,7 +14,7 @@ grep -Fq 'org.jetbrains.kotlin.plugin.compose' build.gradle.kts || fail "Compose
 grep -Fq 'compose = true' app/build.gradle.kts || fail "Compose build feature disabled"
 grep -Fq 'androidx.compose:compose-bom:' app/build.gradle.kts || fail "Compose BOM missing"
 grep -Fq 'androidx.compose.material3:material3' app/build.gradle.kts || fail "Material 3 dependency missing"
-grep -Fq 'NavigationBar {' app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt || fail "bottom navigation missing"
+grep -Fq 'NavigationBar(' app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt || fail "bottom navigation missing"
 grep -Fq 'DisposeOnViewTreeLifecycleDestroyed' app/src/main/java/com/trivox/client/ui/compose/LegacyLayoutBridge.kt || fail "Compose disposal strategy missing"
 
 legacy_refs="$(grep -R -n -E '\bR\.layout\.[A-Za-z_][A-Za-z0-9_]*' app/src/main/java --include='*.kt' | grep -v 'android\.R\.layout' || true)"
@@ -104,8 +104,20 @@ main_activity="app/src/main/java/com/trivox/client/ui/MainActivity.kt"
 
 grep -Fq 'contentWindowInsets = WindowInsets(0, 0, 0, 0)' "$main_compose" || \
   fail "main Compose screen may double-apply system bar insets"
-grep -Fq 'NavigationBar(windowInsets = WindowInsets(0, 0, 0, 0))' "$main_compose" || \
-  fail "bottom navigation may double-apply navigation-bar insets"
+python3 - "$main_compose" <<'PY_NAV' || fail "bottom navigation may double-apply navigation-bar insets"
+from pathlib import Path
+import re
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+pattern = re.compile(
+    r"NavigationBar\s*\(\s*"
+    r"windowInsets\s*=\s*WindowInsets\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)",
+    re.S,
+)
+if pattern.search(source) is None:
+    raise SystemExit(1)
+PY_NAV
 grep -Fq 'composeBatchState' "$main_compose" || fail "Compose batch-test progress state missing"
 grep -Fq 'uiRevision = revision' "$main_compose" || \
   fail "Compose revision is not propagated into tab content"

@@ -153,7 +153,6 @@ interface MainComposeActions {
     fun composeRealDelayLabel(): String
 }
 
-// NavigationBar { marker retained for the repository migration verifier.
 private enum class MainTab(val iconRes: Int) {
     HOME(R.drawable.ic_nav_home),
     CONFIGS(R.drawable.ic_nav_configs),

@@ -125,7 +125,7 @@ jobs:
           fi
           grep -Fq 'org.jetbrains.kotlin.plugin.compose' build.gradle.kts
           grep -Fq 'compose = true' app/build.gradle.kts
-          grep -Fq 'NavigationBar {' app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt
+          grep -Fq 'NavigationBar(' app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt
           grep -Fq 'RoutingComposeScreen' app/src/main/java/com/trivox/client/ui/compose/RoutingComposeScreen.kt
           grep -Fq 'LegacyLayoutBridge.install' app/src/main/java/com/trivox/client/ui/MainActivity.kt
           grep -Fq 'SubscriptionCancelledException' \
