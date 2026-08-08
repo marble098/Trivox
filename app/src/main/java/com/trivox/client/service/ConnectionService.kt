@@ -93,6 +93,20 @@ class ConnectionService : Service() {
             return START_NOT_STICKY
         }
 
+        if (cleanupStarted.get() || stopRequested.get()) {
+            val deferredProfileId = intent?.getStringExtra(EXTRA_PROFILE_ID) ?: restored?.profileId
+            if (!deferredProfileId.isNullOrBlank()) {
+                ConnectionSwitchCoordinator.deferUntilServiceDestroyed(
+                    this, deferredProfileId, ConnectionMode.PROXY, ConnectionMode.PROXY,
+                    "proxy_start_during_cleanup"
+                )
+            }
+            Diagnostics.warning(
+                "Proxy start was deferred because the previous service instance is still cleaning up"
+            )
+            return START_NOT_STICKY
+        }
+
         if (
             !sessionAccepted
                 .compareAndSet(
@@ -570,6 +584,13 @@ class ConnectionService : Service() {
                             "Immediate core stop failed: " + it.message
                         )
                     }
+            } else if (
+                ConnectionRuntime.current().sessionId == sessionId && core.isRunning()
+            ) {
+                Diagnostics.warning("Recovering a process-owned Xray instance during proxy cleanup")
+                runCatching { core.stop() }.onFailure {
+                    Diagnostics.warning("Recovered Xray stop failed: " + it.message)
+                }
             } else {
                 Diagnostics.debug(
                     "Skipped Xray stop: proxy session did not own Xray"
@@ -773,6 +794,10 @@ class ConnectionService : Service() {
         sshHandle = null
         cleanupExecutor.shutdownNow()
         executor.shutdownNow()
+        ConnectionSwitchCoordinator.onServiceDestroyed(
+            this,
+            ConnectionMode.PROXY
+        )
         super.onDestroy()
     }
 

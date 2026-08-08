@@ -5,6 +5,7 @@ import android.app.ApplicationExitInfo
 import android.content.Context
 import android.os.Build
 import android.os.Process
+import android.os.SystemClock
 import com.trivox.client.BuildConfig
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -23,6 +24,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 object Diagnostics {
     enum class Level {
@@ -66,6 +68,10 @@ object Diagnostics {
         AtomicBoolean(false)
     private val handlingCrash =
         AtomicBoolean(false)
+    private val sessionErrors = AtomicInteger(0)
+    private val sessionWarnings = AtomicInteger(0)
+    @Volatile private var sessionStartedAt = 0L
+    @Volatile private var sessionStartedElapsed = 0L
     private val lock = Any()
     private val throwableFingerprints =
         ConcurrentHashMap<String, Long>()
@@ -118,6 +124,8 @@ object Diagnostics {
 
         appContext =
             context.applicationContext
+        sessionStartedAt = System.currentTimeMillis()
+        sessionStartedElapsed = SystemClock.elapsedRealtime()
         diagnosticsDir =
             File(
                 appContext.filesDir,
@@ -168,6 +176,12 @@ object Diagnostics {
 
         if (!initialized.get()) {
             return
+        }
+
+        when (level) {
+            Level.ERROR -> sessionErrors.incrementAndGet()
+            Level.WARNING -> sessionWarnings.incrementAndGet()
+            else -> Unit
         }
 
         val line =
@@ -437,6 +451,11 @@ object Diagnostics {
 
         flushRuntimeWrites()
 
+        sessionWarnings.set(0)
+        sessionErrors.set(0)
+        sessionStartedAt = System.currentTimeMillis()
+        sessionStartedElapsed = SystemClock.elapsedRealtime()
+
         synchronized(lock) {
             diagnosticsDir
                 .listFiles()
@@ -518,8 +537,25 @@ object Diagnostics {
                     lastNativeCheckpoint()
             )
             appendLine()
+            appendLine("--- Current build/session health ---")
+            appendLine("Session started: " + formatTimestamp(sessionStartedAt))
             appendLine(
-                "--- Process exits and crashes ---"
+                "Session uptime: " + formatDurationMs(
+                    (SystemClock.elapsedRealtime() - sessionStartedElapsed).coerceAtLeast(0L)
+                )
+            )
+            appendLine("Session warnings/errors: ${sessionWarnings.get()}/${sessionErrors.get()}")
+            appendLine("Threads: ${Thread.activeCount()}")
+            val runtime = Runtime.getRuntime()
+            val usedMiB = (runtime.totalMemory() - runtime.freeMemory()) / (1024L * 1024L)
+            val maxMiB = runtime.maxMemory() / (1024L * 1024L)
+            appendLine("Java heap: ${usedMiB}MiB/${maxMiB}MiB")
+            appendLine(xrayFailureSummary())
+            appendLine()
+            appendLine("--- Process exits and crashes ---")
+            appendLine(
+                "Note: historical exits below can belong to earlier installed builds. " +
+                    "Use Git/version above and current-session breadcrumbs to distinguish old tombstones."
             )
             appendLine(
                 crashHistory()
@@ -548,6 +584,32 @@ object Diagnostics {
                         "No runtime breadcrumbs."
                     }
             )
+        }
+    }
+
+    private fun xrayFailureSummary(): String {
+        val value = xrayHistory()
+        if (value.isBlank()) return "Xray summary: no recorded warning/error log"
+        fun count(token: String): Int =
+            Regex(Regex.escape(token), RegexOption.IGNORE_CASE).findAll(value).count()
+        return "Xray summary: dns_timeout=${count("context deadline exceeded")}, " +
+            "closed_pipe=${count("closed pipe")}, " +
+            "tun_refused=${count("proxy/tun: connection was refused")}"
+    }
+
+    private fun formatTimestamp(value: Long): String =
+        if (value <= 0L) "unknown" else
+            SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date(value))
+
+    private fun formatDurationMs(value: Long): String {
+        val seconds = value.coerceAtLeast(0L) / 1000L
+        val hours = seconds / 3600L
+        val minutes = (seconds % 3600L) / 60L
+        val remain = seconds % 60L
+        return if (hours > 0L) {
+            String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, remain)
+        } else {
+            String.format(Locale.US, "%02d:%02d", minutes, remain)
         }
     }
 
@@ -790,6 +852,11 @@ object Diagnostics {
                         appendLine(
                             "Historical process exit"
                         )
+                        appendLine(
+                            "Observed by build: ${BuildConfig.VERSION_NAME} " +
+                                "(${BuildConfig.VERSION_CODE}) git=${BuildConfig.GIT_SHA}"
+                        )
+                        appendLine("This exit may have occurred in an earlier installed build.")
                         appendLine(
                             "Timestamp: " +
                                 info.timestamp

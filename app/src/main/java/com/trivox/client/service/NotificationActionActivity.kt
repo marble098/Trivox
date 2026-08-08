@@ -3,8 +3,6 @@ package com.trivox.client.service
 import android.content.Intent
 import android.net.VpnService
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -20,10 +18,8 @@ import com.trivox.client.data.SubscriptionRepository
 import com.trivox.client.util.Diagnostics
 
 class NotificationActionActivity : AppCompatActivity() {
-    private val handler = Handler(Looper.getMainLooper())
     private var pendingProfileId: String? = null
     private var pendingMode: ConnectionMode? = null
-    private var switchDeadline = 0L
 
     private val vpnPermission = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -144,51 +140,18 @@ class NotificationActionActivity : AppCompatActivity() {
         val repository = ConfigRepository(this)
         repository.select(profile.id)
         QuickConnectStore.save(this, mode, profile.id, profile.name)
-        Diagnostics.info(
-            "Notification switch requested; mode=${mode.name}, profile=${profile.id}"
-        )
-
+        Diagnostics.info("Notification switch requested; mode=${mode.name}, profile=${profile.id}")
         pendingProfileId = profile.id
         pendingMode = mode
-
         val current = ConnectionRuntime.current()
-        if (
-            current.state !in setOf(
-                ConnectionState.DISCONNECTED,
-                ConnectionState.ERROR
-            )
-        ) {
-            stop(current.mode ?: mode)
-            switchDeadline = android.os.SystemClock.elapsedRealtime() + SWITCH_TIMEOUT_MS
-            handler.post(switchPoll)
+        if (current.state !in setOf(ConnectionState.DISCONNECTED, ConnectionState.ERROR)) {
+            if (!ConnectionSwitchCoordinator.queue(this, profile.id, mode, "notification")) {
+                finishWithMessage(R.string.quick_tile_no_profile)
+            } else {
+                finish()
+            }
         } else {
             requestStart(profile.id, mode)
-        }
-    }
-
-    private val switchPoll = object : Runnable {
-        override fun run() {
-            val state = ConnectionRuntime.current().state
-            if (
-                state in setOf(
-                    ConnectionState.DISCONNECTED,
-                    ConnectionState.ERROR
-                )
-            ) {
-                val profileId = pendingProfileId ?: run {
-                    finish()
-                    return
-                }
-                val mode = pendingMode ?: activeMode()
-                requestStart(profileId, mode)
-                return
-            }
-
-            if (android.os.SystemClock.elapsedRealtime() >= switchDeadline) {
-                finishWithMessage(R.string.notification_switch_timeout)
-                return
-            }
-            handler.postDelayed(this, POLL_INTERVAL_MS)
         }
     }
 
@@ -219,7 +182,11 @@ class NotificationActionActivity : AppCompatActivity() {
                 .setAction(TrivoxVpnService.ACTION_START)
                 .putExtra(TrivoxVpnService.EXTRA_PROFILE_ID, profileId)
         }
-        ContextCompat.startForegroundService(this, intent)
+        runCatching { ContextCompat.startForegroundService(this, intent) }
+            .onFailure {
+                Diagnostics.recordThrowable("Notification connection start", it)
+                Toast.makeText(this, R.string.connection_start_failed, Toast.LENGTH_LONG).show()
+            }
         finish()
     }
 
@@ -272,11 +239,6 @@ class NotificationActionActivity : AppCompatActivity() {
         finish()
     }
 
-    override fun onDestroy() {
-        handler.removeCallbacksAndMessages(null)
-        super.onDestroy()
-    }
-
     private data class PickerGroup(
         val name: String,
         val profiles: List<ConfigProfile>
@@ -293,7 +255,5 @@ class NotificationActionActivity : AppCompatActivity() {
             "com.trivox.client.NOTIFICATION_APPLY_PROFILE"
         const val EXTRA_PROFILE_ID = "profile_id"
 
-        private const val SWITCH_TIMEOUT_MS = 6_000L
-        private const val POLL_INTERVAL_MS = 120L
     }
 }

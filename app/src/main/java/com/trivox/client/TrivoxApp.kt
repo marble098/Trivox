@@ -9,6 +9,7 @@ import androidx.appcompat.app.AppCompatDelegate
 import com.trivox.client.data.SettingsRepository
 import com.trivox.client.data.ThemeMode
 import com.trivox.client.network.NetworkBufferPool
+import com.trivox.client.service.ConnectionSwitchCoordinator
 import com.trivox.client.ui.UiInsets
 import com.trivox.client.util.Diagnostics
 
@@ -29,6 +30,7 @@ class TrivoxApp : Application() {
         )
 
         Diagnostics.initialize(this)
+        ConnectionSwitchCoordinator.recoverPending(this)
         registerActivityLifecycleCallbacks(
             object : ActivityLifecycleCallbacks {
                 override fun onActivityCreated(

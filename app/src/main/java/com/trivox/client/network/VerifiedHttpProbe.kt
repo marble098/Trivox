@@ -38,10 +38,12 @@ internal object VerifiedHttpProbe {
         val target: String = ""
     )
 
-    val strongTraceTarget = Target(
-        "https://1.1.1.1/cdn-cgi/trace",
-        Proof.CLOUDFLARE_TRACE
+    val dnsFreeTraceTargets = listOf(
+        Target("https://1.1.1.1/cdn-cgi/trace", Proof.CLOUDFLARE_TRACE),
+        Target("https://1.0.0.1/cdn-cgi/trace", Proof.CLOUDFLARE_TRACE)
     )
+
+    val strongTraceTarget = dnsFreeTraceTargets.first()
 
     val fallback204Targets = listOf(
         Target(
@@ -217,9 +219,9 @@ internal object VerifiedHttpProbe {
     }
 
     private fun closeConnection(connection: HttpURLConnection?) {
-        runCatching { connection?.inputStream?.close() }
-        runCatching { connection?.errorStream?.close() }
-        connection?.disconnect()
+        // Streams that were opened are already bounded/closed at their read site.
+        // Re-reading a stream from finally can re-enter DNS/TLS after cancellation.
+        runCatching { connection?.disconnect() }
     }
 
     private fun classify(throwable: Throwable): String {

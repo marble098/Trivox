@@ -26,7 +26,8 @@ object TunnelHealthVerifier {
         perProbeTimeoutMs: Int = MAX_PROBE_TIMEOUT_MS,
         initialDelayMs: Int = 0,
         isCancelled: () -> Boolean = { false },
-        hardFailure: () -> String? = { null }
+        hardFailure: () -> String? = { null },
+        dnsFallbackTargets: Boolean = true
     ): PingResult {
         val timestamp = System.currentTimeMillis()
         if (!waitCancellable(initialDelayMs.coerceIn(0, MAX_INITIAL_DELAY_MS), isCancelled)) {
@@ -54,11 +55,15 @@ object TunnelHealthVerifier {
         val samples = mutableListOf<Long>()
         var lastFailure = "tunnel_timeout"
         val targets = buildList {
-            add(VerifiedHttpProbe.strongTraceTarget)
-            VerifiedHttpProbe.targetForUserUrl(settings.testUrl)
-                ?.takeUnless { it.url == VerifiedHttpProbe.strongTraceTarget.url }
-                ?.let(::add)
-            addAll(VerifiedHttpProbe.fallback204Targets)
+            addAll(VerifiedHttpProbe.dnsFreeTraceTargets)
+            if (dnsFallbackTargets) {
+                VerifiedHttpProbe.targetForUserUrl(settings.testUrl)
+                    ?.takeUnless { candidate ->
+                        VerifiedHttpProbe.dnsFreeTraceTargets.any { it.url == candidate.url }
+                    }
+                    ?.let(::add)
+                addAll(VerifiedHttpProbe.fallback204Targets)
+            }
         }.distinctBy { it.url }
         val targetLimit = (attempts.coerceIn(2, 3) + 2).coerceAtMost(targets.size)
 
@@ -89,12 +94,33 @@ object TunnelHealthVerifier {
                     }
                     break
                 }
-                lastFailure = probe.errorCategory ?: lastFailure
+                lastFailure = preferredFailure(lastFailure, probe.errorCategory)
             }
         }
 
         hardFailure()?.let { lastFailure = it }
         return failureResult(timestamp, mode, lastFailure)
+    }
+
+    private fun preferredFailure(current: String, candidate: String?): String {
+        if (candidate.isNullOrBlank()) return current
+        if (current == "tunnel_timeout") return candidate
+        fun priority(value: String): Int {
+            val v = value.lowercase()
+            return when {
+                v in setOf(
+                    "reality_mismatch", "authentication_failed", "tls_certificate",
+                    "connection_refused", "local_proxy_listener_unavailable"
+                ) -> 100
+                "ssl" in v || "tls" in v -> 90
+                "connectexception" in v || "connectionrefused" in v -> 85
+                "timeout" in v -> 75
+                v.startsWith("http_") || v == "invalid_trace_body" -> 65
+                v in setOf("gaiexception", "unknownhostexception") -> 40
+                else -> 55
+            }
+        }
+        return if (priority(candidate) >= priority(current)) candidate else current
     }
 
     private fun routesFor(mode: ConnectionMode?): List<VerifiedHttpProbe.Route> =

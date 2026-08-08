@@ -80,6 +80,7 @@ import com.trivox.client.network.SubscriptionRefreshCoordinator
 import com.trivox.client.network.TunnelHealthVerifier
 import com.trivox.client.update.UpdateChecker
 import com.trivox.client.service.ConnectionPauseController
+import com.trivox.client.service.ConnectionSwitchCoordinator
 import com.trivox.client.service.ConnectionService
 import com.trivox.client.service.NotificationSupport
 import com.trivox.client.service.QuickConnectTileService
@@ -794,43 +795,23 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         profile: ConfigProfile
     ) {
         repository.select(profile.id)
-
-        val current =
-            ConnectionRuntime.current()
-
+        val current = ConnectionRuntime.current()
         if (
             current.profileId != profile.id &&
-            current.state !in
-            setOf(
-                ConnectionState.DISCONNECTED,
-                ConnectionState.ERROR
-            )
+            current.state !in setOf(ConnectionState.DISCONNECTED, ConnectionState.ERROR)
         ) {
-            pendingSwitchProfileId =
-                profile.id
-            pendingSwitchMode =
-                current.mode
-                    ?: settingsRepository
-                        .load()
-                        .mode
-
-            toast(
-                getString(
-                    R.string.profile_switching,
-                    profile.name
+            val mode = current.mode ?: settingsRepository.load().mode
+            toast(getString(R.string.profile_switching, profile.name))
+            if (!ConnectionSwitchCoordinator.queue(
+                    context = this,
+                    profileId = profile.id,
+                    targetMode = mode,
+                    reason = "main_profile_selection"
                 )
-            )
-
-            if (
-                current.state !=
-                ConnectionState.STOPPING
             ) {
-                stopActiveConnection(
-                    current
-                )
+                toast(getString(R.string.connection_start_failed))
             }
         }
-
         refresh()
     }
 
@@ -4131,9 +4112,12 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                                     latest.mode == ConnectionMode.VPN &&
                                     !reconnectProfile.isNullOrBlank()
                                 ) {
-                                    pendingSwitchProfileId = reconnectProfile
-                                    pendingSwitchMode = ConnectionMode.VPN
-                                    stopActiveConnection(latest)
+                                    ConnectionSwitchCoordinator.queue(
+                                        context = this,
+                                        profileId = reconnectProfile,
+                                        targetMode = ConnectionMode.VPN,
+                                        reason = "automatic_leak_repair"
+                                    )
                                 }
                             } else {
                                 composeLeakStatusText =

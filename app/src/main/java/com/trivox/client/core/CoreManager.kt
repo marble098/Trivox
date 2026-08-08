@@ -177,7 +177,7 @@ class CoreManager(context: Context) {
         } else {
             GENERAL_CONSERVATIVE_VERIFY_BUDGET_MS
         }
-        val health = TunnelHealthVerifier.measure(
+        var health = TunnelHealthVerifier.measure(
             settings = request.settings,
             mode = request.mode,
             attempts = if (adaptive) 3 else 2,
@@ -206,6 +206,39 @@ class CoreManager(context: Context) {
             }
         )
 
+        if (
+            !health.success &&
+            !isCancelled() &&
+            isRunning() &&
+            isTransientVerificationFailure(health.errorCategory)
+        ) {
+            Diagnostics.warning(
+                "Initial live-route verification was inconclusive (" +
+                    "${health.errorCategory.orEmpty()}); retrying DNS-free proof"
+            )
+            val retry = TunnelHealthVerifier.measure(
+                settings = request.settings,
+                mode = request.mode,
+                attempts = 2,
+                budgetMs = TRANSIENT_RETRY_BUDGET_MS,
+                perProbeTimeoutMs = TRANSIENT_RETRY_PROBE_TIMEOUT_MS,
+                initialDelayMs = TRANSIENT_RETRY_GRACE_MS,
+                isCancelled = isCancelled,
+                hardFailure = {
+                    XrayProbeLogInspector.classifySince(logMark)
+                        ?.takeIf(::isImmediateTransportFailure)
+                },
+                dnsFallbackTargets = false
+            )
+            if (retry.success) {
+                Diagnostics.info("Live-route verification recovered on DNS-free retry")
+                return started
+            }
+            if (retry.errorCategory != null && retry.errorCategory != "tunnel_timeout") {
+                health = retry
+            }
+        }
+
         if (isCancelled() || health.errorCategory == "cancelled") {
             stopAfterRejectedStart()
             return cancelledStart()
@@ -230,6 +263,13 @@ class CoreManager(context: Context) {
                 "cannot guarantee that the live route is usable."
         return CoreResult(false, error)
     }
+
+    private fun isTransientVerificationFailure(category: String?): Boolean =
+        category?.lowercase() in setOf(
+            "gaiexception", "unknownhostexception", "sockettimeoutexception",
+            "interruptedioexception", "connectexception", "tunnel_timeout",
+            "invalid_trace_body"
+        )
 
     private fun isImmediateTransportFailure(category: String): Boolean =
         category in setOf(
@@ -276,6 +316,9 @@ class CoreManager(context: Context) {
         )
 
     companion object {
+        private const val TRANSIENT_RETRY_BUDGET_MS = 4_200
+        private const val TRANSIENT_RETRY_PROBE_TIMEOUT_MS = 1_900
+        private const val TRANSIENT_RETRY_GRACE_MS = 260
         private const val GENERAL_ADAPTIVE_VERIFY_BUDGET_MS = 7_000
         private const val GENERAL_CONSERVATIVE_VERIFY_BUDGET_MS = 11_000
         private const val GENERAL_ADAPTIVE_PROBE_TIMEOUT_MS = 2_800

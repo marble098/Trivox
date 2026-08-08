@@ -663,9 +663,11 @@ object XrayConfigBuilder {
 
     private fun remoteSecureDns(profile: ConfigProfile): JSONArray {
         /*
-         * DoH adds TCP + TLS before WireGuard has proved that its UDP tunnel is
-         * alive. For WireGuard use plain DNS IPs inside the encrypted tunnel.
-         * NordLynx gets Nord's resolvers; other proxy protocols retain DoH.
+         * Avoid stacking a second HTTPS/TLS handshake inside the selected proxy
+         * during bootstrap. WireGuard keeps provider/plain IP DNS. Other proxy
+         * protocols use DNS-over-TCP; the dns-in routing tag still sends those
+         * queries through the encrypted proxy outbound rather than the device
+         * network. Direct/local DNS modes remain separate.
          */
         if (profile.protocol.equals("wireguard", ignoreCase = true)) {
             val servers = if (
@@ -685,8 +687,8 @@ object XrayConfigBuilder {
         return withBootstrap(
             profile,
             JSONArray()
-                .put("https://1.1.1.1/dns-query")
-                .put("https://8.8.8.8/dns-query")
+                .put("tcp://1.1.1.1:53")
+                .put("tcp://8.8.8.8:53")
         )
     }
 

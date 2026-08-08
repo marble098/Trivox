@@ -116,6 +116,20 @@ class TrivoxVpnService : VpnService() {
             return START_NOT_STICKY
         }
 
+        if (cleanupStarted.get() || stopRequested.get()) {
+            val deferredProfileId = intent?.getStringExtra(EXTRA_PROFILE_ID) ?: restored?.profileId
+            if (!deferredProfileId.isNullOrBlank()) {
+                ConnectionSwitchCoordinator.deferUntilServiceDestroyed(
+                    this, deferredProfileId, ConnectionMode.VPN, ConnectionMode.VPN,
+                    "vpn_start_during_cleanup"
+                )
+            }
+            Diagnostics.warning(
+                "VPN start was deferred because the previous service instance is still cleaning up"
+            )
+            return START_NOT_STICKY
+        }
+
         if (
             !sessionAccepted
                 .compareAndSet(
@@ -1020,6 +1034,13 @@ class TrivoxVpnService : VpnService() {
                             "Immediate core stop failed: " + it.message
                         )
                     }
+            } else if (
+                ConnectionRuntime.current().sessionId == sessionId && core.isRunning()
+            ) {
+                Diagnostics.warning("Recovering a process-owned Xray instance during VPN cleanup")
+                runCatching { core.stop() }.onFailure {
+                    Diagnostics.warning("Recovered Xray stop failed: " + it.message)
+                }
             } else {
                 Diagnostics.debug(
                     "Skipped Xray stop: VPN session did not own Xray"
@@ -1306,6 +1327,10 @@ class TrivoxVpnService : VpnService() {
         sshSourceProfile = null
         cleanupExecutor.shutdownNow()
         executor.shutdown()
+        ConnectionSwitchCoordinator.onServiceDestroyed(
+            this,
+            ConnectionMode.VPN
+        )
         super.onDestroy()
     }
 
