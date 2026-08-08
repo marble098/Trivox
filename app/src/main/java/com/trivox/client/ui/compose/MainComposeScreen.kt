@@ -271,45 +271,50 @@ private fun HomeTab(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
+                shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.elevatedCardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                 )
             ) {
                 Column(
-                    Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         StatusDot(runtime.state)
                         Spacer(Modifier.width(9.dp))
                         Column(Modifier.weight(1f)) {
-                            val isConnected =
-                                runtime.state == ConnectionState.CONNECTED
                             val connectedGreen = if (isSystemInDarkTheme()) {
                                 Color(0xFF56D99A)
                             } else {
                                 Color(0xFF087A4E)
                             }
+                            val statusColor = when (runtime.state) {
+                                ConnectionState.CONNECTED -> connectedGreen
+                                ConnectionState.ERROR ->
+                                    MaterialTheme.colorScheme.error
+                                ConnectionState.PREPARING,
+                                ConnectionState.CONNECTING,
+                                ConnectionState.RECONNECTING ->
+                                    MaterialTheme.colorScheme.primary
+                                ConnectionState.STOPPING ->
+                                    MaterialTheme.colorScheme.tertiary
+                                ConnectionState.DISCONNECTED ->
+                                    MaterialTheme.colorScheme.onSurface
+                            }
                             Text(
                                 stateLabel(activity, runtime.state),
-                                style = if (isConnected) {
-                                    MaterialTheme.typography.headlineSmall
-                                } else {
-                                    MaterialTheme.typography.titleMedium
-                                },
+                                style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isConnected) {
-                                    connectedGreen
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                }
+                                color = statusColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 selected?.name ?: activity.getString(R.string.select_profile),
@@ -377,8 +382,10 @@ private fun HomeTab(
                         onClick = actions::composeToggleConnection,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .height(52.dp)
                             .animateContentSize(),
                         enabled = runtime.state != ConnectionState.STOPPING,
+                        shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = connectionColor,
                             contentColor = connectionContentColor
@@ -397,8 +404,13 @@ private fun HomeTab(
                             label = "connection-action"
                         ) { isConnected ->
                             Text(
-                                if (isConnected) activity.getString(R.string.disconnect)
-                                else activity.getString(R.string.connect)
+                                if (isConnected) {
+                                    activity.getString(R.string.disconnect)
+                                } else {
+                                    activity.getString(R.string.connect)
+                                },
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
                     }
@@ -612,34 +624,34 @@ private fun ConfigsTab(
             BatchStateBanner(activity, batch)
         }
 
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 1.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             item {
-                FilterChip(
+                ConfigScopeChip(
+                    label = activity.getString(
+                        R.string.subscription_all_count,
+                        actions.composeProfiles("", null, false).size
+                    ),
                     selected = selectedSource == null,
                     onClick = {
                         selectedSource = null
                         actions.composeSelectSubscription(null)
-                    },
-                    label = {
-                        Text(
-                            activity.getString(
-                                R.string.subscription_all_count,
-                                actions.composeProfiles("", null, false).size
-                            )
-                        )
                     }
                 )
             }
             item {
-                FilterChip(
+                ConfigScopeChip(
+                    label = "★ ${activity.getString(R.string.compose_favorites_only)}",
                     selected = favoritesOnly,
-                    onClick = { favoritesOnly = !favoritesOnly },
-                    label = { Text("★ ${activity.getString(R.string.compose_favorites_only)}") }
+                    onClick = { favoritesOnly = !favoritesOnly }
                 )
             }
             lazyItems(sources, key = { it.id }) { source ->
-                SubscriptionSourceChip(
-                    name = source.name,
+                ConfigScopeChip(
+                    label = source.name,
                     count = actions.composeProfiles("", source.id, false).size,
                     selected = selectedSource == source.id,
                     onClick = {
@@ -1089,51 +1101,76 @@ private fun SettingsTab(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SubscriptionSourceChip(
-    name: String,
-    count: Int,
+private fun ConfigScopeChip(
+    label: String,
+    count: Int? = null,
     selected: Boolean,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: (() -> Unit)? = null
 ) {
     Surface(
         modifier = Modifier
-            .widthIn(min = 112.dp, max = 190.dp)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
-        shape = RoundedCornerShape(16.dp),
-        color = if (selected) MaterialTheme.colorScheme.secondaryContainer
-        else MaterialTheme.colorScheme.surfaceContainerLow,
+            .height(44.dp)
+            .widthIn(min = 108.dp, max = 190.dp)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
+        shape = RoundedCornerShape(15.dp),
+        color = if (selected) {
+            MaterialTheme.colorScheme.secondaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
         border = BorderStroke(
             if (selected) 1.5.dp else 1.dp,
-            if (selected) MaterialTheme.colorScheme.secondary
-            else MaterialTheme.colorScheme.outlineVariant
+            if (selected) {
+                MaterialTheme.colorScheme.secondary
+            } else {
+                MaterialTheme.colorScheme.outlineVariant
+            }
         )
     ) {
         Row(
-            Modifier.padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(7.dp)
         ) {
             Text(
-                name,
+                label,
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.labelLarge,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                maxLines = 1, overflow = TextOverflow.Ellipsis
+                fontWeight = if (selected) {
+                    FontWeight.Bold
+                } else {
+                    FontWeight.Medium
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            Surface(
-                shape = CircleShape,
-                color = if (selected) MaterialTheme.colorScheme.secondary
-                else MaterialTheme.colorScheme.surfaceContainerHigh,
-                contentColor = if (selected) MaterialTheme.colorScheme.onSecondary
-                else MaterialTheme.colorScheme.onSurfaceVariant
-            ) {
-                Text(
-                    count.toString(),
-                    Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold
-                )
+            if (count != null) {
+                Surface(
+                    shape = CircleShape,
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.secondary
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerHigh
+                    },
+                    contentColor = if (selected) {
+                        MaterialTheme.colorScheme.onSecondary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                ) {
+                    Text(
+                        count.toString(),
+                        Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }
@@ -1185,10 +1222,15 @@ private fun BatchStateBanner(activity: Activity, state: ComposeBatchState) {
 private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(17.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        )
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        Column(
+            Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             content()
@@ -1388,11 +1430,18 @@ private fun ConnectionDuration(snapshot: ConnectionRuntime.Snapshot) {
     val duration = if (snapshot.startedElapsed > 0L) {
         (now - snapshot.startedElapsed).coerceAtLeast(0L)
     } else 0L
-    Text(
-        formatDuration(duration),
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
+        Text(
+            formatDuration(duration),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
 
 private data class ToolEntry(val title: String, val subtitle: String, val onClick: () -> Unit)

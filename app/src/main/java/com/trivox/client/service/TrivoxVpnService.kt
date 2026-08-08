@@ -15,6 +15,7 @@ import com.trivox.client.core.CoreManager
 import com.trivox.client.core.CoreResult
 import com.trivox.client.core.CoreStartRequest
 import com.trivox.client.data.AppRoutingMode
+import com.trivox.client.data.ConfigProfile
 import com.trivox.client.data.ConfigRepository
 import com.trivox.client.data.ConnectionMode
 import com.trivox.client.data.ConnectionState
@@ -23,6 +24,8 @@ import com.trivox.client.data.SettingsRepository
 import com.trivox.client.config.OpenSshProfileCodec
 import com.trivox.client.ssh.OpenSshTunnelBridge
 import com.trivox.client.util.Diagnostics
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
@@ -287,9 +290,24 @@ class TrivoxVpnService : VpnService() {
             SettingsRepository(this)
                 .load()
 
+        val isWireGuard =
+            profile.protocol.equals(
+                "wireguard",
+                ignoreCase = true
+            )
+        val effectiveIpv6 =
+            settings.ipv6 &&
+                (
+                    !isWireGuard ||
+                        wireGuardHasIpv6Address(profile)
+                    )
+
+        /*
+         * WireGuard itself does not need Trivox's localhost mixed listener.
+         * Only expose/reserve that port when the user explicitly enabled it.
+         */
         val needsMixedListener =
-            settings.localProxyInVpn ||
-                profile.protocol.equals("wireguard", ignoreCase = true)
+            settings.localProxyInVpn
         mixedListenerPort =
             settings.socksPort.takeIf { needsMixedListener }
         if (
@@ -322,7 +340,16 @@ class TrivoxVpnService : VpnService() {
             .setSession(
                 "Trivox • ${profile.name}"
             )
-            .setMtu(settings.mtu)
+            .setMtu(
+                if (isWireGuard) {
+                    minOf(
+                        settings.mtu,
+                        settings.wireGuardMtu
+                    )
+                } else {
+                    settings.mtu
+                }
+            )
             .addAddress(
                 "172.19.0.1",
                 30
@@ -332,13 +359,17 @@ class TrivoxVpnService : VpnService() {
                 0
             )
 
-        if (settings.ipv6) {
+        if (effectiveIpv6) {
             builder
                 .addAddress(
                     "fd00:7472:6976:6f78::1",
                     126
                 )
                 .addRoute("::", 0)
+        } else if (isWireGuard && settings.ipv6) {
+            Diagnostics.info(
+                "IPv6 route disabled for an IPv4-only WireGuard profile"
+            )
         }
 
         val dnsServers =
@@ -1043,6 +1074,36 @@ class TrivoxVpnService : VpnService() {
         }
 
         networkCallback = null
+    }
+
+    private fun wireGuardHasIpv6Address(
+        profile: ConfigProfile
+    ): Boolean {
+        if (!profile.protocol.equals("wireguard", ignoreCase = true)) {
+            return false
+        }
+
+        return runCatching {
+            val outbound =
+                JSONObject(profile.outboundJson)
+            val wireGuard =
+                outbound.optJSONObject("settings")
+                    ?: return@runCatching true
+
+            when (val raw = wireGuard.opt("address")) {
+                is JSONArray ->
+                    (0 until raw.length()).any {
+                        ':' in raw.optString(it)
+                    }
+
+                is String ->
+                    raw.split(',').any {
+                        ':' in it.trim()
+                    }
+
+                else -> true
+            }
+        }.getOrDefault(false)
     }
 
     private fun executeSafely(

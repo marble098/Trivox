@@ -74,14 +74,25 @@ object XrayConfigBuilder {
         val log = JSONObject().put("loglevel", "warning")
         if (!errorLogPath.isNullOrBlank()) log.put("error", errorLogPath)
 
+        /*
+         * A WireGuard profile with an explicit IPv4-only interface cannot
+         * safely carry an IPv6 default route. Keep the user's global IPv6
+         * preference untouched, but build this one profile as IPv4-only.
+         */
+        val effectiveSettings = if (isIpv4OnlyWireGuard(profile)) {
+            settings.copy(ipv6 = false).normalize()
+        } else {
+            settings
+        }
+
         val root = JSONObject().put("log", log)
         if (tunFd != null) {
             root.put("env", JSONObject().put("xray.tun.fd", tunFd.toString()))
         }
-        root.put("inbounds", buildInbounds(profile, settings, mode))
-        root.put("outbounds", buildOutbounds(profile, settings))
-        root.put("dns", dns(profile, settings))
-        root.put("routing", routing(settings, mode))
+        root.put("inbounds", buildInbounds(profile, effectiveSettings, mode))
+        root.put("outbounds", buildOutbounds(profile, effectiveSettings))
+        root.put("dns", dns(profile, effectiveSettings))
+        root.put("routing", routing(profile, effectiveSettings, mode))
         return root.toString(2)
     }
 
@@ -635,13 +646,34 @@ object XrayConfigBuilder {
     private fun queryStrategy(settings: AppSettings) =
         if (settings.ipv6) "UseIP" else "UseIPv4"
 
-    private fun remoteSecureDns(profile: ConfigProfile): JSONArray =
-        withBootstrap(
+    private fun remoteSecureDns(profile: ConfigProfile): JSONArray {
+        /*
+         * DoH adds TCP + TLS before WireGuard has proved that its UDP tunnel is
+         * alive. For WireGuard use plain DNS IPs inside the encrypted tunnel.
+         * NordLynx gets Nord's resolvers; other proxy protocols retain DoH.
+         */
+        if (profile.protocol.equals("wireguard", ignoreCase = true)) {
+            val servers = if (
+                profile.name.contains("NordVPN", ignoreCase = true)
+            ) {
+                JSONArray()
+                    .put("103.86.96.100")
+                    .put("103.86.99.100")
+            } else {
+                JSONArray()
+                    .put("1.1.1.1")
+                    .put("8.8.8.8")
+            }
+            return withBootstrap(profile, servers)
+        }
+
+        return withBootstrap(
             profile,
             JSONArray()
                 .put("https://1.1.1.1/dns-query")
                 .put("https://8.8.8.8/dns-query")
         )
+    }
 
     private fun withBootstrap(
         profile: ConfigProfile,
@@ -687,6 +719,41 @@ object XrayConfigBuilder {
         .put("https+local://1.1.1.1/dns-query")
         .put("https+local://8.8.8.8/dns-query")
 
+    private fun isIpv4OnlyWireGuard(profile: ConfigProfile): Boolean {
+        if (!profile.protocol.equals("wireguard", ignoreCase = true)) {
+            return false
+        }
+
+        val outbound = runCatching {
+            JSONObject(profile.outboundJson)
+        }.getOrNull() ?: return false
+        val wireGuard = outbound.optJSONObject("settings") ?: return false
+        val values = mutableListOf<String>()
+
+        when (val raw = wireGuard.opt("address")) {
+            is JSONArray -> {
+                for (index in 0 until raw.length()) {
+                    raw.optString(index)
+                        .split(',')
+                        .map(String::trim)
+                        .filterTo(values, String::isNotBlank)
+                }
+            }
+
+            is String -> raw.split(',')
+                .map(String::trim)
+                .filterTo(values, String::isNotBlank)
+        }
+
+        if (values.isEmpty()) {
+            return false
+        }
+
+        val hasIpv4 = values.any { ':' !in it }
+        val hasIpv6 = values.any { ':' in it }
+        return hasIpv4 && !hasIpv6
+    }
+
     private fun isIpLiteral(value: String): Boolean {
         val clean = value.trim().removePrefix("[").removeSuffix("]")
         return clean.matches(Regex("[0-9.]+")) ||
@@ -694,12 +761,15 @@ object XrayConfigBuilder {
     }
 
     private fun routing(
+        profile: ConfigProfile,
         settings: AppSettings,
         mode: ConnectionMode
     ): JSONObject {
         val dnsRouteTag = when {
             settings.dnsMode == DnsMode.SYSTEM ||
                 settings.dnsMode == DnsMode.DIRECT -> "direct"
+            profile.protocol.equals("wireguard", ignoreCase = true) ->
+                "proxy"
             mode == ConnectionMode.PROXY &&
                 settings.dnsMode != DnsMode.THROUGH_PROXY &&
                 settings.dnsMode != DnsMode.IMPORTED -> "direct"

@@ -92,9 +92,10 @@ class PingManager(
     }
 
     /**
-     * WireGuard endpoints are UDP. A raw TCP connect to the endpoint is not a
-     * valid test. Start Xray on an isolated local mixed proxy and measure a
-     * SOCKS CONNECT that must cross the real WireGuard route.
+     * WireGuard endpoints are UDP, so TCP-connect to :51820 is meaningless.
+     * Start Xray on an isolated local mixed proxy and require verified HTTPS
+     * application data to cross the real WireGuard route. The probe target is
+     * an IP literal, so a broken DNS path cannot fabricate or hide the result.
      */
     @Synchronized
     fun wireGuardTcp(
@@ -160,40 +161,50 @@ class PingManager(
             }
 
             val samples = mutableListOf<Long>()
-            var lastFailure: Throwable? = null
-            var lastTarget: InetAddress? = null
+            var lastFailure = "wireguard_route_unverified"
             repeat(count) { index ->
                 if (Thread.currentThread().isInterrupted) {
                     return cancelled(PingMethod.TCP_CONNECT.name, timestamp)
                 }
-                val target = WIREGUARD_TCP_TARGETS[
-                    index % WIREGUARD_TCP_TARGETS.size
-                ]
-                runCatching {
-                    socksConnectOnce(
-                        probeSettings.socksPort, target, 443, timeout
-                    )
-                }.onSuccess {
-                    samples += it
-                    lastTarget = target
-                }.onFailure { lastFailure = it }
+
+                val probe = VerifiedHttpProbe.probe(
+                    settings = probeSettings,
+                    route = VerifiedHttpProbe.Route.SOCKS_PROXY,
+                    target = VerifiedHttpProbe.strongTraceTarget,
+                    timeoutMs = timeout,
+                    nonce = timestamp + index
+                )
+
+                if (probe.success && probe.latencyMs != null) {
+                    samples +=
+                        probe.latencyMs *
+                            NANOS_PER_MILLISECOND
+                } else {
+                    lastFailure =
+                        probe.errorCategory
+                            ?: lastFailure
+                }
             }
-            val summary = PingStatistics.summarize(samples, count)
+
+            val summary =
+                PingStatistics.summarize(
+                    samples,
+                    count
+                )
             PingResult(
                 method = PingMethod.TCP_CONNECT.name,
                 success = summary.success,
                 latencyMs = summary.latencyMs,
                 jitterMs = summary.jitterMs,
                 successRatio = summary.successRatio,
-                resolvedIp = lastTarget?.hostAddress,
+                resolvedIp = "1.1.1.1",
                 timestamp = timestamp,
-                errorCategory = if (summary.success) null
-                else XrayProbeLogInspector.classifySince(mark)
-                    ?: classify(
-                        lastFailure ?: SocketTimeoutException(
-                            "WireGuard route did not establish TCP"
-                        )
-                    )
+                errorCategory = if (summary.success) {
+                    null
+                } else {
+                    XrayProbeLogInspector.classifySince(mark)
+                        ?: lastFailure
+                }
             )
         } catch (t: Throwable) {
             failure(PingMethod.TCP_CONNECT.name, timestamp, t)
@@ -1056,11 +1067,6 @@ class PingManager(
         private const val PROBE_START_GRACE_MS = 90
         private const val WIREGUARD_PROBE_START_GRACE_MS = 220
         private const val NANOS_PER_MILLISECOND = 1_000_000L
-        private val WIREGUARD_TCP_TARGETS = listOf(
-            InetAddress.getByAddress(byteArrayOf(1, 1, 1, 1)),
-            InetAddress.getByAddress(byteArrayOf(8, 8, 8, 8))
-        )
-
         /* Retained as a documented compatibility pool for diagnostics/audits. */
         private val FALLBACK_CONNECTIVITY_URLS = listOf(
             "https://1.1.1.1/cdn-cgi/trace",

@@ -13,7 +13,7 @@ import org.junit.Test
 
 class XrayConfigBuilderWireGuardTest {
     @Test
-    fun wireGuardUsesVerifiedMixedInboundReliableMtuAndSmartDns() {
+    fun wireGuardUsesIpv4SafeDnsReliableMtuAndNoForcedMixedInbound() {
         val outbound = JSONObject()
             .put("protocol", "wireguard")
             .put(
@@ -63,7 +63,9 @@ class XrayConfigBuilderWireGuardTest {
         assertTrue(wireGuard.getBoolean("noKernelTun"))
 
         val dns = root.getJSONObject("dns")
-        assertTrue(dns.getJSONArray("servers").getString(0).startsWith("https://"))
+        assertEquals("UseIPv4", dns.getString("queryStrategy"))
+        assertEquals("1.1.1.1", dns.getJSONArray("servers").getString(0))
+        assertEquals("8.8.8.8", dns.getJSONArray("servers").getString(1))
         assertTrue(dns.getBoolean("enableParallelQuery"))
 
         val firstRule = root.getJSONObject("routing")
@@ -71,5 +73,55 @@ class XrayConfigBuilderWireGuardTest {
             .getJSONObject(0)
         assertEquals("53", firstRule.getString("port"))
         assertEquals("dns-out", firstRule.getString("outboundTag"))
+    }
+
+    @Test
+    fun nordLynxUsesProviderDnsInsideTheWireGuardRoute() {
+        val outbound = JSONObject()
+            .put("protocol", "wireguard")
+            .put(
+                "settings",
+                JSONObject()
+                    .put("secretKey", "private")
+                    .put("address", JSONArray().put("10.5.0.2/32"))
+                    .put(
+                        "peers",
+                        JSONArray().put(
+                            JSONObject()
+                                .put("publicKey", "public")
+                                .put("endpoint", "198.51.100.20:51820")
+                                .put(
+                                    "allowedIPs",
+                                    JSONArray().put("0.0.0.0/0")
+                                )
+                        )
+                    )
+            )
+        val profile = ConfigProfile(
+            name = "NordVPN Emirates - Dubai",
+            protocol = "wireguard",
+            server = "198.51.100.20",
+            port = 51820,
+            raw = outbound.toString(),
+            outboundJson = outbound.toString()
+        )
+
+        val root = JSONObject(
+            XrayConfigBuilder.build(
+                profile,
+                AppSettings(ipv6 = true),
+                ConnectionMode.PROXY
+            )
+        )
+        val dns = root.getJSONObject("dns")
+        val servers = dns.getJSONArray("servers")
+
+        assertEquals("UseIPv4", dns.getString("queryStrategy"))
+        assertEquals("103.86.96.100", servers.getString(0))
+        assertEquals("103.86.99.100", servers.getString(1))
+        val dnsRoute = root.getJSONObject("routing")
+            .getJSONArray("rules")
+            .getJSONObject(1)
+        assertEquals("proxy", dnsRoute.getString("outboundTag"))
     }
 }

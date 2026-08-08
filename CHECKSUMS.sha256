@@ -34,7 +34,7 @@ af96f9126bca3662401b239785da5af32b07ffc6990b35bd19a077e809776da3  ./app/src/main
 eb36a28ccd3af8f4feebabf015509baede1ce458e033ca3954c539da78342b21  ./app/src/main/java/com/trivox/client/config/ProxyChainCodec.kt
 72357f6cf98d93817f1f0ef470e03c0ee7a814f315baec5ef70bd8ff048780e0  ./app/src/main/java/com/trivox/client/config/Shadowsocks2022.kt
 b4f0ec4a9a78a34a8b588ead93270c7da151fcd77f8172405e44b161664f4885  ./app/src/main/java/com/trivox/client/config/XrayCompatibility.kt
-1fe98ca4db329cbccb821269865100b25302cdc26815c6659bc2a76efb8bef16  ./app/src/main/java/com/trivox/client/config/XrayConfigBuilder.kt
+83b4b2284b3f55f365e1a2777d33f24ba2efb8e81c8b7d33e6f4fd00516f9fb9  ./app/src/main/java/com/trivox/client/config/XrayConfigBuilder.kt
 9b1ff20fb2668a16606fa7b9f83bd1be8e2e6182d5ee8d6ff5367452437b3293  ./app/src/main/java/com/trivox/client/core/CoreManager.kt
 a9710bbc4c7d4b33ccd62de4a207fde07be3a8aa27f3c38c49c346f8fc04a65c  ./app/src/main/java/com/trivox/client/core/CoreModels.kt
 5a90fedaeae899fecb34190536174df166bb7ea62b59d31e374c646164a1b6d3  ./app/src/main/java/com/trivox/client/core/XrayCoreAdapter.kt
@@ -44,8 +44,8 @@ a9710bbc4c7d4b33ccd62de4a207fde07be3a8aa27f3c38c49c346f8fc04a65c  ./app/src/main
 cf55ef21b0cc4741e14d8a0bc32bb0ec5de7c0a4a44d2a073a37d53e4b45101d  ./app/src/main/java/com/trivox/client/network/BatchRealDelayRunner.kt
 ace70ed6790f3b7e25f44bea0f61339f06e727169d7bf0341fd5bb5b7fe8a7ce  ./app/src/main/java/com/trivox/client/network/ConnectionInfoManager.kt
 0dc694ca736e3a625b6f4b49cdf0fc618fcffc2659f9fd314337788558f5bd0e  ./app/src/main/java/com/trivox/client/network/NetworkBufferPool.kt
-0f8943cd6cebff24ab7634c84989dd76434015d6cb9895ebddf9105e0f484455  ./app/src/main/java/com/trivox/client/network/NordVpnSubscriptionManager.kt
-9a3805e67c96a95bb753a048fc69bfcdcf1e6204c76347911f1c422a39881a8a  ./app/src/main/java/com/trivox/client/network/PingManager.kt
+fc666d5f162dfbb7faecf8757d51312bf8ecbccd3e4a5782edf298ca759f7910  ./app/src/main/java/com/trivox/client/network/NordVpnSubscriptionManager.kt
+b7942a94b7f2d03142cce8372392207161ad257a30e5b41294c1a2b3c5eb4259  ./app/src/main/java/com/trivox/client/network/PingManager.kt
 b82a0e81ec9e35dc5e10a9b5fb8b7774d3ae0ff96a37cb6a02f2593d662aa7fa  ./app/src/main/java/com/trivox/client/network/PingStatistics.kt
 af98e866f14bda87c1352d1fe739362180250dcf99bbe01e116c7073a3790c18  ./app/src/main/java/com/trivox/client/network/RealDelayPolicy.kt
 fdf863d6b86d6bb86dc4eb071563867aa5d3e119844478707a9685a659a7fb85  ./app/src/main/java/com/trivox/client/network/SubscriptionManager.kt
@@ -68,7 +68,7 @@ e6baa328a00f7fcdcc3535f0b2372d04401d964b8b4e1d209eef1ae1abd99731  ./app/src/main
 1b575b88f1e7d7ae7743e935ca07f66ff802def94a2c375b67245cf1a5e53f16  ./app/src/main/java/com/trivox/client/service/QuickConnectActivity.kt
 203949d8abaa595c9a4e67ccf02d6ac6f85c35a8ec6ef8ba1b91cadfa6649b7d  ./app/src/main/java/com/trivox/client/service/QuickConnectStore.kt
 a2a5cb464b992365acfaedeb606859b80a370910f0f0345da179f23d43c10444  ./app/src/main/java/com/trivox/client/service/QuickConnectTileService.kt
-665aa1fbdb49c0035bd6e4d238f3fbc09208ee599f3d4e745c62c1acefb7f26c  ./app/src/main/java/com/trivox/client/service/TrivoxVpnService.kt
+fb44e742ff242c9ab9ffd15674076fa2fb7d02a3967b190ca7137ddccffcf552  ./app/src/main/java/com/trivox/client/service/TrivoxVpnService.kt
 bb823265a6a6a1e4aa0be6edca9b6de27bdcc95bc338bb30ee728730edb3a1f9  ./app/src/main/java/com/trivox/client/ssh/OpenSshBinaryManager.kt
 ca9f54e7c8759bdc64818268edd3c34b3a766539eeeae0fa9bae98c9cda8b27a  ./app/src/main/java/com/trivox/client/ssh/OpenSshCommand.kt
 dc879e75b4e8092ad7f7048d552e249857c28986660042f6d960fb14de6ac883  ./app/src/main/java/com/trivox/client/ssh/OpenSshTunnelBridge.kt
@@ -85,7 +85,7 @@ ff3087ffbb877efe2b4beed9017e409eec693d1f017c5d9becb70c9cc2e7c6f1  ./app/src/main
 ac90290ded6f5c25887f62b5d722b08e5b057a1cc144ea71bbaac5b5f7a4acbc  ./app/src/main/java/com/trivox/client/ui/ThemedActivity.kt
 856eeb8e2c72ceb08be0651e9bde7e29bc503389c0a4bfaa17b03b8b878bb929  ./app/src/main/java/com/trivox/client/ui/UiInsets.kt
 a6dd44767d64edae8ec54895ddb524009b13034d450baff8d1aae5a3228b96e4  ./app/src/main/java/com/trivox/client/ui/compose/LegacyLayoutBridge.kt
-6895a35cf42dd38cadd0fa900dba0310ac0d5b8390b4991741f8756092424c1b  ./app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt
+78a4a319ec66b9ad519c84e872ae7acb419adb31c93870d93a489d52007dad95  ./app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt
 d0af0b76e024009807055a3c35360470077b6512547d1ecc7657e51ed75bc587  ./app/src/main/java/com/trivox/client/ui/compose/RoutingComposeScreen.kt
 471e18887b77304ea7e5e67942da7549bba4b0074ba1b9bd58875d75f9e01c8c  ./app/src/main/java/com/trivox/client/ui/compose/TrivoxComposeUi.kt
 a575f9e2bcc75ff8ae11209be33d039a7e0e66e83a4b746ef7103aa7b17247d6  ./app/src/main/java/com/trivox/client/ui/compose/UnifiedSettingsScreen.kt
@@ -154,7 +154,7 @@ e11a7fa0b47e421f2ef8cb9ab91443e1e7891afc6256961ef9a720b3676c767c  ./app/src/test
 6cbac5914938b253d9505fb8f7ed37deebe8dc9449ecfe4cc2f3e0b511bf019c  ./app/src/test/java/com/trivox/client/config/ManualConfigFactoryWireGuardV9Test.kt
 ea1d8c8609c24a72859c5c71a0ffcf2ef96e7955782d67a51e752c5392a4abbe  ./app/src/test/java/com/trivox/client/config/XrayConfigBuilderNetworkTuningV9Test.kt
 f9a54dad6ed041fae59f87a27b195e213e4bd3f64e98aa03e802dc392a005d8e  ./app/src/test/java/com/trivox/client/config/XrayConfigBuilderV8ReliabilityTest.kt
-930886084ebaa494b7f6c517272b4c687ce2c249c68b015b8159c284dd52d677  ./app/src/test/java/com/trivox/client/config/XrayConfigBuilderWireGuardTest.kt
+4de51f26052699f0d68e14893131ca3ef1b3f806308a047a714090d4fa7552dd  ./app/src/test/java/com/trivox/client/config/XrayConfigBuilderWireGuardTest.kt
 5c03b5d4bf35bb1cc9796da13d7b3cde78e8f6c76ee695af902360c3b94e45a3  ./app/src/test/java/com/trivox/client/config/XrayConfigBuilderWireGuardV6Test.kt
 f70874b332b7d6d0e9678b5bf72001ff8ef93f4ae78dfc986dfdfb0954bf03a5  ./app/src/test/java/com/trivox/client/config/XrayConfigBuilderWireGuardV7Test.kt
 a6191135dd928f19007c6612879fe562a44686a378c522a2f1b013e1444c7d21  ./app/src/test/java/com/trivox/client/data/AppSettingsLivePingTest.kt

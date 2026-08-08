@@ -471,6 +471,16 @@ class NordVpnSubscriptionManager {
             raw = portableJson(outbound),
             outboundJson =
                 outbound.toString(),
+            originalDnsJson =
+                JSONObject()
+                    .put(
+                        "servers",
+                        JSONArray()
+                            .put(NORDLYNX_DNS_PRIMARY)
+                            .put(NORDLYNX_DNS_SECONDARY)
+                    )
+                    .put("queryStrategy", "UseIPv4")
+                    .toString(),
             probeServer =
                 server.station,
             probePort =
@@ -557,8 +567,8 @@ class NordVpnSubscriptionManager {
                     .put(
                         "servers",
                         JSONArray()
-                            .put("1.1.1.1")
-                            .put("8.8.8.8")
+                            .put(NORDLYNX_DNS_PRIMARY)
+                            .put(NORDLYNX_DNS_SECONDARY)
                     )
                     .put(
                         "queryStrategy",
@@ -585,7 +595,7 @@ class NordVpnSubscriptionManager {
                                     .put("port", "53")
                                     .put(
                                         "outboundTag",
-                                        "direct"
+                                        "proxy"
                                     )
                             )
                             .put(
@@ -1080,6 +1090,10 @@ class NordVpnSubscriptionManager {
                 "%5Bid%5D=35" +
                 "&filters%5Bcountry_id%5D="
         private const val NORDLYNX_PORT = 51820
+        private const val NORDLYNX_DNS_PRIMARY =
+            "103.86.96.100"
+        private const val NORDLYNX_DNS_SECONDARY =
+            "103.86.99.100"
         private const val COUNTRY_WORKERS = 6
         private const val ALL_COUNTRIES_TIMEOUT_SECONDS =
             150L
