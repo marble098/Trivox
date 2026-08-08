@@ -85,7 +85,7 @@ ff3087ffbb877efe2b4beed9017e409eec693d1f017c5d9becb70c9cc2e7c6f1  ./app/src/main
 ac90290ded6f5c25887f62b5d722b08e5b057a1cc144ea71bbaac5b5f7a4acbc  ./app/src/main/java/com/trivox/client/ui/ThemedActivity.kt
 856eeb8e2c72ceb08be0651e9bde7e29bc503389c0a4bfaa17b03b8b878bb929  ./app/src/main/java/com/trivox/client/ui/UiInsets.kt
 a6dd44767d64edae8ec54895ddb524009b13034d450baff8d1aae5a3228b96e4  ./app/src/main/java/com/trivox/client/ui/compose/LegacyLayoutBridge.kt
-78a4a319ec66b9ad519c84e872ae7acb419adb31c93870d93a489d52007dad95  ./app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt
+6996c24a89a423e4e7480cd93633d2677c591a24f107221d0d0b32569aafe18f  ./app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt
 d0af0b76e024009807055a3c35360470077b6512547d1ecc7657e51ed75bc587  ./app/src/main/java/com/trivox/client/ui/compose/RoutingComposeScreen.kt
 471e18887b77304ea7e5e67942da7549bba4b0074ba1b9bd58875d75f9e01c8c  ./app/src/main/java/com/trivox/client/ui/compose/TrivoxComposeUi.kt
 a575f9e2bcc75ff8ae11209be33d039a7e0e66e83a4b746ef7103aa7b17247d6  ./app/src/main/java/com/trivox/client/ui/compose/UnifiedSettingsScreen.kt

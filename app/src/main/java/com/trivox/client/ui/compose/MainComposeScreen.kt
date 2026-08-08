@@ -624,32 +624,28 @@ private fun ConfigsTab(
             BatchStateBanner(activity, batch)
         }
 
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 1.dp),
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
-            verticalAlignment = Alignment.CenterVertically
+        val allProfileCount = actions.composeProfiles("", null, false).size
+        val favoriteProfileCount = actions.composeProfiles("", null, true).size
+        androidx.compose.foundation.layout.FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            item {
-                ConfigScopeChip(
-                    label = activity.getString(
-                        R.string.subscription_all_count,
-                        actions.composeProfiles("", null, false).size
-                    ),
-                    selected = selectedSource == null,
-                    onClick = {
-                        selectedSource = null
-                        actions.composeSelectSubscription(null)
-                    }
-                )
-            }
-            item {
-                ConfigScopeChip(
-                    label = "★ ${activity.getString(R.string.compose_favorites_only)}",
-                    selected = favoritesOnly,
-                    onClick = { favoritesOnly = !favoritesOnly }
-                )
-            }
-            lazyItems(sources, key = { it.id }) { source ->
+            ConfigScopeChip(
+                label = activity.getString(R.string.subscription_all_count, allProfileCount),
+                selected = selectedSource == null,
+                onClick = {
+                    selectedSource = null
+                    actions.composeSelectSubscription(null)
+                }
+            )
+            ConfigScopeChip(
+                label = "★ ${activity.getString(R.string.compose_favorites_only)}",
+                count = favoriteProfileCount,
+                selected = favoritesOnly,
+                onClick = { favoritesOnly = !favoritesOnly }
+            )
+            sources.forEach { source ->
                 ConfigScopeChip(
                     label = source.name,
                     count = actions.composeProfiles("", source.id, false).size,
@@ -1110,13 +1106,12 @@ private fun ConfigScopeChip(
 ) {
     Surface(
         modifier = Modifier
-            .height(44.dp)
-            .widthIn(min = 108.dp, max = 190.dp)
+            .animateContentSize()
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
             ),
-        shape = RoundedCornerShape(15.dp),
+        shape = RoundedCornerShape(16.dp),
         color = if (selected) {
             MaterialTheme.colorScheme.secondaryContainer
         } else {
@@ -1129,18 +1124,18 @@ private fun ConfigScopeChip(
             } else {
                 MaterialTheme.colorScheme.outlineVariant
             }
-        )
+        ),
+        tonalElevation = if (selected) 1.5.dp else 0.dp,
+        shadowElevation = 0.dp
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 11.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
                 label,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.widthIn(min = 0.dp, max = 172.dp),
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = if (selected) {
                     FontWeight.Bold
@@ -1166,7 +1161,7 @@ private fun ConfigScopeChip(
                 ) {
                     Text(
                         count.toString(),
-                        Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                        Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold
                     )
