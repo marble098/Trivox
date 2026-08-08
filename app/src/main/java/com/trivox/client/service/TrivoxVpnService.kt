@@ -55,6 +55,7 @@ class TrivoxVpnService : VpnService() {
     private var startedElapsed = 0L
     private var restoredStartedElapsed = 0L
     private var sessionId = 0L
+    private var mixedListenerPort: Int? = null
     private var networkCallback:
         ConnectivityManager
             .NetworkCallback? = null
@@ -284,6 +285,25 @@ class TrivoxVpnService : VpnService() {
         val settings =
             SettingsRepository(this)
                 .load()
+
+        val needsMixedListener =
+            settings.localProxyInVpn ||
+                profile.protocol.equals("wireguard", ignoreCase = true)
+        mixedListenerPort =
+            settings.socksPort.takeIf { needsMixedListener }
+        if (
+            needsMixedListener &&
+            !LocalProxyPortGuard.prepare(
+                core = core,
+                port = settings.socksPort
+            )
+        ) {
+            fail(
+                "The local mixed proxy port ${settings.socksPort} is still in use. " +
+                    "Choose another local proxy port or disable the VPN local proxy."
+            )
+            return
+        }
 
         ConnectionRuntime.update(
             ConnectionRuntime.Snapshot(
@@ -753,6 +773,9 @@ class TrivoxVpnService : VpnService() {
                 fail(stopped.error)
                 return
             }
+            mixedListenerPort?.let { port ->
+                LocalProxyPortGuard.awaitReleased(port, 2_000L)
+            }
         }
 
         if (stopRequested.get()) {
@@ -926,6 +949,14 @@ class TrivoxVpnService : VpnService() {
                         "Immediate core stop failed: " + it.message
                     )
                 }
+            mixedListenerPort?.let { port ->
+                if (!LocalProxyPortGuard.awaitReleased(port)) {
+                    Diagnostics.warning(
+                        "Local mixed proxy port $port was still busy after VPN cleanup"
+                    )
+                }
+            }
+            mixedListenerPort = null
 
             runCatching {
                 tun?.close()

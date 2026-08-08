@@ -15,190 +15,153 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.trivox.client.R
+import com.trivox.client.data.ConfigRepository
 import com.trivox.client.data.ConnectionMode
+import com.trivox.client.data.SubscriptionRepository
 import com.trivox.client.ui.MainActivity
 import java.util.Locale
 
 internal object NotificationSupport {
-    const val CHANNEL =
-        "trivox_connection"
+    const val CHANNEL = "trivox_connection"
     const val ID = 3107
 
-    fun createChannel(
-        context: Context
-    ) {
-        if (
-            Build.VERSION.SDK_INT >=
-            Build.VERSION_CODES.O
-        ) {
-            val manager =
-                context.getSystemService(
-                    NotificationManager::
-                        class.java
+    fun createChannel(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = context.getSystemService(NotificationManager::class.java)
+            val channel = NotificationChannel(
+                CHANNEL,
+                context.getString(R.string.notification_channel),
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = context.getString(
+                    R.string.notification_channel_description
                 )
-
-            val channel =
-                NotificationChannel(
-                    CHANNEL,
-                    context.getString(
-                        R.string
-                            .notification_channel
-                    ),
-                    NotificationManager
-                        .IMPORTANCE_LOW
-                ).apply {
-                    description =
-                        context.getString(
-                            R.string
-                                .notification_channel_description
-                        )
-                    setShowBadge(false)
-                    lockscreenVisibility =
-                        Notification
-                            .VISIBILITY_PRIVATE
-                }
-
-            manager
-                .createNotificationChannel(
-                    channel
-                )
+                setShowBadge(false)
+                lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+            }
+            manager.createNotificationChannel(channel)
         }
     }
 
     fun build(
         service: Service,
         title: String,
+        profileId: String?,
         mode: ConnectionMode,
         startedElapsed: Long,
         stopIntent: Intent
     ): Notification {
-        val openIntent =
+        val openIntent = PendingIntent.getActivity(
+            service,
+            REQUEST_OPEN,
+            Intent(service, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val stopPendingIntent = PendingIntent.getService(
+            service,
+            if (mode == ConnectionMode.PROXY) REQUEST_STOP_PROXY else REQUEST_STOP_VPN,
+            stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        fun actionIntent(action: String, requestCode: Int): PendingIntent =
             PendingIntent.getActivity(
                 service,
-                1,
-                Intent(
-                    service,
-                    MainActivity::class.java
-                ).apply {
-                    flags =
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                            Intent.FLAG_ACTIVITY_SINGLE_TOP
-                },
-                PendingIntent
-                    .FLAG_UPDATE_CURRENT or
-                    PendingIntent
-                        .FLAG_IMMUTABLE
+                requestCode,
+                Intent(service, NotificationActionActivity::class.java)
+                    .setAction(action),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-        val stopRequestCode =
-            if (
-                mode ==
-                ConnectionMode.PROXY
-            ) {
-                2
+        val profile = ConfigRepository(service).find(profileId)
+        val subscription = profile?.subscriptionId?.let {
+            SubscriptionRepository(service).find(it)?.name
+        }
+        val modeText = service.getString(
+            if (mode == ConnectionMode.PROXY) {
+                R.string.notification_proxy_active
             } else {
-                3
+                R.string.notification_vpn_active
             }
+        )
+        val detail = listOfNotNull(
+            modeText,
+            subscription?.takeIf(String::isNotBlank)
+        ).joinToString(" • ")
 
-        val stopPendingIntent =
-            PendingIntent.getService(
-                service,
-                stopRequestCode,
-                stopIntent,
-                PendingIntent
-                    .FLAG_UPDATE_CURRENT or
-                    PendingIntent
-                        .FLAG_IMMUTABLE
+        val builder = NotificationCompat.Builder(service, CHANNEL)
+            .setSmallIcon(R.drawable.ic_launcher)
+            .setContentTitle(
+                title.ifBlank { service.getString(R.string.app_name) }
             )
-
-        val modeText =
-            service.getString(
-                if (
-                    mode ==
-                    ConnectionMode.PROXY
-                ) {
-                    R.string
-                        .notification_proxy_active
-                } else {
-                    R.string
-                        .notification_vpn_active
-                }
+            .setContentText(detail)
+            .setStyle(
+                NotificationCompat.BigTextStyle().bigText(
+                    listOfNotNull(
+                        detail,
+                        profile?.let {
+                            "${it.protocol.uppercase(Locale.ROOT)} • ${it.server}:${it.port}"
+                        }
+                    ).joinToString("\n")
+                )
             )
-
-        val builder =
-            NotificationCompat
-                .Builder(
-                    service,
-                    CHANNEL
+            .setContentIntent(openIntent)
+            .setOngoing(true)
+            .setAutoCancel(false)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setForegroundServiceBehavior(
+                NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE
+            )
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .addAction(
+                0,
+                service.getString(R.string.notification_switch),
+                actionIntent(
+                    NotificationActionActivity.ACTION_PICK,
+                    REQUEST_PICK
                 )
-                .setSmallIcon(
-                    R.drawable.ic_launcher
+            )
+            .addAction(
+                0,
+                service.getString(R.string.notification_next),
+                actionIntent(
+                    NotificationActionActivity.ACTION_NEXT,
+                    REQUEST_NEXT
                 )
-                .setContentTitle(
-                    title.ifBlank {
-                        service.getString(
-                            R.string.app_name
-                        )
-                    }
+            )
+            .addAction(
+                0,
+                service.getString(R.string.notification_pause_15),
+                actionIntent(
+                    NotificationActionActivity.ACTION_PAUSE_15,
+                    REQUEST_PAUSE
                 )
-                .setContentText(
-                    modeText
-                )
-                .setContentIntent(
-                    openIntent
-                )
-                .setOngoing(true)
-                .setAutoCancel(false)
-                .setOnlyAlertOnce(true)
-                .setSilent(true)
-                .setCategory(
-                    NotificationCompat
-                        .CATEGORY_SERVICE
-                )
-                .setPriority(
-                    NotificationCompat
-                        .PRIORITY_LOW
-                )
-                .setForegroundServiceBehavior(
-                    NotificationCompat
-                        .FOREGROUND_SERVICE_IMMEDIATE
-                )
-                .setVisibility(
-                    NotificationCompat
-                        .VISIBILITY_PRIVATE
-                )
-                .addAction(
-                    0,
-                    service.getString(
-                        R.string.stop
-                    ),
-                    stopPendingIntent
-                )
+            )
+            .addAction(
+                0,
+                service.getString(R.string.stop),
+                stopPendingIntent
+            )
 
         if (
             startedElapsed > 0L &&
-            startedElapsed <=
-            SystemClock.elapsedRealtime()
+            startedElapsed <= SystemClock.elapsedRealtime()
         ) {
-            val duration =
-                (
-                    SystemClock
-                        .elapsedRealtime() -
-                        startedElapsed
-                    ).coerceAtLeast(0L)
-            val startedWallClock =
-                System.currentTimeMillis() -
-                    duration
-
+            val duration = (
+                SystemClock.elapsedRealtime() - startedElapsed
+            ).coerceAtLeast(0L)
             builder
-                .setWhen(
-                    startedWallClock
-                )
+                .setWhen(System.currentTimeMillis() - duration)
                 .setShowWhen(true)
                 .setUsesChronometer(true)
-                .setChronometerCountDown(
-                    false
-                )
+                .setChronometerCountDown(false)
         } else {
             builder
                 .setShowWhen(false)
@@ -213,41 +176,23 @@ internal object NotificationSupport {
         notification: Notification
     ) {
         val permissionGranted =
-            Build.VERSION.SDK_INT <
-            Build.VERSION_CODES.TIRAMISU ||
-                ContextCompat
-                    .checkSelfPermission(
-                        service,
-                        Manifest.permission
-                            .POST_NOTIFICATIONS
-                    ) ==
-                PackageManager
-                    .PERMISSION_GRANTED
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                ContextCompat.checkSelfPermission(
+                    service,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
 
         if (permissionGranted) {
-            NotificationManagerCompat
-                .from(service)
-                .notify(
-                    ID,
-                    notification
-                )
+            NotificationManagerCompat.from(service)
+                .notify(ID, notification)
         }
     }
 
-    fun formatDuration(
-        ms: Long
-    ): String {
-        val totalSeconds =
-            ms.coerceAtLeast(0) /
-                1000
-        val hours =
-            totalSeconds / 3600
-        val minutes =
-            totalSeconds % 3600 /
-                60
-        val seconds =
-            totalSeconds % 60
-
+    fun formatDuration(ms: Long): String {
+        val totalSeconds = ms.coerceAtLeast(0) / 1000
+        val hours = totalSeconds / 3600
+        val minutes = totalSeconds % 3600 / 60
+        val seconds = totalSeconds % 60
         return if (hours > 0) {
             String.format(
                 Locale.US,
@@ -265,4 +210,11 @@ internal object NotificationSupport {
             )
         }
     }
+
+    private const val REQUEST_OPEN = 31071
+    private const val REQUEST_STOP_PROXY = 31072
+    private const val REQUEST_STOP_VPN = 31073
+    private const val REQUEST_PICK = 31074
+    private const val REQUEST_NEXT = 31075
+    private const val REQUEST_PAUSE = 31076
 }

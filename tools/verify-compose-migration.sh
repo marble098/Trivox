@@ -136,3 +136,17 @@ grep -Fq 'RadioButton' "$routing_compose" || fail "responsive routing policy sel
 grep -Fq 'AlertDialog' "$legacy_compose" || fail "safe spinner dialog renderer missing"
 
 echo "Compose Material 3 migration verification passed."
+
+grep -Fq 'UnifiedSettingsScreen' app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt || fail "unified settings screen not wired"
+[[ -s app/src/main/java/com/trivox/client/ui/compose/UnifiedSettingsScreen.kt ]] || fail "UnifiedSettingsScreen.kt missing"
+[[ -s app/src/main/java/com/trivox/client/importing/SmartClipboardImporter.kt ]] || fail "SmartClipboardImporter.kt missing"
+[[ -s app/src/main/java/com/trivox/client/service/NotificationActionActivity.kt ]] || fail "NotificationActionActivity.kt missing"
+[[ -s app/src/main/java/com/trivox/client/service/LocalProxyPortGuard.kt ]] || fail "LocalProxyPortGuard.kt missing"
+grep -Fq 'composeMagicClipboard' app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt || fail "magic clipboard action missing"
+grep -Fq 'combinedClickable' app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt || fail "subscription long press missing"
+grep -Fq 'refreshSources' app/src/main/java/com/trivox/client/network/SubscriptionRefreshCoordinator.kt || fail "single subscription refresh missing"
+grep -Fq 'notification_pause_15' app/src/main/java/com/trivox/client/service/NotificationSupport.kt || fail "notification quick actions missing"
+grep -Fq 'LocalProxyPortGuard.prepare' app/src/main/java/com/trivox/client/service/ConnectionService.kt || fail "proxy port guard missing"
+if grep -Fq 'LocaleListCompat.forLanguageTags("fa")' app/src/main/java/com/trivox/client/ui/MainActivity.kt; then
+  fail "fresh install still forces Persian instead of System Default"
+fi

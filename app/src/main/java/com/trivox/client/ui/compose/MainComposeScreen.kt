@@ -6,7 +6,10 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -84,6 +87,12 @@ data class ComposeBatchState(
     val total: Int = 0
 )
 
+data class ComposeProfileStats(
+    val total: Int = 0,
+    val alive: Int = 0,
+    val failed: Int = 0
+)
+
 interface MainComposeActions {
     fun composeRevision(): Int
     fun composeBatchState(): ComposeBatchState
@@ -93,12 +102,22 @@ interface MainComposeActions {
     fun composeSelectedId(): String?
     fun composeRuntime(): ConnectionRuntime.Snapshot
     fun composeSettings(): AppSettings
+    fun composeSelectedProfile(): ConfigProfile?
+    fun composeProfileStats(): ComposeProfileStats
+    fun composeSaveSettings(value: AppSettings)
+    fun composeLanguageTag(): String
+    fun composeSetLanguage(tag: String)
+    fun composeCheckForUpdates()
+    fun composeUpdateStatus(): String
+    fun composeLocalProxyStatus(): String
     fun composeActiveSubscriptionId(): String?
     fun composeSelectSubscription(id: String?)
     fun composeSelectProfile(id: String)
     fun composeProfileActions(id: String)
     fun composePingProfile(id: String, method: PingMethod)
     fun composeSubscriptionActions(id: String)
+    fun composeMagicClipboard()
+    fun composeMagicClipboardBusy(): Boolean
     fun composeAdd()
     fun composeRefreshSubscriptions()
     fun composeTestAll(method: PingMethod)
@@ -243,9 +262,8 @@ private fun HomeTab(
 ) {
     val runtime = remember(uiRevision) { actions.composeRuntime() }
     val settings = remember(uiRevision) { actions.composeSettings() }
-    val profiles = remember(uiRevision) { actions.composeProfiles("", null, false) }
-    val selectedId = runtime.profileId ?: actions.composeSelectedId()
-    val selected = profiles.firstOrNull { it.id == selectedId }
+    val selected = remember(uiRevision) { actions.composeSelectedProfile() }
+    val stats = remember(uiRevision) { actions.composeProfileStats() }
     val connected = runtime.state !in setOf(ConnectionState.DISCONNECTED, ConnectionState.ERROR)
 
     LazyColumn(
@@ -451,29 +469,20 @@ private fun HomeTab(
         }
 
         item {
-            val alive = profiles.count {
-                it.tcpTestStatus == TestStatus.ALIVE || it.realTestStatus == TestStatus.ALIVE
-            }
-            val failed = profiles.count {
-                it.tcpTestStatus != TestStatus.ALIVE &&
-                    it.realTestStatus != TestStatus.ALIVE &&
-                    (it.tcpTestStatus in setOf(TestStatus.DEAD, TestStatus.ERROR) ||
-                        it.realTestStatus in setOf(TestStatus.DEAD, TestStatus.ERROR))
-            }
             SectionCard(activity.getString(R.string.profile_details)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MetricChip(
-                        profiles.size.toString(),
+                        stats.total.toString(),
                         activity.getString(R.string.configurations),
                         Modifier.weight(1f)
                     )
                     MetricChip(
-                        alive.toString(),
+                        stats.alive.toString(),
                         activity.getString(R.string.compose_alive_label),
                         Modifier.weight(1f)
                     )
                     MetricChip(
-                        failed.toString(),
+                        stats.failed.toString(),
                         activity.getString(R.string.compose_failed_label),
                         Modifier.weight(1f)
                     )
@@ -496,6 +505,7 @@ private fun ConfigsTab(
     val sources = remember(uiRevision) { actions.composeSubscriptions() }
     val settings = remember(uiRevision) { actions.composeSettings() }
     val batch = remember(uiRevision) { actions.composeBatchState() }
+    val magicBusy = remember(uiRevision) { actions.composeMagicClipboardBusy() }
     val profiles = remember(query, selectedSource, favoritesOnly, uiRevision) {
         actions.composeProfiles(query, selectedSource, favoritesOnly)
     }
@@ -518,15 +528,40 @@ private fun ConfigsTab(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilledTonalButton(
                 onClick = actions::composeAdd,
-                modifier = Modifier.weight(0.8f),
-                enabled = !batch.running
+                modifier = Modifier.weight(1f),
+                enabled = !batch.running && !magicBusy
             ) {
                 Text("＋ ${activity.getString(R.string.add)}")
             }
+            Button(
+                onClick = actions::composeMagicClipboard,
+                modifier = Modifier.weight(1f),
+                enabled = !batch.running && !magicBusy
+            ) {
+                if (magicBusy) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(Modifier.width(7.dp))
+                }
+                Text(
+                    if (magicBusy) {
+                        activity.getString(R.string.v15_magic_clipboard_working)
+                    } else {
+                        activity.getString(R.string.v15_magic_clipboard)
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
                 onClick = { actions.composeTestAll(PingMethod.TCP_CONNECT) },
                 modifier = Modifier.weight(1f),
-                enabled = !batch.running
+                enabled = !batch.running && !magicBusy
             ) {
                 Text(
                     if (batch.running && batch.method == PingMethod.TCP_CONNECT) {
@@ -540,7 +575,7 @@ private fun ConfigsTab(
             OutlinedButton(
                 onClick = { actions.composeTestAll(PingMethod.XRAY_HTTP) },
                 modifier = Modifier.weight(1f),
-                enabled = !batch.running
+                enabled = !batch.running && !magicBusy
             ) {
                 Text(
                     if (batch.running && batch.method == PingMethod.XRAY_HTTP) {
@@ -584,17 +619,26 @@ private fun ConfigsTab(
                 )
             }
             lazyItems(sources, key = { it.id }) { source ->
-                FilterChip(
+                SubscriptionSourceChip(
+                    label = "${source.name} (${actions.composeProfiles("", source.id, false).size})",
                     selected = selectedSource == source.id,
                     onClick = {
                         selectedSource = source.id
                         actions.composeSelectSubscription(source.id)
                     },
-                    label = {
-                        Text("${source.name} (${actions.composeProfiles("", source.id, false).size})")
+                    onLongClick = {
+                        actions.composeSubscriptionActions(source.id)
                     }
                 )
             }
+        }
+
+        if (sources.isNotEmpty()) {
+            Text(
+                activity.getString(R.string.v15_subscription_long_press_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
 
         if (profiles.isEmpty()) {
@@ -936,55 +980,54 @@ private fun SettingsTab(
     uiRevision: Int,
     modifier: Modifier = Modifier
 ) {
-    val settings = remember(uiRevision) { actions.composeSettings() }
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        item {
-            SectionCard(activity.getString(R.string.compose_quick_settings)) {
-                SettingSummary(
-                    activity.getString(R.string.connection_mode),
-                    if (settings.mode == ConnectionMode.VPN) activity.getString(R.string.vpn_mode)
-                    else activity.getString(R.string.proxy_mode)
-                )
-                SettingToggle(
-                    label = activity.getString(R.string.hide_ip_on_main),
-                    checked = settings.hideIpOnMain,
-                    onCheckedChange = actions::composeSetHideIp
-                )
-                SettingToggle(
-                    label = activity.getString(R.string.live_ping_enabled),
-                    checked = settings.livePingEnabled,
-                    onCheckedChange = actions::composeSetLivePingEnabled
-                )
-                SettingToggle(
-                    label = activity.getString(R.string.compose_grid_layout),
-                    checked = settings.gridMode,
-                    onCheckedChange = actions::composeSetGrid
-                )
-                SettingSummary(
-                    activity.getString(R.string.profile_sorting_section),
-                    sortModeLabel(activity, settings)
-                )
-                SettingSummary(
-                    activity.getString(R.string.dns_section),
-                    dnsModeLabel(activity, settings)
-                )
-            }
-        }
+    UnifiedSettingsScreen(
+        activity = activity,
+        actions = actions,
+        uiRevision = uiRevision,
+        modifier = modifier
+    )
+}
 
-        item {
-            Button(onClick = actions::composeOpenSettings, modifier = Modifier.fillMaxWidth()) {
-                Text(activity.getString(R.string.compose_advanced_settings))
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun SubscriptionSourceChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.combinedClickable(
+            onClick = onClick,
+            onLongClick = onLongClick
+        ),
+        shape = RoundedCornerShape(50),
+        color = if (selected) {
+            MaterialTheme.colorScheme.secondaryContainer
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        contentColor = if (selected) {
+            MaterialTheme.colorScheme.onSecondaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
+        border = BorderStroke(
+            1.dp,
+            if (selected) {
+                MaterialTheme.colorScheme.secondaryContainer
+            } else {
+                MaterialTheme.colorScheme.outlineVariant
             }
-        }
-        item {
-            OutlinedButton(onClick = actions::composeOpenRouting, modifier = Modifier.fillMaxWidth()) {
-                Text(activity.getString(R.string.app_routing))
-            }
-        }
+        )
+    ) {
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.labelLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

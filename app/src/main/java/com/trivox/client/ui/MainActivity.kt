@@ -43,6 +43,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.trivox.client.R
 import com.trivox.client.ui.compose.LegacyLayoutBridge
 import com.trivox.client.ui.compose.ComposeBatchState
+import com.trivox.client.ui.compose.ComposeProfileStats
+import com.trivox.client.importing.SmartClipboardImporter
 import com.trivox.client.ui.compose.MainComposeActions
 import com.trivox.client.ui.compose.MainComposeScreen
 import com.trivox.client.config.ConfigParser
@@ -76,6 +78,7 @@ import com.trivox.client.service.NotificationSupport
 import com.trivox.client.service.QuickConnectTileService
 import com.trivox.client.service.TrivoxVpnService
 import com.trivox.client.util.Diagnostics
+import com.trivox.client.util.SecretStore
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URI
@@ -172,6 +175,9 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     private var subscriptionTabsSignature = ""
     private var quickToolsExpanded = false
     private var lastUiRuntimeState: ConnectionState? = null
+    private val magicClipboardBusy = AtomicBoolean(false)
+    @Volatile private var composeUpdateStatusText = ""
+    @Volatile private var composeProfileStatsCache = ComposeProfileStats()
 
     private val filePicker =
         registerForActivityResult(
@@ -249,17 +255,6 @@ class MainActivity : ThemedActivity(), MainComposeActions {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        val localePrefs = getSharedPreferences("locale", MODE_PRIVATE)
-        if (
-            !localePrefs.getBoolean("initialized", false) &&
-            AppCompatDelegate.getApplicationLocales().isEmpty
-        ) {
-            localePrefs.edit().putBoolean("initialized", true).apply()
-            AppCompatDelegate.setApplicationLocales(
-                LocaleListCompat.forLanguageTags("fa")
-            )
-        }
 
         val composeHost = LegacyLayoutBridge.install(this, "activity_main")
 
@@ -634,125 +629,104 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             getString(R.string.toggle_connection_tools)
     }
 
-    private fun refreshSubscriptionsFromMain() {
-        if (
-            !subscriptionRefreshBusy
-                .compareAndSet(
-                    false,
-                    true
-                )
-        ) {
-            toast(
-                getString(
-                    R.string
-                        .subscription_update_busy
-                )
-            )
+    private fun refreshSubscriptionsFromMain(
+        sourceIds: Collection<String>? = null
+    ) {
+        if (!subscriptionRefreshBusy.compareAndSet(false, true)) {
+            toast(getString(R.string.subscription_update_busy))
             return
         }
 
+        val requested = sourceIds
+            ?.asSequence()
+            ?.filter(String::isNotBlank)
+            ?.distinct()
+            ?.toSet()
+
+        Diagnostics.info(
+            if (requested.isNullOrEmpty()) {
+                "Subscription refresh requested for all enabled sources"
+            } else {
+                "Subscription refresh requested for ${requested.size} selected source(s)"
+            }
+        )
+
         notifyComposeChanged()
-        refreshSubscriptionsButton.isEnabled =
-            false
+        refreshSubscriptionsButton.isEnabled = false
         refreshSubscriptionsButton.text = "…"
-        refreshSubscriptionsButton
-            .contentDescription =
-            getString(
-                R.string.subscription_updating
-            )
+        refreshSubscriptionsButton.contentDescription =
+            getString(R.string.subscription_updating)
+
+        val progressCallback:
+            (SubscriptionRefreshCoordinator.Progress) -> Unit = { progress ->
+                runOnUiThreadIfAlive {
+                    if (subscriptionRefreshBusy.get()) {
+                        refreshSubscriptionsButton.text =
+                            if (progress.total > 0) {
+                                "${progress.completed + 1}/${progress.total}"
+                            } else {
+                                "…"
+                            }
+                        refreshSubscriptionsButton.contentDescription =
+                            getString(
+                                R.string.subscription_progress_format,
+                                (progress.completed + 1).toString(),
+                                progress.total.toString(),
+                                progress.sourceName
+                            )
+                        notifyComposeChanged()
+                    }
+                }
+            }
+
+        val completionCallback:
+            (SubscriptionRefreshCoordinator.Summary) -> Unit = { summary ->
+                runOnUiThreadIfAlive {
+                    subscriptionRefreshBusy.set(false)
+                    refreshSubscriptionsButton.isEnabled = true
+                    refreshSubscriptionsButton.text = "↻"
+                    refreshSubscriptionsButton.contentDescription =
+                        getString(R.string.update_subscriptions)
+                    subscriptionTabsSignature = ""
+                    renderSubscriptionTabs(force = true)
+                    refresh()
+
+                    if (!summary.cancelled) {
+                        toast(
+                            getString(
+                                R.string.subscription_update_done_detailed,
+                                summary.updated,
+                                summary.profiles,
+                                summary.partial,
+                                summary.failed
+                            )
+                        )
+                    }
+                }
+            }
 
         val accepted =
-            subscriptionUpdater
-                .refreshEnabled(
-                    progress = {
-                        progress ->
-                        runOnUiThreadIfAlive {
-                            if (
-                                subscriptionRefreshBusy
-                                    .get()
-                            ) {
-                                refreshSubscriptionsButton
-                                    .text =
-                                    if (
-                                        progress.total >
-                                        0
-                                    ) {
-                                        "${progress.completed + 1}/" +
-                                            progress.total
-                                    } else {
-                                        "…"
-                                    }
-                                refreshSubscriptionsButton
-                                    .contentDescription =
-                                    getString(
-                                        R.string
-                                            .subscription_progress_format,
-                                        (
-                                            progress.completed +
-                                                1
-                                        ).toString(),
-                                        progress.total.toString(),
-                                        progress.sourceName
-                                    )
-                            }
-                        }
-                    },
-                    callback = {
-                        summary ->
-                        runOnUiThreadIfAlive {
-                            subscriptionRefreshBusy
-                                .set(false)
-                            notifyComposeChanged()
-                            refreshSubscriptionsButton
-                                .isEnabled = true
-                            refreshSubscriptionsButton
-                                .text = "↻"
-                            refreshSubscriptionsButton
-                                .contentDescription =
-                                getString(
-                                    R.string
-                                        .update_subscriptions
-                                )
-                            subscriptionTabsSignature =
-                                ""
-                            renderSubscriptionTabs(
-                                force = true
-                            )
-                            refresh()
-
-                            if (!summary.cancelled) {
-                                toast(
-                                    getString(
-                                        R.string
-                                            .subscription_update_done_detailed,
-                                        summary.updated,
-                                        summary.profiles,
-                                        summary.partial,
-                                        summary.failed
-                                    )
-                                )
-                            }
-                        }
-                    }
+            if (requested.isNullOrEmpty()) {
+                subscriptionUpdater.refreshEnabled(
+                    progress = progressCallback,
+                    callback = completionCallback
                 )
+            } else {
+                subscriptionUpdater.refreshSources(
+                    sourceIds = requested,
+                    progress = progressCallback,
+                    callback = completionCallback
+                )
+            }
 
         if (!accepted) {
             subscriptionRefreshBusy.set(false)
             notifyComposeChanged()
-            refreshSubscriptionsButton.isEnabled =
-                true
+            refreshSubscriptionsButton.isEnabled = true
             refreshSubscriptionsButton.text = "↻"
-            refreshSubscriptionsButton
-                .contentDescription =
-                getString(
-                    R.string.update_subscriptions
-                )
-            toast(
-                getString(
-                    R.string
-                        .subscription_update_busy
-                )
-            )
+            refreshSubscriptionsButton.contentDescription =
+                getString(R.string.update_subscriptions)
+            toast(getString(R.string.subscription_update_busy))
         }
     }
 
@@ -1225,23 +1199,27 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     private fun showSubscriptionActions(
         subscriptionId: String
     ) {
-        val source =
-            SubscriptionRepository(this)
-                .find(subscriptionId)
-                ?: return
-        val profiles =
-            repository.all()
-                .filter {
-                    it.subscriptionId ==
-                        subscriptionId
-                }
+        val source = SubscriptionRepository(this)
+            .find(subscriptionId)
+            ?: return
+        val profiles = repository.all()
+            .filter { it.subscriptionId == subscriptionId }
         val labels = arrayOf(
             getString(R.string.subscription_open_settings),
+            getString(R.string.v15_subscription_update),
+            getString(
+                if (source.enabled) {
+                    R.string.v15_subscription_toggle_disable
+                } else {
+                    R.string.v15_subscription_toggle_enable
+                }
+            ),
             getString(R.string.subscription_export_links),
             getString(R.string.subscription_delete_all_profiles),
             getString(R.string.subscription_delete_without_tcp),
             getString(R.string.subscription_delete_without_real),
-            getString(R.string.subscription_delete_without_both)
+            getString(R.string.subscription_delete_without_both),
+            getString(R.string.v15_subscription_delete)
         )
 
         AlertDialog.Builder(this)
@@ -1249,13 +1227,22 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             .setItems(labels) { _, which ->
                 when (which) {
                     0 -> openSubscriptionManager(sourceId = subscriptionId)
-                    1 -> exportSubscriptionLinks(source, profiles)
-                    2 -> confirmSubscriptionProfileCleanup(
+                    1 -> refreshSubscriptionsFromMain(setOf(subscriptionId))
+                    2 -> {
+                        SubscriptionRepository(this).update(subscriptionId) {
+                            it.enabled = !it.enabled
+                        }
+                        subscriptionTabsSignature = ""
+                        renderSubscriptionTabs(force = true)
+                        refresh()
+                    }
+                    3 -> exportSubscriptionLinks(source, profiles)
+                    4 -> confirmSubscriptionProfileCleanup(
                         source = source,
                         profiles = profiles,
                         title = labels[which]
                     ) { true }
-                    3 -> confirmSubscriptionProfileCleanup(
+                    5 -> confirmSubscriptionProfileCleanup(
                         source = source,
                         profiles = profiles,
                         title = labels[which]
@@ -1263,7 +1250,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                         it.tcpTestStatus != TestStatus.ALIVE ||
                             it.tcpLatencyMs == null
                     }
-                    4 -> confirmSubscriptionProfileCleanup(
+                    6 -> confirmSubscriptionProfileCleanup(
                         source = source,
                         profiles = profiles,
                         title = labels[which]
@@ -1271,14 +1258,21 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                         it.realTestStatus != TestStatus.ALIVE ||
                             it.realLatencyMs == null
                     }
-                    5 -> confirmSubscriptionProfileCleanup(
+                    7 -> confirmSubscriptionProfileCleanup(
                         source = source,
                         profiles = profiles,
                         title = labels[which]
                     ) {
-                        (it.tcpTestStatus != TestStatus.ALIVE || it.tcpLatencyMs == null) &&
-                            (it.realTestStatus != TestStatus.ALIVE || it.realLatencyMs == null)
+                        (
+                            it.tcpTestStatus != TestStatus.ALIVE ||
+                                it.tcpLatencyMs == null
+                            ) &&
+                            (
+                                it.realTestStatus != TestStatus.ALIVE ||
+                                    it.realLatencyMs == null
+                                )
                     }
+                    8 -> confirmDeleteSubscriptionFromMain(source, profiles.size)
                 }
             }
             .show()
@@ -1378,6 +1372,178 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             .show()
     }
 
+    private fun confirmDeleteSubscriptionFromMain(
+        source: SubscriptionSource,
+        profileCount: Int
+    ) {
+        val current = ConnectionRuntime.current()
+        val connectedProfile = repository.find(current.profileId)
+        if (
+            current.state !in setOf(
+                ConnectionState.DISCONNECTED,
+                ConnectionState.ERROR
+            ) &&
+            connectedProfile?.subscriptionId == source.id
+        ) {
+            toast(getString(R.string.disconnect_subscription_first))
+            return
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.v15_subscription_delete)
+            .setMessage(
+                getString(
+                    R.string.v15_subscription_delete_confirm,
+                    source.name,
+                    profileCount
+                )
+            )
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.delete) { _, _ ->
+                storageWorker.execute {
+                    repository.deleteSubscription(source.id)
+                    SubscriptionRepository(this).delete(source.id)
+                    if (source.secretAlias.isNotBlank()) {
+                        SecretStore.delete(this, source.secretAlias)
+                    }
+                    runOnUiThreadIfAlive {
+                        if (activeSubscriptionId == source.id) {
+                            activeSubscriptionId = null
+                            storeActiveSubscription()
+                        }
+                        subscriptionTabsSignature = ""
+                        renderSubscriptionTabs(force = true)
+                        refresh()
+                        toast(getString(R.string.v15_subscription_deleted))
+                    }
+                }
+            }
+            .show()
+    }
+
+    private fun runMagicClipboardImport() {
+        if (!magicClipboardBusy.compareAndSet(false, true)) {
+            toast(getString(R.string.v15_magic_busy))
+            return
+        }
+
+        val clipboard = getSystemService(ClipboardManager::class.java)
+        val text = clipboard.primaryClip
+            ?.takeIf { it.itemCount > 0 }
+            ?.getItemAt(0)
+            ?.coerceToText(this)
+            ?.toString()
+            ?.trim()
+            .orEmpty()
+
+        if (text.isBlank()) {
+            magicClipboardBusy.set(false)
+            toast(getString(R.string.v15_magic_empty))
+            notifyComposeChanged()
+            return
+        }
+
+        Diagnostics.info(
+            "Magic clipboard import requested; target=" +
+                (activeSubscriptionId ?: "local")
+        )
+        notifyComposeChanged()
+        performSmartImport(
+            text = text,
+            requestedTargetId = activeSubscriptionId,
+            magic = true
+        )
+    }
+
+    private fun performSmartImport(
+        text: String,
+        requestedTargetId: String?,
+        magic: Boolean
+    ) {
+        worker.execute {
+            runCatching {
+                SmartClipboardImporter.import(
+                    context = this,
+                    rawText = text,
+                    targetSubscriptionId = requestedTargetId
+                )
+            }.onSuccess { result ->
+                runOnUiThreadIfAlive {
+                    if (magic) {
+                        magicClipboardBusy.set(false)
+                    }
+                    result.sourceId
+                        ?.takeIf {
+                            result.kind != SmartClipboardImporter.Kind.CONFIGS ||
+                                requestedTargetId == null
+                        }
+                        ?.let {
+                            activeSubscriptionId = it
+                            storeActiveSubscription()
+                        }
+
+                    subscriptionTabsSignature = ""
+                    renderSubscriptionTabs(force = true)
+                    refresh()
+
+                    val message = when (result.kind) {
+                        SmartClipboardImporter.Kind.URL_SUBSCRIPTION ->
+                            getString(
+                                R.string.v15_magic_subscription_done,
+                                result.sourceName,
+                                result.received
+                            )
+
+                        SmartClipboardImporter.Kind.CONFIGS ->
+                            getString(
+                                R.string.v15_magic_configs_done,
+                                result.added,
+                                result.updated,
+                                result.moved,
+                                result.skipped
+                            )
+
+                        SmartClipboardImporter.Kind.NORDVPN -> {
+                            val suffix =
+                                if (result.warningCount > 0) {
+                                    getString(
+                                        R.string.v15_magic_warning_suffix,
+                                        result.warningCount
+                                    )
+                                } else {
+                                    ""
+                                }
+                            getString(
+                                R.string.v15_magic_nord_done,
+                                result.received,
+                                suffix
+                            )
+                        }
+                    }
+                    Diagnostics.info(
+                        "Smart import completed; kind=${result.kind}, " +
+                            "received=${result.received}, changed=${result.changed}"
+                    )
+                    toast(message)
+                }
+            }.onFailure { error ->
+                runOnUiThreadIfAlive {
+                    if (magic) {
+                        magicClipboardBusy.set(false)
+                    }
+                    notifyComposeChanged()
+                    Diagnostics.recordThrowable("Smart import", error)
+                    toast(
+                        getString(
+                            R.string.import_failed,
+                            error.message ?: getString(R.string.unknown_error)
+                        )
+                    )
+                }
+            }
+        }
+    }
+
     private fun dp(value: Int): Int =
         (
             value *
@@ -1400,6 +1566,21 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             settingsRepository.load()
         val all =
             repository.all()
+        composeProfileStatsCache = ComposeProfileStats(
+            total = all.size,
+            alive = all.count {
+                it.tcpTestStatus == TestStatus.ALIVE ||
+                    it.realTestStatus == TestStatus.ALIVE
+            },
+            failed = all.count {
+                it.tcpTestStatus != TestStatus.ALIVE &&
+                    it.realTestStatus != TestStatus.ALIVE &&
+                    (
+                        it.tcpTestStatus in setOf(TestStatus.DEAD, TestStatus.ERROR) ||
+                            it.realTestStatus in setOf(TestStatus.DEAD, TestStatus.ERROR)
+                        )
+            }
+        )
         val values =
             all.asSequence()
                 .filter { profile ->
@@ -1713,87 +1894,11 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         text: String,
         requestedTargetId: String?
     ) {
-        val single = text.trim()
-        val uri = runCatching { URI(single) }.getOrNull()
-        val subscription =
-            uri?.scheme.equals("https", ignoreCase = true) &&
-                uri?.userInfo == null &&
-                uri?.fragment == null &&
-                uri?.port == -1 &&
-                !single.contains('\n')
-
-        worker.execute {
-            runCatching {
-                if (subscription) {
-                    val source = SubscriptionSource(
-                        name = uri?.host ?: "Subscription",
-                        url = single
-                    )
-                    val result = SubscriptionManager().fetch(single)
-                    val profiles = result.profiles.map { profile ->
-                        OpenSshProfileCodec.secureForStorage(this, profile).copy(
-                            subscriptionId = source.id,
-                            group = source.name
-                        )
-                    }
-                    ConfigRepository(this).replaceSubscription(
-                        source.id,
-                        profiles
-                    )
-                    source.lastSuccessAt = System.currentTimeMillis()
-                    source.url = result.finalUrl
-                    SubscriptionRepository(this).save(source)
-                    ProfileImportResult(
-                        received = profiles.size,
-                        added = profiles.size,
-                        updated = 0,
-                        moved = 0,
-                        skipped = 0
-                    )
-                } else {
-                    val source = requestedTargetId?.let {
-                        SubscriptionRepository(this).find(it)
-                            ?: error(
-                                getString(
-                                    R.string.import_target_missing
-                                )
-                            )
-                    }
-                    val profiles = ConfigParser.parseText(text).map { profile ->
-                        OpenSshProfileCodec.secureForStorage(this, profile)
-                    }
-                    ConfigRepository(this).importProfiles(
-                        profiles = profiles,
-                        subscriptionId = source?.id,
-                        groupName = source?.name
-                    )
-                }
-            }.onSuccess { result ->
-                runOnUiThread {
-                    toast(
-                        getString(
-                            R.string.import_success_detailed,
-                            result.added,
-                            result.updated,
-                            result.moved,
-                            result.skipped
-                        )
-                    )
-                    subscriptionTabsSignature = ""
-                    renderSubscriptionTabs(force = true)
-                    refresh()
-                }
-            }.onFailure { error ->
-                runOnUiThread {
-                    toast(
-                        getString(
-                            R.string.import_failed,
-                            error.message ?: getString(R.string.unknown_error)
-                        )
-                    )
-                }
-            }
-        }
+        performSmartImport(
+            text = text,
+            requestedTargetId = requestedTargetId,
+            magic = false
+        )
     }
 
     private fun showActions(profile: ConfigProfile) {
@@ -2625,12 +2730,35 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     }
 
     private fun copyLocalProxyEndpoint() {
-        val port = settingsRepository.load().socksPort
+        val settings = settingsRepository.load()
+        val runtime = ConnectionRuntime.current()
+        val currentProfile = repository.find(runtime.profileId)
+
+        if (
+            runtime.state == ConnectionState.CONNECTED &&
+            runtime.mode == ConnectionMode.VPN &&
+            !settings.localProxyInVpn &&
+            !currentProfile?.protocol.equals("wireguard", ignoreCase = true)
+        ) {
+            toast(getString(R.string.v15_proxy_disabled_vpn))
+            return
+        }
+
+        val port = settings.socksPort
         val value = buildString {
             appendLine("socks5://127.0.0.1:$port")
             append("http://127.0.0.1:$port")
         }
         copyToClipboard(getString(R.string.local_mixed_proxy), value)
+
+        if (
+            runtime.state !in setOf(
+                ConnectionState.CONNECTED,
+                ConnectionState.RECONNECTING
+            )
+        ) {
+            toast(getString(R.string.v15_proxy_copied_offline))
+        }
     }
 
     private fun exportCompleteBackup() {
@@ -3329,14 +3457,26 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                     }
 
                     livePingBusy.set(false)
-                    Diagnostics.info(
+                    val completionMessage =
                         "UI live ping completed; success=${result.success}, " +
                             "latency=${result.latencyMs}, error=${result.errorCategory.orEmpty()}"
-                    )
+                    if (manual || !result.success) {
+                        Diagnostics.info(completionMessage)
+                    } else {
+                        Diagnostics.debug(completionMessage)
+                    }
                     runOnUiThread {
-                        refresh()
                         val current = ConnectionRuntime.current()
                         val latestSettings = settingsRepository.load()
+                        val currentProfile = repository.find(
+                            current.profileId ?: repository.selectedId()
+                        )
+                        renderConnectedInfo(
+                            current,
+                            currentProfile,
+                            latestSettings
+                        )
+                        notifyComposeChanged()
                         if (
                             current.state == ConnectionState.CONNECTED &&
                             current.sessionId == sessionId &&
@@ -3765,6 +3905,13 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         showSubscriptionActions(id)
     }
 
+    override fun composeMagicClipboard() {
+        runMagicClipboardImport()
+    }
+
+    override fun composeMagicClipboardBusy(): Boolean =
+        magicClipboardBusy.get()
+
     override fun composePingProfile(id: String, method: PingMethod) {
         repository.find(id)?.let { testSingleProfile(it, method) }
     }
@@ -3782,6 +3929,159 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     override fun composeCopyProxy() = copyLocalProxyEndpoint()
     override fun composeExportBackup() = exportCompleteBackup()
     override fun composeClearDead() = confirmClearDeadProfiles()
+
+    override fun composeSelectedProfile(): ConfigProfile? {
+        if (!::repository.isInitialized) return null
+        val current = ConnectionRuntime.current()
+        return repository.find(current.profileId ?: repository.selectedId())
+    }
+
+    override fun composeProfileStats(): ComposeProfileStats =
+        composeProfileStatsCache
+
+    override fun composeSaveSettings(value: AppSettings) {
+        if (!::settingsRepository.isInitialized) return
+
+        val previous = settingsRepository.load()
+        val next = value.copy().normalize()
+        val runtime = ConnectionRuntime.current()
+
+        if (
+            previous.mode != next.mode &&
+            runtime.state !in setOf(
+                ConnectionState.DISCONNECTED,
+                ConnectionState.ERROR
+            )
+        ) {
+            next.mode = previous.mode
+            toast(getString(R.string.v15_disconnect_to_change_mode))
+        }
+
+        settingsRepository.save(next)
+        Diagnostics.debug("Settings auto-saved")
+
+        if (::modeSpinner.isInitialized && previous.mode != next.mode) {
+            modeSpinner.setSelection(
+                if (next.mode == ConnectionMode.PROXY) 0 else 1
+            )
+        }
+
+        if (previous.livePingEnabled != next.livePingEnabled) {
+            handler.removeCallbacks(livePingTick)
+            if (
+                next.livePingEnabled &&
+                ConnectionRuntime.current().state == ConnectionState.CONNECTED
+            ) {
+                handler.post(livePingTick)
+            }
+        }
+
+        if (previous.gridMode != next.gridMode) {
+            Diagnostics.info("UI grid mode changed: ${next.gridMode}")
+            applyLayout()
+        } else {
+            refresh()
+        }
+
+        if (previous.themeMode != next.themeMode) {
+            applyNightModeWithMotion(
+                if (next.themeMode == com.trivox.client.data.ThemeMode.DARK) {
+                    AppCompatDelegate.MODE_NIGHT_YES
+                } else {
+                    AppCompatDelegate.MODE_NIGHT_NO
+                }
+            )
+        }
+    }
+
+    override fun composeLanguageTag(): String =
+        AppCompatDelegate.getApplicationLocales()
+            .toLanguageTags()
+            .substringBefore(',')
+            .lowercase(Locale.ROOT)
+            .let { tag ->
+                when {
+                    tag.startsWith("fa") -> "fa"
+                    tag.startsWith("en") -> "en"
+                    else -> ""
+                }
+            }
+
+    override fun composeSetLanguage(tag: String) {
+        val normalized = when (tag.lowercase(Locale.ROOT)) {
+            "fa" -> "fa"
+            "en" -> "en"
+            else -> ""
+        }
+        if (composeLanguageTag() == normalized) return
+
+        Diagnostics.info(
+            "Application language changed to " +
+                normalized.ifBlank { "system-default" }
+        )
+        AppCompatDelegate.setApplicationLocales(
+            LocaleListCompat.forLanguageTags(normalized)
+        )
+    }
+
+    override fun composeCheckForUpdates() {
+        composeUpdateStatusText = getString(R.string.update_checking)
+        notifyComposeChanged()
+        UpdateChecker.check(this, showCurrentResult = true) { result ->
+            composeUpdateStatusText = when {
+                result.available ->
+                    getString(R.string.update_found, result.version)
+
+                result.error.isNotBlank() ->
+                    getString(
+                        R.string.update_check_failed,
+                        result.error
+                    )
+
+                else -> getString(R.string.update_current)
+            }
+            notifyComposeChanged()
+        }
+    }
+
+    override fun composeUpdateStatus(): String =
+        composeUpdateStatusText
+
+    override fun composeLocalProxyStatus(): String {
+        if (!::settingsRepository.isInitialized) return ""
+        val settings = settingsRepository.load()
+        val runtime = ConnectionRuntime.current()
+        val profile = if (::repository.isInitialized) {
+            repository.find(runtime.profileId)
+        } else {
+            null
+        }
+        val listenerExpected =
+            runtime.mode == ConnectionMode.PROXY ||
+                settings.localProxyInVpn ||
+                profile?.protocol.equals("wireguard", ignoreCase = true)
+
+        return when {
+            runtime.state in setOf(
+                ConnectionState.CONNECTED,
+                ConnectionState.RECONNECTING
+            ) && listenerExpected ->
+                getString(
+                    R.string.v15_proxy_active,
+                    settings.socksPort
+                )
+
+            runtime.state == ConnectionState.CONNECTED &&
+                runtime.mode == ConnectionMode.VPN ->
+                getString(R.string.v15_proxy_disabled_vpn)
+
+            else ->
+                getString(
+                    R.string.v15_proxy_ready,
+                    settings.socksPort
+                )
+        }
+    }
 
     override fun composeOpenSettings() {
         startActivity(Intent(this, SettingsActivity::class.java))

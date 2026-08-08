@@ -9,6 +9,7 @@ import android.os.SystemClock
 import com.trivox.client.core.ConnectionRuntime
 import com.trivox.client.core.CoreManager
 import com.trivox.client.core.CoreStartRequest
+import com.trivox.client.data.AppSettings
 import com.trivox.client.data.ConfigRepository
 import com.trivox.client.data.ConnectionMode
 import com.trivox.client.data.ConnectionState
@@ -16,8 +17,6 @@ import com.trivox.client.data.SettingsRepository
 import com.trivox.client.config.OpenSshProfileCodec
 import com.trivox.client.ssh.OpenSshTunnelBridge
 import com.trivox.client.util.Diagnostics
-import java.net.InetSocketAddress
-import java.net.ServerSocket
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
@@ -48,6 +47,7 @@ class ConnectionService : Service() {
     private var restoredStartedElapsed =
         0L
     private var sessionId = 0L
+    private var mixedPort = AppSettings.DEFAULT_MIXED_PORT
 
     override fun onCreate() {
         super.onCreate()
@@ -264,38 +264,18 @@ class ConnectionService : Service() {
             SettingsRepository(this)
                 .load()
 
+        mixedPort = settings.socksPort
         if (
-            !portAvailable(
-                settings.socksPort
+            !LocalProxyPortGuard.prepare(
+                core = core,
+                port = mixedPort
             )
         ) {
-            Diagnostics.warning(
-                "Mixed proxy port was busy; " +
-                    "stopping a stale Xray instance"
+            fail(
+                "The mixed proxy port $mixedPort is still in use. " +
+                    "Choose another local proxy port or stop the application using it."
             )
-            core.stop()
-
-            try {
-                Thread.sleep(250L)
-            } catch (
-                _: InterruptedException
-            ) {
-                Thread.currentThread()
-                    .interrupt()
-            }
-
-            if (
-                !portAvailable(
-                    settings.socksPort
-                )
-            ) {
-                fail(
-                    "The mixed proxy port " +
-                        "is already in use by " +
-                        "another application"
-                )
-                return
-            }
+            return
         }
 
         ConnectionRuntime.update(
@@ -581,6 +561,11 @@ class ConnectionService : Service() {
                         "Immediate core stop failed: " + it.message
                     )
                 }
+            if (!LocalProxyPortGuard.awaitReleased(mixedPort)) {
+                Diagnostics.warning(
+                    "Mixed proxy port $mixedPort was still busy after service cleanup"
+                )
+            }
 
             storeDuration()
 
@@ -650,22 +635,6 @@ class ConnectionService : Service() {
 
         startedElapsed = 0L
     }
-
-    private fun portAvailable(
-        port: Int
-    ): Boolean =
-        runCatching {
-            ServerSocket().use {
-                it.reuseAddress = false
-                it.bind(
-                    InetSocketAddress(
-                        "127.0.0.1",
-                        port
-                    )
-                )
-            }
-            true
-        }.getOrDefault(false)
 
     private fun executeSafely(
         block: () -> Unit
