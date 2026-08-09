@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v37_home_customize">Home layout</string>
+    <string name="v37_home_customize_hint">Choose what stays visible on the Advanced home screen.</string>
+    <string name="v37_home_show_mode">VPN / proxy selector</string>
+    <string name="v37_home_show_usage">Usage and recent connections</string>
+    <string name="v37_home_show_map">Connection map</string>
+    <string name="v37_home_show_network">IP and network details</string>
+    <string name="v37_home_show_leak">Leak protection</string>
+    <string name="v37_simple_settings">Essential settings</string>
+    <string name="v37_simple_settings_hint">Only the settings needed for everyday use are shown here.</string>
+    <string name="v37_community_feed">Community feed</string>
+    <string name="v37_community_feed_hint">Refresh the curated community configuration pool.</string>
+    <string name="v37_profile_ready">Ready</string>
+    <string name="v37_profile_testing">Testing</string>
+    <string name="v37_profile_unavailable">Unavailable</string>
+    <string name="v37_profile_test">Test route</string>
+    <string name="v37_subscription_actions">Subscription actions</string>
+    <string name="v37_settings_interface">Appearance</string>
+    <string name="v37_settings_connection">Connection</string>
+    <string name="v37_settings_network">Network &amp; DNS</string>
+    <string name="v37_settings_notifications">Notification controls</string>
+    <string name="v37_settings_updates">Updates</string>
+</resources>

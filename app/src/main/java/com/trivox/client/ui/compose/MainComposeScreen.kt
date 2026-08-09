@@ -6,6 +6,7 @@ package com.trivox.client.ui.compose
 
 import android.app.Activity
 import android.os.SystemClock
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -191,6 +192,11 @@ fun MainComposeScreen(activity: Activity, actions: MainComposeActions) {
         settingsOverride = settings
     ) {
         var simpleSettings by rememberSaveable { mutableStateOf(false) }
+        BackHandler(
+            enabled = settings.experienceMode == ExperienceMode.SIMPLE && simpleSettings
+        ) {
+            simpleSettings = false
+        }
 
         TrivoxGradientBackground(
             activity = activity,
@@ -218,7 +224,8 @@ fun MainComposeScreen(activity: Activity, actions: MainComposeActions) {
                             activity = activity,
                             actions = actions,
                             uiRevision = revision,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            simple = true
                         )
                     }
                 } else {
@@ -263,7 +270,7 @@ fun MainComposeScreen(activity: Activity, actions: MainComposeActions) {
                                     colors = NavigationBarItemDefaults.colors(
                                         selectedIconColor = MaterialTheme.colorScheme.primary,
                                         selectedTextColor = MaterialTheme.colorScheme.primary,
-                                        indicatorColor = Color.Transparent,
+                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f),
                                         unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.70f),
                                         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.70f)
                                     ),
@@ -446,15 +453,12 @@ private fun SimpleHomeScreen(
         item {
             SectionCard(activity.getString(R.string.v26_community_section)) {
                 Text(
-                    activity.getString(
-                        R.string.v26_source_attribution,
-                        settings.communityChannelUsername
-                    ),
+                    activity.getString(R.string.v37_community_feed),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    activity.getString(R.string.v26_community_hint),
+                    activity.getString(R.string.v37_community_feed_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -607,11 +611,6 @@ private fun UsageHistoryCard(
                 )
             }
         }
-        Text(
-            activity.getString(R.string.v26_usage_estimate_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f)
-        )
     }
 }
 
@@ -769,6 +768,7 @@ private fun HomeTab(
                         }
                     }
 
+                    if (settings.homeShowModeSelector) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = settings.mode == ConnectionMode.VPN,
@@ -784,6 +784,7 @@ private fun HomeTab(
                             enabled = !connected,
                             modifier = Modifier.weight(1f)
                         )
+                    }
                     }
 
                     val connectionColor by animateColorAsState(
@@ -868,10 +869,13 @@ private fun HomeTab(
         }
 
         
-        item {
-            UsageHistoryCard(activity, actions, runtime)
+        if (settings.homeShowUsage) {
+            item {
+                UsageHistoryCard(activity, actions, runtime)
+            }
         }
 
+        if (settings.homeShowMap) {
         item {
             WorldMapCard(
                 connected =
@@ -910,7 +914,9 @@ private fun HomeTab(
                     settings.hideIpOnMain
             )
         }
+        }
 
+        if (settings.homeShowNetwork) {
         item {
             SectionCard(activity.getString(R.string.compose_latency_section)) {
                 if (selected != null) {
@@ -974,6 +980,9 @@ private fun HomeTab(
             }
         }
 
+        }
+
+        if (settings.homeShowLeakGuard) {
         item {
             SectionCard(activity.getString(R.string.v19_leak_guard_title)) {
                 Row(
@@ -1039,6 +1048,7 @@ private fun HomeTab(
                     }
                 }
             }
+        }
         }
 
             }
@@ -1181,13 +1191,8 @@ private fun ConfigsTab(
                     },
                     onLongClick = {
                         actions.composeSubscriptionActions("trivox-scope-all")
-                    }
-                )
-            }
-            item {
-                ScopeOverflowPill(
-                    label = "⋮",
-                    onClick = {
+                    },
+                    onMore = {
                         actions.composeSubscriptionActions("trivox-scope-all")
                     }
                 )
@@ -1204,19 +1209,24 @@ private fun ConfigsTab(
                     },
                     onLongClick = {
                         actions.composeSubscriptionActions("trivox-scope-favorites")
+                    },
+                    onMore = {
+                        actions.composeSubscriptionActions("trivox-scope-favorites")
                     }
                 )
             }
             if ((sourceCounts[CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID] ?: 0) > 0) {
                 item {
                     ConfigScopeChip(
-                        label = "@" + settings.communityChannelUsername,
+                        label = activity.getString(R.string.v37_community_feed),
                         count = sourceCounts[CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID] ?: 0,
                         selected = selectedSource == CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID,
                         onClick = {
+                            favoritesOnly = false
                             selectedSource = CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID
                             actions.composeSelectSubscription(CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID)
-                        }
+                        },
+                        onMore = actions::composeOpenCommunityChannel
                     )
                 }
             }
@@ -1226,23 +1236,20 @@ private fun ConfigsTab(
                     count = sourceCounts[source.id] ?: 0,
                     selected = selectedSource == source.id,
                     onClick = {
+                        favoritesOnly = false
                         selectedSource = source.id
                         actions.composeSelectSubscription(source.id)
                     },
                     onLongClick = {
+                        actions.composeSubscriptionActions(source.id)
+                    },
+                    onMore = {
                         actions.composeSubscriptionActions(source.id)
                     }
                 )
             }
         }
 
-        if (sources.isNotEmpty()) {
-            Text(
-                activity.getString(R.string.v15_subscription_long_press_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
 
         if (profiles.isEmpty()) {
             EmptyCard(activity.getString(R.string.no_profiles))
@@ -1317,8 +1324,11 @@ private fun ProfileCard(
         ),
         colors = CardDefaults.cardColors(
             containerColor = if (selected)
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.34f)
-            else MaterialTheme.colorScheme.surfaceContainerLow
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.46f)
+            else MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (selected) 3.dp else 1.dp
         )
     ) {
         if (compact) CompactProfileCard(activity, profile, hideIp, actions)
@@ -1335,60 +1345,88 @@ private fun CompactProfileCard(
 ) {
     Column(
         Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(9.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(verticalAlignment = Alignment.Top) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(9.dp)
+        ) {
+            Surface(
+                modifier = Modifier.size(38.dp),
+                shape = RoundedCornerShape(13.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        profile.exitFlag.ifBlank { if (profile.favorite) "★" else "◇" },
+                        fontSize = 17.sp
+                    )
+                }
+            }
             Column(Modifier.weight(1f)) {
                 Text(
-                    (if (profile.favorite) "★ " else "") + profile.name,
+                    profile.name,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(Modifier.height(3.dp))
                 Text(
-                    profileEndpoint(profile, hideIp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    profile.protocol.uppercase(Locale.ROOT),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1
                 )
             }
             Box(
-                Modifier.size(32.dp).clickable {
-                    actions.composeProfileActions(profile.id)
-                },
+                Modifier
+                    .size(34.dp)
+                    .clickable { actions.composeProfileActions(profile.id) },
                 contentAlignment = Alignment.Center
             ) {
-                Text("⋮", fontSize = 20.sp, color = MaterialTheme.colorScheme.primary)
+                Text("⋮", fontSize = 21.sp, color = MaterialTheme.colorScheme.primary)
             }
         }
+
+        Text(
+            profileEndpoint(profile, hideIp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
         LatencyCell(
             label = activity.getString(R.string.compose_real_label),
             latency = profile.realLatencyMs,
             status = profile.realTestStatus,
             modifier = Modifier.fillMaxWidth()
         )
-        if (
-            profile.realTestStatus == TestStatus.TESTING
-        ) LinearProgressIndicator(Modifier.fillMaxWidth())
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            TextButton(
-                onClick = { actions.composePingProfile(profile.id, PingMethod.XRAY_HTTP) },
-                enabled = profile.realTestStatus != TestStatus.TESTING,
-                modifier = Modifier.weight(1f).height(36.dp)
-            ) {
-                TrivoxAutoFitButtonText(
-                    text = if (profile.realTestStatus == TestStatus.TESTING)
-                        "${activity.getString(R.string.compose_real_label)}…"
-                    else activity.getString(R.string.compose_test_real),
-                    modifier = Modifier.fillMaxWidth(),
-                    maxFontSize = 13.sp,
-                    minFontSize = 8.sp,
-                    style = MaterialTheme.typography.labelMedium
-                )
-            }
+        if (profile.realTestStatus == TestStatus.TESTING) {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+        }
+        OutlinedButton(
+            onClick = { actions.composePingProfile(profile.id, PingMethod.XRAY_HTTP) },
+            enabled = profile.realTestStatus != TestStatus.TESTING,
+            modifier = Modifier.fillMaxWidth().height(38.dp)
+        ) {
+            TrivoxAutoFitButtonText(
+                text = activity.getString(R.string.v37_profile_test),
+                modifier = Modifier.fillMaxWidth(),
+                maxFontSize = 13.sp,
+                minFontSize = 8.sp
+            )
+        }
+        if (profile.exitCountry.isNotBlank()) {
+            Text(
+                buildExitLine(profile, hideIp),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -1402,68 +1440,103 @@ private fun ListProfileCard(
 ) {
     Column(
         Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
-        verticalArrangement = Arrangement.spacedBy(9.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(verticalAlignment = Alignment.Top) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(11.dp)
+        ) {
+            Surface(
+                modifier = Modifier.size(44.dp),
+                shape = RoundedCornerShape(15.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        profile.exitFlag.ifBlank { if (profile.favorite) "★" else "◇" },
+                        fontSize = 19.sp
+                    )
+                }
+            }
             Column(Modifier.weight(1f)) {
                 Text(
-                    (if (profile.favorite) "★ " else "") + profile.name,
+                    profile.name,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    profileEndpoint(profile, hideIp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        profile.protocol.uppercase(Locale.ROOT),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        "• " + profileEndpoint(profile, hideIp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
             Box(
-                Modifier.size(36.dp).clickable {
-                    actions.composeProfileActions(profile.id)
-                },
+                Modifier
+                    .size(38.dp)
+                    .clickable { actions.composeProfileActions(profile.id) },
                 contentAlignment = Alignment.Center
             ) {
-                Text("⋮", fontSize = 22.sp, color = MaterialTheme.colorScheme.primary)
+                Text("⋮", fontSize = 23.sp, color = MaterialTheme.colorScheme.primary)
             }
         }
-        LatencyCell(
-            label = activity.getString(R.string.compose_real_label),
-            latency = profile.realLatencyMs,
-            status = profile.realTestStatus,
-            modifier = Modifier.fillMaxWidth()
-        )
-        if (
-            profile.realTestStatus == TestStatus.TESTING
-        ) LinearProgressIndicator(Modifier.fillMaxWidth())
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(9.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            LatencyCell(
+                label = activity.getString(R.string.compose_real_label),
+                latency = profile.realLatencyMs,
+                status = profile.realTestStatus,
+                modifier = Modifier.weight(1f)
+            )
             OutlinedButton(
                 onClick = { actions.composePingProfile(profile.id, PingMethod.XRAY_HTTP) },
                 enabled = profile.realTestStatus != TestStatus.TESTING,
-                modifier = Modifier.weight(1f).height(40.dp).trivoxSpringPress(profile.realTestStatus != TestStatus.TESTING)
+                modifier = Modifier.height(46.dp).width(118.dp)
             ) {
                 TrivoxAutoFitButtonText(
-                    text = if (profile.realTestStatus == TestStatus.TESTING)
-                        "${activity.getString(R.string.compose_real_label)}…"
-                    else activity.getString(R.string.compose_test_real),
+                    text = activity.getString(R.string.v37_profile_test),
                     modifier = Modifier.fillMaxWidth(),
-                    maxFontSize = 14.sp,
+                    maxFontSize = 13.sp,
                     minFontSize = 8.sp
                 )
             }
+        }
+        if (profile.realTestStatus == TestStatus.TESTING) {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
         }
         if (
             profile.exitCountry.isNotBlank() ||
             (!hideIp && profile.exitIp.isNotBlank())
         ) {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Text(
-                buildExitLine(profile, hideIp),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1, overflow = TextOverflow.Ellipsis
-            )
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    buildExitLine(profile, hideIp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -1570,12 +1643,12 @@ private fun SubscriptionsTab(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "@${settings.communityChannelUsername}",
+                            activity.getString(R.string.v37_community_feed),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            activity.getString(R.string.v26_community_hint),
+                            activity.getString(R.string.v37_community_feed_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 2,
@@ -1807,24 +1880,6 @@ private fun SettingsTab(
     )
 }
 
-@Composable
-private fun ScopeOverflowPill(
-    label: String,
-    onClick: () -> Unit
-) {
-    OutlinedButton(
-        onClick = onClick,
-        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-        modifier = Modifier.height(40.dp)
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold
-        )
-    }
-}
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ConfigScopeChip(
@@ -1832,7 +1887,8 @@ private fun ConfigScopeChip(
     count: Int? = null,
     selected: Boolean,
     onClick: () -> Unit,
-    onLongClick: (() -> Unit)? = null
+    onLongClick: (() -> Unit)? = null,
+    onMore: (() -> Unit)? = null
 ) {
     Surface(
         modifier = Modifier
@@ -1890,6 +1946,21 @@ private fun ConfigScopeChip(
                         count.toString(),
                         Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
                         style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            if (onMore != null) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clickable(onClick = onMore),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "⋮",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold
                     )
                 }

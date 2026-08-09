@@ -66,7 +66,8 @@ internal fun UnifiedSettingsScreen(
     activity: Activity,
     actions: MainComposeActions,
     uiRevision: Int,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    simple: Boolean = false
 ) {
     val settings = remember(uiRevision) { actions.composeSettings() }
     val language = remember(uiRevision) { actions.composeLanguageTag() }
@@ -74,8 +75,11 @@ internal fun UnifiedSettingsScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = TrivoxUiTokens.pagePadding, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(
+            horizontal = TrivoxUiTokens.pagePadding,
+            vertical = 12.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
             ExperienceModeShowcaseSection(
@@ -87,8 +91,19 @@ internal fun UnifiedSettingsScreen(
             )
         }
 
+        if (simple) {
+            item {
+                Text(
+                    activity.getString(R.string.v37_simple_settings_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+            }
+        }
+
         item {
-            SettingsSection(activity.getString(R.string.v15_settings_interface)) {
+            SettingsSection(activity.getString(R.string.v37_settings_interface)) {
                 ChoiceSetting(
                     label = activity.getString(R.string.v15_language),
                     value = language,
@@ -98,27 +113,6 @@ internal fun UnifiedSettingsScreen(
                         "en" to activity.getString(R.string.language_english)
                     ),
                     onSelected = actions::composeSetLanguage
-                )
-                ChoiceSetting(
-                    label = activity.getString(R.string.v26_experience_mode),
-                    value = settings.experienceMode,
-                    choices = listOf(
-                        ExperienceMode.SIMPLE to activity.getString(R.string.v26_mode_simple),
-                        ExperienceMode.ADVANCED to activity.getString(R.string.v26_mode_advanced)
-                    )
-                ) { selected ->
-                    actions.composeSaveSettings(settings.copy(experienceMode = selected))
-                }
-                Text(
-                    activity.getString(
-                        if (settings.experienceMode == ExperienceMode.SIMPLE) {
-                            R.string.v26_simple_hint
-                        } else {
-                            R.string.v26_advanced_hint
-                        }
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 ChoiceSetting(
                     label = activity.getString(R.string.v15_theme),
@@ -150,48 +144,90 @@ internal fun UnifiedSettingsScreen(
                 ) { selected ->
                     actions.composeSaveSettings(settings.copy(visualTheme = selected))
                 }
-                ChoiceSetting(
-                    label = activity.getString(R.string.v26_launcher_icon),
-                    value = settings.launcherIconStyle,
-                    choices = listOf(
-                        LauncherIconStyle.DEFAULT to activity.getString(R.string.v26_icon_default),
-                        LauncherIconStyle.OCEAN to activity.getString(R.string.v26_icon_ocean),
-                        LauncherIconStyle.AURORA to activity.getString(R.string.v26_icon_aurora),
-                        LauncherIconStyle.MONO to activity.getString(R.string.v26_icon_mono)
+                if (!simple) {
+                    ChoiceSetting(
+                        label = activity.getString(R.string.v26_launcher_icon),
+                        value = settings.launcherIconStyle,
+                        choices = listOf(
+                            LauncherIconStyle.DEFAULT to activity.getString(R.string.v26_icon_default),
+                            LauncherIconStyle.OCEAN to activity.getString(R.string.v26_icon_ocean),
+                            LauncherIconStyle.AURORA to activity.getString(R.string.v26_icon_aurora),
+                            LauncherIconStyle.MONO to activity.getString(R.string.v26_icon_mono)
+                        )
+                    ) { selected ->
+                        actions.composeSaveSettings(
+                            settings.copy(launcherIconStyle = selected)
+                        )
+                    }
+                    BooleanSetting(
+                        activity.getString(R.string.hide_ip_on_main),
+                        settings.hideIpOnMain
+                    ) {
+                        actions.composeSaveSettings(settings.copy(hideIpOnMain = it))
+                    }
+                    ChoiceSetting(
+                        label = activity.getString(R.string.v15_sort_mode),
+                        value = settings.sortMode,
+                        choices = listOf(
+                            ProfileSortMode.SMART to activity.getString(R.string.sort_smart),
+                            ProfileSortMode.LOWEST_LATENCY to activity.getString(R.string.sort_latency),
+                            ProfileSortMode.NAME to activity.getString(R.string.sort_name),
+                            ProfileSortMode.LAST_TESTED to activity.getString(R.string.sort_recent),
+                            ProfileSortMode.GROUP to activity.getString(R.string.sort_group)
+                        )
+                    ) {
+                        actions.composeSaveSettings(settings.copy(sortMode = it))
+                    }
+                }
+            }
+        }
+
+        if (!simple) {
+            item {
+                SettingsSection(activity.getString(R.string.v37_home_customize)) {
+                    Text(
+                        activity.getString(R.string.v37_home_customize_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                ) { selected ->
-                    actions.composeSaveSettings(settings.copy(launcherIconStyle = selected))
-                }
-                BooleanSetting(
-                    activity.getString(R.string.hide_ip_on_main),
-                    settings.hideIpOnMain
-                ) {
-                    actions.composeSaveSettings(settings.copy(hideIpOnMain = it))
-                }
-                BooleanSetting(
-                    activity.getString(R.string.compose_grid_layout),
-                    settings.gridMode
-                ) {
-                    actions.composeSaveSettings(settings.copy(gridMode = it))
-                }
-                ChoiceSetting(
-                    label = activity.getString(R.string.v15_sort_mode),
-                    value = settings.sortMode,
-                    choices = listOf(
-                        ProfileSortMode.SMART to activity.getString(R.string.sort_smart),
-                        ProfileSortMode.LOWEST_LATENCY to activity.getString(R.string.sort_latency),
-                        ProfileSortMode.NAME to activity.getString(R.string.sort_name),
-                        ProfileSortMode.LAST_TESTED to activity.getString(R.string.sort_recent),
-                        ProfileSortMode.GROUP to activity.getString(R.string.sort_group)
-                    )
-                ) {
-                    actions.composeSaveSettings(settings.copy(sortMode = it))
+                    BooleanSetting(
+                        activity.getString(R.string.v37_home_show_mode),
+                        settings.homeShowModeSelector
+                    ) {
+                        actions.composeSaveSettings(
+                            settings.copy(homeShowModeSelector = it)
+                        )
+                    }
+                    BooleanSetting(
+                        activity.getString(R.string.v37_home_show_usage),
+                        settings.homeShowUsage
+                    ) {
+                        actions.composeSaveSettings(settings.copy(homeShowUsage = it))
+                    }
+                    BooleanSetting(
+                        activity.getString(R.string.v37_home_show_map),
+                        settings.homeShowMap
+                    ) {
+                        actions.composeSaveSettings(settings.copy(homeShowMap = it))
+                    }
+                    BooleanSetting(
+                        activity.getString(R.string.v37_home_show_network),
+                        settings.homeShowNetwork
+                    ) {
+                        actions.composeSaveSettings(settings.copy(homeShowNetwork = it))
+                    }
+                    BooleanSetting(
+                        activity.getString(R.string.v37_home_show_leak),
+                        settings.homeShowLeakGuard
+                    ) {
+                        actions.composeSaveSettings(settings.copy(homeShowLeakGuard = it))
+                    }
                 }
             }
         }
 
         item {
-            SettingsSection(activity.getString(R.string.v15_settings_connection)) {
+            SettingsSection(activity.getString(R.string.v37_settings_connection)) {
                 ChoiceSetting(
                     label = activity.getString(R.string.connection_mode),
                     value = settings.mode,
@@ -202,38 +238,6 @@ internal fun UnifiedSettingsScreen(
                 ) {
                     actions.composeSaveSettings(settings.copy(mode = it))
                 }
-                NumberSetting(
-                    label = activity.getString(R.string.v15_mixed_port),
-                    value = settings.socksPort,
-                    range = 1..65535
-                ) {
-                    actions.composeSaveSettings(
-                        settings.copy(socksPort = it, httpPort = it)
-                    )
-                }
-                Text(
-                    actions.composeLocalProxyStatus(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                BooleanSetting(
-                    activity.getString(R.string.v15_local_proxy_in_vpn),
-                    settings.localProxyInVpn
-                ) {
-                    actions.composeSaveSettings(settings.copy(localProxyInVpn = it))
-                }
-                BooleanSetting(
-                    activity.getString(R.string.v15_ipv6),
-                    settings.ipv6
-                ) {
-                    actions.composeSaveSettings(settings.copy(ipv6 = it))
-                }
-                BooleanSetting(
-                    activity.getString(R.string.v15_blocking),
-                    settings.blocking
-                ) {
-                    actions.composeSaveSettings(settings.copy(blocking = it))
-                }
                 BooleanSetting(
                     activity.getString(R.string.v15_reconnect_network),
                     settings.reconnectOnNetworkChange
@@ -242,164 +246,172 @@ internal fun UnifiedSettingsScreen(
                         settings.copy(reconnectOnNetworkChange = it)
                     )
                 }
-                BooleanSetting(
-                    activity.getString(R.string.v15_reconnect_boot),
-                    settings.reconnectOnBoot
-                ) {
-                    actions.composeSaveSettings(settings.copy(reconnectOnBoot = it))
-                }
-            }
-        }
-
-        item {
-            SettingsSection(activity.getString(R.string.v15_settings_latency)) {
-                BooleanSetting(
-                    activity.getString(R.string.live_ping_enabled),
-                    settings.livePingEnabled
-                ) {
-                    actions.composeSaveSettings(
-                        settings.copy(livePingEnabled = it)
-                    )
-                }
-                Text(
-                    activity.getString(R.string.v20_live_ping_auto_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                ChoiceSetting(
-                    label = activity.getString(R.string.v15_real_profile),
-                    value = settings.realDelayProfile,
-                    choices = listOf(
-                        RealDelayProfile.TURBO to activity.getString(
-                            R.string.real_delay_profile_turbo
-                        ),
-                        RealDelayProfile.BALANCED to activity.getString(
-                            R.string.real_delay_profile_balanced
-                        ),
-                        RealDelayProfile.ACCURATE to activity.getString(
-                            R.string.real_delay_profile_accurate
+                if (!simple) {
+                    NumberSetting(
+                        label = activity.getString(R.string.v15_mixed_port),
+                        value = settings.socksPort,
+                        range = 1..65535
+                    ) {
+                        actions.composeSaveSettings(
+                            settings.copy(socksPort = it, httpPort = it)
                         )
-                    )
-                ) {
-                    actions.composeSaveSettings(
-                        settings.copy(realDelayProfile = it)
-                    )
-                }
-            }
-        }
-
-        item {
-            SettingsSection(activity.getString(R.string.v15_settings_dns)) {
-                BooleanSetting(
-                    activity.getString(R.string.v19_leak_guard_toggle),
-                    settings.autoLeakProtection
-                ) {
-                    actions.composeSaveSettings(
-                        settings.copy(autoLeakProtection = it)
-                    )
-                }
-                Text(
-                    activity.getString(R.string.v21_leak_auto_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                ChoiceSetting(
-                    label = activity.getString(R.string.v15_dns_mode),
-                    value = settings.dnsMode,
-                    choices = listOf(
-                        DnsMode.IMPORTED to activity.getString(R.string.dns_imported),
-                        DnsMode.TRIVOX_DEFAULT to activity.getString(R.string.dns_default),
-                        DnsMode.CUSTOM to activity.getString(R.string.dns_custom),
-                        DnsMode.SYSTEM to activity.getString(R.string.dns_system),
-                        DnsMode.DIRECT to activity.getString(R.string.dns_direct),
-                        DnsMode.THROUGH_PROXY to activity.getString(R.string.dns_proxy)
-                    )
-                ) {
-                    actions.composeSaveSettings(settings.copy(dnsMode = it))
-                }
-                if (settings.dnsMode == DnsMode.CUSTOM) {
-                    StringSetting(
-                        label = activity.getString(R.string.v15_custom_dns),
-                        value = settings.customDns.joinToString("\n"),
-                        singleLine = false,
-                        validator = ::validDnsList
-                    ) { text ->
-                        val values = text.lineSequence()
-                            .map(String::trim)
-                            .filter(String::isNotBlank)
-                            .distinct()
-                            .toList()
-                        actions.composeSaveSettings(settings.copy(customDns = values))
+                    }
+                    BooleanSetting(
+                        activity.getString(R.string.v15_local_proxy_in_vpn),
+                        settings.localProxyInVpn
+                    ) {
+                        actions.composeSaveSettings(settings.copy(localProxyInVpn = it))
+                    }
+                    BooleanSetting(
+                        activity.getString(R.string.v15_ipv6),
+                        settings.ipv6
+                    ) {
+                        actions.composeSaveSettings(settings.copy(ipv6 = it))
+                    }
+                    BooleanSetting(
+                        activity.getString(R.string.v15_blocking),
+                        settings.blocking
+                    ) {
+                        actions.composeSaveSettings(settings.copy(blocking = it))
+                    }
+                    BooleanSetting(
+                        activity.getString(R.string.v15_reconnect_boot),
+                        settings.reconnectOnBoot
+                    ) {
+                        actions.composeSaveSettings(settings.copy(reconnectOnBoot = it))
                     }
                 }
             }
         }
 
-        item {
-            SettingsSection(activity.getString(R.string.v15_settings_wireguard)) {
-                NumberSetting(
-                    activity.getString(R.string.v15_wireguard_mtu),
-                    settings.wireGuardMtu,
-                    1280..1420
-                ) {
-                    actions.composeSaveSettings(
-                        settings.copy(wireGuardMtu = it)
-                    )
+        if (!simple) {
+            item {
+                SettingsSection(activity.getString(R.string.v15_settings_latency)) {
+                    BooleanSetting(
+                        activity.getString(R.string.live_ping_enabled),
+                        settings.livePingEnabled
+                    ) {
+                        actions.composeSaveSettings(settings.copy(livePingEnabled = it))
+                    }
+                    ChoiceSetting(
+                        label = activity.getString(R.string.v15_real_profile),
+                        value = settings.realDelayProfile,
+                        choices = listOf(
+                            RealDelayProfile.TURBO to activity.getString(R.string.real_delay_profile_turbo),
+                            RealDelayProfile.BALANCED to activity.getString(R.string.real_delay_profile_balanced),
+                            RealDelayProfile.ACCURATE to activity.getString(R.string.real_delay_profile_accurate)
+                        )
+                    ) {
+                        actions.composeSaveSettings(settings.copy(realDelayProfile = it))
+                    }
                 }
-                NumberSetting(
-                    activity.getString(R.string.v15_wireguard_keepalive),
-                    settings.wireGuardKeepAliveSeconds,
-                    0..120
-                ) {
-                    actions.composeSaveSettings(
-                        settings.copy(wireGuardKeepAliveSeconds = it)
-                    )
-                }
-                Text(
-                    activity.getString(R.string.v20_wireguard_auto_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
-        }
 
+            item {
+                SettingsSection(activity.getString(R.string.v37_settings_network)) {
+                    BooleanSetting(
+                        activity.getString(R.string.v19_leak_guard_toggle),
+                        settings.autoLeakProtection
+                    ) {
+                        actions.composeSaveSettings(settings.copy(autoLeakProtection = it))
+                    }
+                    ChoiceSetting(
+                        label = activity.getString(R.string.v15_dns_mode),
+                        value = settings.dnsMode,
+                        choices = listOf(
+                            DnsMode.IMPORTED to activity.getString(R.string.dns_imported),
+                            DnsMode.TRIVOX_DEFAULT to activity.getString(R.string.dns_default),
+                            DnsMode.CUSTOM to activity.getString(R.string.dns_custom),
+                            DnsMode.SYSTEM to activity.getString(R.string.dns_system),
+                            DnsMode.DIRECT to activity.getString(R.string.dns_direct),
+                            DnsMode.THROUGH_PROXY to activity.getString(R.string.dns_proxy)
+                        )
+                    ) {
+                        actions.composeSaveSettings(settings.copy(dnsMode = it))
+                    }
+                    if (settings.dnsMode == DnsMode.CUSTOM) {
+                        StringSetting(
+                            label = activity.getString(R.string.v15_custom_dns),
+                            value = settings.customDns.joinToString("
+"),
+                            singleLine = false,
+                            validator = ::validDnsList
+                        ) { text ->
+                            val values = text.lineSequence()
+                                .map(String::trim)
+                                .filter(String::isNotBlank)
+                                .distinct()
+                                .toList()
+                            actions.composeSaveSettings(
+                                settings.copy(customDns = values)
+                            )
+                        }
+                    }
+                    NumberSetting(
+                        activity.getString(R.string.v15_wireguard_mtu),
+                        settings.wireGuardMtu,
+                        1280..1420
+                    ) {
+                        actions.composeSaveSettings(settings.copy(wireGuardMtu = it))
+                    }
+                    NumberSetting(
+                        activity.getString(R.string.v15_wireguard_keepalive),
+                        settings.wireGuardKeepAliveSeconds,
+                        0..120
+                    ) {
+                        actions.composeSaveSettings(
+                            settings.copy(wireGuardKeepAliveSeconds = it)
+                        )
+                    }
+                }
+            }
 
-        item {
-            SettingsSection(activity.getString(R.string.v26_notification_section)) {
-                val actionChoices = notificationActionChoices(activity)
-                ChoiceSetting(
-                    label = activity.getString(R.string.v26_notification_action_1),
-                    value = settings.notificationAction1,
-                    choices = actionChoices
-                ) {
-                    actions.composeSaveSettings(settings.copy(notificationAction1 = it))
+            item {
+                SettingsSection(activity.getString(R.string.v37_settings_notifications)) {
+                    val actionChoices = notificationActionChoices(activity)
+                    ChoiceSetting(
+                        label = activity.getString(R.string.v26_notification_action_1),
+                        value = settings.notificationAction1,
+                        choices = actionChoices.filter { (choice, _) ->
+                            choice == settings.notificationAction1 ||
+                                choice == NotificationActionChoice.NONE ||
+                                choice !in setOf(settings.notificationAction2, settings.notificationAction3)
+                        }
+                    ) {
+                        actions.composeSaveSettings(settings.copy(notificationAction1 = it))
+                    }
+                    ChoiceSetting(
+                        label = activity.getString(R.string.v26_notification_action_2),
+                        value = settings.notificationAction2,
+                        choices = actionChoices.filter { (choice, _) ->
+                            choice == settings.notificationAction2 ||
+                                choice == NotificationActionChoice.NONE ||
+                                choice !in setOf(settings.notificationAction1, settings.notificationAction3)
+                        }
+                    ) {
+                        actions.composeSaveSettings(settings.copy(notificationAction2 = it))
+                    }
+                    ChoiceSetting(
+                        label = activity.getString(R.string.v26_notification_action_3),
+                        value = settings.notificationAction3,
+                        choices = actionChoices.filter { (choice, _) ->
+                            choice == settings.notificationAction3 ||
+                                choice == NotificationActionChoice.NONE ||
+                                choice !in setOf(settings.notificationAction1, settings.notificationAction2)
+                        }
+                    ) {
+                        actions.composeSaveSettings(settings.copy(notificationAction3 = it))
+                    }
+                    NumberSetting(
+                        label = activity.getString(R.string.v26_pause_minutes),
+                        value = settings.notificationPauseMinutes,
+                        range = 1..180
+                    ) {
+                        actions.composeSaveSettings(
+                            settings.copy(notificationPauseMinutes = it)
+                        )
+                    }
                 }
-                ChoiceSetting(
-                    label = activity.getString(R.string.v26_notification_action_2),
-                    value = settings.notificationAction2,
-                    choices = actionChoices
-                ) {
-                    actions.composeSaveSettings(settings.copy(notificationAction2 = it))
-                }
-                ChoiceSetting(
-                    label = activity.getString(R.string.v26_notification_action_3),
-                    value = settings.notificationAction3,
-                    choices = actionChoices
-                ) {
-                    actions.composeSaveSettings(settings.copy(notificationAction3 = it))
-                }
-                NumberSetting(
-                    label = activity.getString(R.string.v26_pause_minutes),
-                    value = settings.notificationPauseMinutes,
-                    range = 1..180
-                ) {
-                    actions.composeSaveSettings(settings.copy(notificationPauseMinutes = it))
-                }
-                Text(
-                    activity.getString(R.string.v26_notification_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
 
@@ -418,37 +430,39 @@ internal fun UnifiedSettingsScreen(
                     actions.composeSaveSettings(settings.copy(communityAutoSync = it))
                 }
                 Text(
-                    activity.getString(R.string.v26_community_hint),
+                    activity.getString(R.string.v37_community_feed_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                // trivox-v33-community-buttons: one full-width button per row
                 OutlinedButton(
                     onClick = actions::composeCommunitySync,
-                    enabled = settings.communitySourceEnabled &&
-                        !actions.composeCommunitySyncBusy(),
+                    enabled = settings.communitySourceEnabled && !actions.composeCommunitySyncBusy(),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(activity.getString(R.string.v26_community_sync))
                 }
-                OutlinedButton(
-                    onClick = actions::composeOpenCommunityChannel,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(activity.getString(R.string.v26_community_open))
+                if (!simple) {
+                    OutlinedButton(
+                        onClick = actions::composeOpenCommunityChannel,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(activity.getString(R.string.v26_community_open))
+                    }
                 }
                 actions.composeCommunityStatus().takeIf(String::isNotBlank)?.let {
                     Text(
                         it,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                 }
             }
         }
 
         item {
-            SettingsSection(activity.getString(R.string.v15_settings_updates)) {
+            SettingsSection(activity.getString(R.string.v37_settings_updates)) {
                 BooleanSetting(
                     activity.getString(R.string.v15_auto_update),
                     settings.autoUpdateCheck
@@ -465,7 +479,8 @@ internal fun UnifiedSettingsScreen(
                     Text(
                         updateStatus,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2
                     )
                 }
             }

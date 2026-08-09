@@ -109,11 +109,11 @@ private val TrivoxTypography = Typography(
 )
 
 private val TrivoxShapes = Shapes(
-    extraSmall = ContinuousCornerShape(8.dp),
-    small = ContinuousCornerShape(9.dp),
-    medium = ContinuousCornerShape(11.dp),
-    large = ContinuousCornerShape(16.dp),
-    extraLarge = ContinuousCornerShape(20.dp)
+    extraSmall = ContinuousCornerShape(10.dp),
+    small = ContinuousCornerShape(12.dp),
+    medium = ContinuousCornerShape(16.dp),
+    large = ContinuousCornerShape(22.dp),
+    extraLarge = ContinuousCornerShape(28.dp)
 )
 
 @Composable
@@ -147,23 +147,20 @@ fun TrivoxGradientBackground(
 ) {
     val settings = settingsOverride ?: SettingsRepository(activity).load()
     val dark = resolveTrivoxDark(settings.themeMode, isSystemInDarkTheme())
+    val accents = trivoxGradient(settings.visualTheme, dark)
+    val base = MaterialTheme.colorScheme.background
+    val first = accents.firstOrNull() ?: MaterialTheme.colorScheme.primary
+    val last = accents.lastOrNull() ?: MaterialTheme.colorScheme.secondary
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    trivoxGradient(settings.visualTheme, dark).map { accent ->
-                        val blend = when (settings.visualTheme) {
-                            VisualTheme.CLASSIC -> if (dark) 0.36f else 0.42f
-                            VisualTheme.GRAPHITE -> if (dark) 0.58f else 0.62f
-                            else -> if (dark) 0.66f else 0.74f
-                        }
-                        lerp(
-                            MaterialTheme.colorScheme.background,
-                            accent,
-                            blend
-                        )
-                    }
+                    listOf(
+                        lerp(base, first, if (dark) 0.12f else 0.08f),
+                        base,
+                        lerp(base, last, if (dark) 0.10f else 0.065f)
+                    )
                 )
             )
     ) {

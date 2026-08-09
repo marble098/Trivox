@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v37_home_customize">چیدمان صفحه خانه</string>
+    <string name="v37_home_customize_hint">مشخص کنید در صفحه خانه حالت پیشرفته چه بخش‌هایی دیده شوند.</string>
+    <string name="v37_home_show_mode">انتخاب VPN / پروکسی</string>
+    <string name="v37_home_show_usage">مصرف و اتصال‌های اخیر</string>
+    <string name="v37_home_show_map">نقشه اتصال</string>
+    <string name="v37_home_show_network">اطلاعات IP و شبکه</string>
+    <string name="v37_home_show_leak">محافظت نشت</string>
+    <string name="v37_simple_settings">تنظیمات ضروری</string>
+    <string name="v37_simple_settings_hint">فقط گزینه‌های لازم برای استفاده روزمره نمایش داده می‌شوند.</string>
+    <string name="v37_community_feed">فید کانفیگ‌های عمومی</string>
+    <string name="v37_community_feed_hint">فهرست مدیریت‌شده کانفیگ‌های عمومی را تازه‌سازی کنید.</string>
+    <string name="v37_profile_ready">آماده</string>
+    <string name="v37_profile_testing">در حال تست</string>
+    <string name="v37_profile_unavailable">نامعتبر</string>
+    <string name="v37_profile_test">تست مسیر</string>
+    <string name="v37_subscription_actions">عملیات ساب</string>
+    <string name="v37_settings_interface">ظاهر برنامه</string>
+    <string name="v37_settings_connection">اتصال</string>
+    <string name="v37_settings_network">شبکه و DNS</string>
+    <string name="v37_settings_notifications">کنترل اعلان</string>
+    <string name="v37_settings_updates">به‌روزرسانی</string>
+</resources>

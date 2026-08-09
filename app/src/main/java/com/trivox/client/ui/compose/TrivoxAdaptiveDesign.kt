@@ -194,14 +194,14 @@ internal class ContinuousCornerShape private constructor(
     }
 }
 
-internal val TrivoxOuterShape: Shape = ContinuousCornerShape(24.dp)
-internal val TrivoxInnerShape: Shape = ContinuousCornerShape(14.dp)
-internal val TrivoxCompactShape: Shape = ContinuousCornerShape(8.dp)
+internal val TrivoxOuterShape: Shape = ContinuousCornerShape(26.dp)
+internal val TrivoxInnerShape: Shape = ContinuousCornerShape(16.dp)
+internal val TrivoxCompactShape: Shape = ContinuousCornerShape(10.dp)
 
 internal object TrivoxUiTokens {
-    val pagePadding = 14.dp
-    val groupSpacing = 14.dp
-    val rowSpacing = 10.dp
+    val pagePadding = 16.dp
+    val groupSpacing = 16.dp
+    val rowSpacing = 11.dp
     val systemBlueLight = Color(0xFF007AFF)
     val systemBlueDark = Color(0xFF0A84FF)
     val systemGreenLight = Color(0xFF34C759)
@@ -217,8 +217,8 @@ internal fun TrivoxGlassBar(
 ) {
     val surface = MaterialTheme.colorScheme.surface
     val primary = MaterialTheme.colorScheme.primary
-    val glassTop = lerp(surface, primary, 0.045f)
-    val glassBottom = lerp(surface, primary, 0.018f)
+    val glassTop = lerp(surface, primary, 0.070f)
+    val glassBottom = lerp(surface, primary, 0.030f)
     val edge = lerp(
         MaterialTheme.colorScheme.outlineVariant,
         primary,
@@ -230,8 +230,8 @@ internal fun TrivoxGlassBar(
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        glassTop.copy(alpha = 0.90f),
-                        glassBottom.copy(alpha = 0.78f)
+                        glassTop.copy(alpha = 0.94f),
+                        glassBottom.copy(alpha = 0.86f)
                     )
                 )
             )
@@ -268,13 +268,21 @@ internal fun TrivoxInsetGroup(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = TrivoxOuterShape,
-            color = MaterialTheme.colorScheme.surface,
+            color = lerp(
+                MaterialTheme.colorScheme.surface,
+                MaterialTheme.colorScheme.primary,
+                0.025f
+            ),
             border = BorderStroke(
                 1.dp,
-                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.90f)
+                lerp(
+                    MaterialTheme.colorScheme.outlineVariant,
+                    MaterialTheme.colorScheme.primary,
+                    0.12f
+                ).copy(alpha = 0.88f)
             ),
-            shadowElevation = 1.dp,
-            tonalElevation = 0.dp
+            shadowElevation = 2.dp,
+            tonalElevation = 1.dp
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -441,8 +449,8 @@ internal fun TrivoxLargeTopBar(
      * AppCompat already positions this Compose host below the real system status bar.
      * Never add the same inset a second time.
      */
-    val expandedHeight = 34.dp
-    val collapsedHeight = 28.dp
+    val expandedHeight = 48.dp
+    val collapsedHeight = 38.dp
     val density = LocalDensity.current
 
     SideEffect {
@@ -548,8 +556,8 @@ internal fun TrivoxLargeTopBar(
                         scaleY = scale
                     },
                 style = MaterialTheme.typography.headlineLarge.copy(
-                    fontSize = 28.sp,
-                    lineHeight = 32.sp
+                    fontSize = 30.sp,
+                    lineHeight = 36.sp
                 ),
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
