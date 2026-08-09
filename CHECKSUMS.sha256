@@ -210,7 +210,7 @@ d9775eefee793eb1a110e470ab92688a0a8f5040a619b2435e5ebb397e57b9ea  ./tools/openss
 03d4961aeb69ca9e3278ec4c3f1757a8a9237cf5ecf79825be386e19f70d949e  ./tools/validate-android-resources.py
 5e0eaf59e140118cf08891e912a2b945b09adbb3f823f4e6c4e82097742f2c93  ./tools/validate-api-guards.py
 94e56f1059f0981fad2db85aa1e43a8b93a93ebbf37479d016143e91d587fe37  ./tools/validate-string-formats.py
-b43e47ed3eb4e9bc07b0f098a82b47de718e28ef9e3f2f57e557a4988075b8b5  ./tools/verify-compose-migration.sh
+5fde438fe2bd824a95ea60d22a7c16abb420685868a30d20b6fb7f1d9e3d7eeb  ./tools/verify-compose-migration.sh
 f2cb3e86611434c56c74dabdf38bfa7c1b1c24c2f43c5e4a54ad2113805990fb  ./app/src/main/java/com/trivox/client/ui/compose/WorldMapCard.kt
 d2694c1ef6d46a65e653664dea876ee03f6e912013aee22789252f3faa297407  ./app/src/main/java/com/trivox/client/ui/compose/WorldMapGeo.kt
 fe3e713b919d56dc47b4df13e49a43c0fc3fe1bd2958c5df8ce67bcb69b1cacd  ./app/src/main/res/values-fa/strings_v22.xml
