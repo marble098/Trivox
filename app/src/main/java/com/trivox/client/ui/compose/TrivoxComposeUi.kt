@@ -110,10 +110,10 @@ private val TrivoxTypography = Typography(
 
 private val TrivoxShapes = Shapes(
     extraSmall = ContinuousCornerShape(8.dp),
-    small = ContinuousCornerShape(10.dp),
-    medium = ContinuousCornerShape(12.dp),
-    large = ContinuousCornerShape(18.dp),
-    extraLarge = ContinuousCornerShape(22.dp)
+    small = ContinuousCornerShape(9.dp),
+    medium = ContinuousCornerShape(11.dp),
+    large = ContinuousCornerShape(16.dp),
+    extraLarge = ContinuousCornerShape(20.dp)
 )
 
 @Composable
@@ -328,7 +328,7 @@ private fun trivoxColorScheme(
     val neutralOutline =
         if (dark) Color(0xFF636366) else Color(0xFF8E8E93)
     val neutralOutlineVariant =
-        if (dark) Color(0xFF48484A) else Color(0xFFC7C7CC)
+        if (dark) Color(0xFF56575C) else Color(0xFFB9BBC1)
 
     val groupedSurface = lerp(
         neutralSurface,
@@ -562,7 +562,7 @@ private fun LegacyLinearGroup(group: LinearLayout, revision: Int, parentTopLevel
                 shape = TrivoxOuterShape,
                 border = BorderStroke(
                     1.dp,
-                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.82f)
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.90f)
                 ),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surface
@@ -724,7 +724,7 @@ private fun LegacySwitch(view: SwitchCompat, revision: Int, modifier: Modifier) 
         shape = TrivoxInnerShape,
         border = BorderStroke(
             1.dp,
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.78f)
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.88f)
         ),
         modifier = modifier.clickable(enabled = view.isEnabled) {
             checked = !checked

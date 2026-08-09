@@ -86,10 +86,10 @@ ff3087ffbb877efe2b4beed9017e409eec693d1f017c5d9becb70c9cc2e7c6f1  ./app/src/main
 ac90290ded6f5c25887f62b5d722b08e5b057a1cc144ea71bbaac5b5f7a4acbc  ./app/src/main/java/com/trivox/client/ui/ThemedActivity.kt
 856eeb8e2c72ceb08be0651e9bde7e29bc503389c0a4bfaa17b03b8b878bb929  ./app/src/main/java/com/trivox/client/ui/UiInsets.kt
 a6dd44767d64edae8ec54895ddb524009b13034d450baff8d1aae5a3228b96e4  ./app/src/main/java/com/trivox/client/ui/compose/LegacyLayoutBridge.kt
-d018a13535eff29c8290d98f7f4816ebbbde9913df2586dad464b75be8b12c84  ./app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt
+1c6af58fba2cd130e34738731d89f96c6f9ff8f22abb7c1599f742f078f066b0  ./app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt
 819b04749e31680d4588d610434305ba1013b40210e118cecaaca230bba05d54  ./app/src/main/java/com/trivox/client/ui/compose/RoutingComposeScreen.kt
-5aef4e9f803bdd9b92e24c170c0b2ff88fa098a18601b02fe78579948be9e4a8  ./app/src/main/java/com/trivox/client/ui/compose/TrivoxComposeUi.kt
-b7084b1bdf3d902c59005d620fd054b3d84d7b8c4bf3ea5fbe6fc7e390e2e03a  ./app/src/main/java/com/trivox/client/ui/compose/UnifiedSettingsScreen.kt
+019c0b8e9681d1822eb370d50b44c699b32640ada17998f40393ee1802486a2d  ./app/src/main/java/com/trivox/client/ui/compose/TrivoxComposeUi.kt
+4c0fac1df77a05c765011fa68b720ddf6a83203f3ea57bec478711f6efb0eb37  ./app/src/main/java/com/trivox/client/ui/compose/UnifiedSettingsScreen.kt
 22fc2fea3013958e0f3950f89b1836eef3a950e78b4d49fc7f194828196a4d13  ./app/src/main/java/com/trivox/client/update/UpdateChecker.kt
 6cf684b1ce5e58a5a42adba26fa59d5b44cb4bd940e4690c2aa43714d72e407c  ./app/src/main/java/com/trivox/client/update/VersionComparator.kt
 409e15a4f384ce88ccc0b27c4bb19132c4414b23d53505a2b28434d183235413  ./app/src/main/java/com/trivox/client/util/Diagnostics.kt
@@ -229,7 +229,7 @@ a674d99f2d9882c76cdcc9b5a020450b79a23553c509a2b36ede6397014e7315  ./app/src/main
 eb6415a6e03bd310e31f0e4dbea1430a47a2f2420472e4ad52c8f4c0b23a77e2  ./app/src/main/res/drawable/ic_launcher_ocean.xml
 a7738ce3e2ca6c00fdab69384b180ac80c6574e2a16e4e2eded7aa961667084f  ./app/src/main/res/values-fa/strings_v26.xml
 4fbb6b1690ab751465330de46a2d694e5dabb42ddfffcfc760c3f4d592a6fd27  ./app/src/main/res/values/strings_v26.xml
-b6fbfb635ff39230694a5f50e7b1536578811e13d16bae46e6a5bb39fb115f1a  ./app/src/main/java/com/trivox/client/ui/compose/TrivoxAdaptiveDesign.kt
+35be857f176effbe9025d21a428a72accfe32ba2600765cef5a1930aa3e28a8e  ./app/src/main/java/com/trivox/client/ui/compose/TrivoxAdaptiveDesign.kt
 bd90170af18d6aee40b05ba116e74aca6be42a8d2cac5c99b73003331d1cec9c  ./app/src/main/res/drawable/ic_sf_configs_fill.xml
 b1c7c98eb2c25975d20435637f64eff8e813ab5e4af11aeb6f0bfc3259b2646c  ./app/src/main/res/drawable/ic_sf_home_fill.xml
 6d67747c6cf4472f8a852cda8cf0122a81a0ec810feeb4c1464fbe605cec8514  ./app/src/main/res/drawable/ic_sf_settings_fill.xml

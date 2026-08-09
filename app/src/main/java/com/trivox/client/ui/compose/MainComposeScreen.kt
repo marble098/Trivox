@@ -273,7 +273,7 @@ fun MainComposeScreen(activity: Activity, actions: MainComposeActions) {
                                                 item.outlineIconRes
                                             ),
                                             contentDescription = null,
-                                            modifier = Modifier.size(21.dp)
+                                            modifier = Modifier.size(22.dp)
                                         )
                                     },
                                     label = {
@@ -354,7 +354,7 @@ private fun SimpleHomeScreen(
                     .border(
                         BorderStroke(
                             1.dp,
-                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.84f)
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.92f)
                         ),
                         TrivoxOuterShape
                     ),
@@ -389,7 +389,7 @@ private fun SimpleHomeScreen(
                         onClick = actions::composeSimpleToggleConnection,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(68.dp)
+                            .height(64.dp)
                             .trivoxSpringPress(
                                 runtime.state != ConnectionState.STOPPING
                             ),
@@ -672,7 +672,7 @@ private fun HomeTab(
                     .border(
                         BorderStroke(
                             1.dp,
-                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.86f)
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.92f)
                         ),
                         TrivoxOuterShape
                     ),
@@ -777,7 +777,7 @@ private fun HomeTab(
                         onClick = actions::composeToggleConnection,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(52.dp)
+                            .height(50.dp)
                             .trivoxSpringPress(
                                 runtime.state != ConnectionState.STOPPING
                             )
@@ -1509,7 +1509,7 @@ private fun SubscriptionCard(
         shape = TrivoxOuterShape,
         border = BorderStroke(
             1.dp,
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.90f)
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.92f)
         ),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
@@ -1878,13 +1878,13 @@ private fun ToolButton(title: String, subtitle: String, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(112.dp)
+            .height(104.dp)
             .trivoxSpringPress()
             .clickable(onClick = onClick),
         shape = TrivoxOuterShape,
         border = BorderStroke(
             1.dp,
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.90f)
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.92f)
         ),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface

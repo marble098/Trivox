@@ -192,14 +192,14 @@ internal class ContinuousCornerShape private constructor(
     }
 }
 
-internal val TrivoxOuterShape: Shape = ContinuousCornerShape(20.dp)
-internal val TrivoxInnerShape: Shape = ContinuousCornerShape(12.dp)
+internal val TrivoxOuterShape: Shape = ContinuousCornerShape(18.dp)
+internal val TrivoxInnerShape: Shape = ContinuousCornerShape(10.dp)
 internal val TrivoxCompactShape: Shape = ContinuousCornerShape(8.dp)
 
 internal object TrivoxUiTokens {
-    val pagePadding = 16.dp
-    val groupSpacing = 16.dp
-    val rowSpacing = 12.dp
+    val pagePadding = 14.dp
+    val groupSpacing = 14.dp
+    val rowSpacing = 10.dp
     val systemBlueLight = Color(0xFF007AFF)
     val systemBlueDark = Color(0xFF0A84FF)
     val systemGreenLight = Color(0xFF34C759)
@@ -269,7 +269,7 @@ internal fun TrivoxInsetGroup(
             color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(
                 1.dp,
-                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.82f)
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.90f)
             ),
             shadowElevation = 1.dp,
             tonalElevation = 0.dp
@@ -391,8 +391,8 @@ internal fun TrivoxLargeTopBar(
      * very small height values are supplied. Own the geometry directly so
      * the only top inset is the real system status bar.
      */
-    val expandedHeight = 42.dp
-    val collapsedHeight = 34.dp
+    val expandedHeight = 34.dp
+    val collapsedHeight = 28.dp
     val density = LocalDensity.current
 
     SideEffect {
@@ -485,20 +485,20 @@ internal fun TrivoxLargeTopBar(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .padding(
-                        start = if (onBack == null) 16.dp else 118.dp,
-                        end = 16.dp
+                        start = if (onBack == null) 12.dp else 92.dp,
+                        end = 12.dp
                     )
                     .graphicsLayer {
                         alpha =
                             (1f - collapsed * 1.45f)
                                 .coerceIn(0f, 1f)
-                        val scale = 1f - (0.055f * collapsed)
+                        val scale = 1f - (0.040f * collapsed)
                         scaleX = scale
                         scaleY = scale
                     },
                 style = MaterialTheme.typography.headlineLarge.copy(
-                    fontSize = 30.sp,
-                    lineHeight = 34.sp
+                    fontSize = 28.sp,
+                    lineHeight = 32.sp
                 ),
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,

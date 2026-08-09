@@ -69,8 +69,8 @@ internal fun UnifiedSettingsScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = TrivoxUiTokens.pagePadding, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(TrivoxUiTokens.groupSpacing)
+        contentPadding = PaddingValues(horizontal = TrivoxUiTokens.pagePadding, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
             SettingsSection(activity.getString(R.string.v15_settings_interface)) {
