@@ -534,9 +534,10 @@ internal fun TrivoxLargeTopBar(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .padding(
-                        start = if (onBack == null) 18.dp else 96.dp,
-                        end = 16.dp,
-                        bottom = 4.dp
+                        start = if (onBack == null) 20.dp else 100.dp,
+                        end = 20.dp,
+                        top = 3.dp,
+                        bottom = 5.dp
                     )
                     .graphicsLayer {
                         alpha =
@@ -559,6 +560,7 @@ internal fun TrivoxLargeTopBar(
                 text = title,
                 modifier = Modifier
                     .align(Alignment.Center)
+                    .padding(horizontal = 8.dp)
                     .graphicsLayer {
                         alpha =
                             ((collapsed - 0.18f) / 0.82f)

@@ -1105,16 +1105,12 @@ private fun ConfigsTab(
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
-                onClick = { actions.composeTestAll(PingMethod.TCP_CONNECT) },
+                onClick = actions::composeClearDead,
                 modifier = Modifier.weight(1f).height(42.dp).trivoxSpringPress(!batch.running && !magicBusy),
                 enabled = !batch.running && !magicBusy
             ) {
                 TrivoxAutoFitButtonText(
-                    text = if (batch.running && batch.method == PingMethod.TCP_CONNECT) {
-                        "TCP ${batch.completed}/${batch.total.coerceAtLeast(1)}"
-                    } else {
-                        activity.getString(R.string.compose_tcp_all)
-                    },
+                    text = activity.getString(R.string.v34_clear_invalid),
                     modifier = Modifier.fillMaxWidth(),
                     maxFontSize = 14.sp,
                     minFontSize = 8.sp
@@ -1165,8 +1161,9 @@ private fun ConfigsTab(
                 ConfigScopeChip(
                     label = activity.getString(R.string.v21_scope_all),
                     count = allProfileCount,
-                    selected = selectedSource == null,
+                    selected = selectedSource == null && !favoritesOnly,
                     onClick = {
+                        favoritesOnly = false
                         selectedSource = null
                         actions.composeSelectSubscription(null)
                     },
@@ -1176,11 +1173,23 @@ private fun ConfigsTab(
                 )
             }
             item {
+                ScopeOverflowPill(
+                    label = "⋮",
+                    onClick = {
+                        actions.composeSubscriptionActions("trivox-scope-all")
+                    }
+                )
+            }
+            item {
                 ConfigScopeChip(
                     label = activity.getString(R.string.v21_scope_favorites),
                     count = favoriteProfileCount,
                     selected = favoritesOnly,
-                    onClick = { favoritesOnly = !favoritesOnly },
+                    onClick = {
+                        favoritesOnly = true
+                        selectedSource = null
+                        actions.composeSelectSubscription(null)
+                    },
                     onLongClick = {
                         actions.composeSubscriptionActions("trivox-scope-favorites")
                     }
@@ -1857,6 +1866,24 @@ private fun SettingsTab(
         uiRevision = uiRevision,
         modifier = modifier
     )
+}
+
+@Composable
+private fun ScopeOverflowPill(
+    label: String,
+    onClick: () -> Unit
+) {
+    OutlinedButton(
+        onClick = onClick,
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+        modifier = Modifier.height(40.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)

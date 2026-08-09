@@ -67,6 +67,7 @@ import com.trivox.client.data.ConfigRepository
 import com.trivox.client.data.ProfileImportResult
 import com.trivox.client.data.ConnectionMode
 import com.trivox.client.data.ConnectionState
+import com.trivox.client.data.ExperienceMode
 import com.trivox.client.data.PingMethod
 import com.trivox.client.data.PingResult
 import com.trivox.client.data.ProfileSortMode
@@ -4010,6 +4011,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             force = true
         )
         refresh()
+        maybeShowFirstRunModeChooser()
         UpdateChecker.checkIfDue(this)
         scheduleCommunitySyncIfDue()
 
@@ -4343,6 +4345,33 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     override fun composeExportBackup() = exportCompleteBackup()
     override fun composeClearDead() = confirmClearDeadProfiles()
 
+
+    private fun maybeShowFirstRunModeChooser() {
+        if (!::settingsRepository.isInitialized) return
+        val prefs = getSharedPreferences("trivox_v34_onboarding", MODE_PRIVATE)
+        if (prefs.getBoolean("mode_prompt_seen", false)) return
+        prefs.edit().putBoolean("mode_prompt_seen", true).apply()
+        val current = settingsRepository.load()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.v34_first_run_title)
+            .setMessage(R.string.v34_first_run_message)
+            .setNegativeButton(R.string.v34_choose_simple) { _, _ ->
+                settingsRepository.save(current.copy(experienceMode = ExperienceMode.SIMPLE))
+                refresh()
+                notifyComposeChanged()
+            }
+            .setPositiveButton(R.string.v34_choose_advanced) { _, _ ->
+                settingsRepository.save(current.copy(experienceMode = ExperienceMode.ADVANCED))
+                refresh()
+                notifyComposeChanged()
+            }
+            .setOnCancelListener {
+                settingsRepository.save(current.copy(experienceMode = ExperienceMode.SIMPLE))
+                refresh()
+                notifyComposeChanged()
+            }
+            .show()
+    }
 
     private fun scheduleAutomaticLeakCheck(
         snapshot: ConnectionRuntime.Snapshot

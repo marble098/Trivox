@@ -10,6 +10,7 @@ import android.app.Activity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -72,6 +73,16 @@ internal fun UnifiedSettingsScreen(
         contentPadding = PaddingValues(horizontal = TrivoxUiTokens.pagePadding, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        item {
+            ExperienceModeShowcaseSection(
+                activity = activity,
+                settings = settings,
+                onSelect = { mode ->
+                    actions.composeSaveSettings(settings.copy(experienceMode = mode))
+                }
+            )
+        }
+
         item {
             SettingsSection(activity.getString(R.string.v15_settings_interface)) {
                 ChoiceSetting(
@@ -464,6 +475,107 @@ private fun SettingsSection(
     content: @Composable ColumnScope.() -> Unit
 ) {
     TrivoxInsetGroup(title = title, content = content)
+}
+
+@Composable
+private fun ExperienceModeShowcaseSection(
+    activity: Activity,
+    settings: AppSettings,
+    onSelect: (ExperienceMode) -> Unit
+) {
+    SettingsSection(activity.getString(R.string.v34_home_tools_title)) {
+        Text(
+            text = activity.getString(R.string.v34_home_tools_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            ExperienceModeShowcaseCard(
+                selected = settings.experienceMode == ExperienceMode.SIMPLE,
+                title = activity.getString(R.string.v34_mode_simple_title),
+                description = activity.getString(R.string.v34_mode_simple_desc),
+                primaryGlyph = "◯",
+                secondaryGlyph = "▭",
+                onClick = { onSelect(ExperienceMode.SIMPLE) }
+            )
+            ExperienceModeShowcaseCard(
+                selected = settings.experienceMode == ExperienceMode.ADVANCED,
+                title = activity.getString(R.string.v34_mode_advanced_title),
+                description = activity.getString(R.string.v34_mode_advanced_desc),
+                primaryGlyph = "▦",
+                secondaryGlyph = "◫",
+                onClick = { onSelect(ExperienceMode.ADVANCED) }
+            )
+        }
+        Text(
+            text = activity.getString(R.string.v34_theme_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun ExperienceModeShowcaseCard(
+    selected: Boolean,
+    title: String,
+    description: String,
+    primaryGlyph: String,
+    secondaryGlyph: String,
+    onClick: () -> Unit
+) {
+    val border = if (selected) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.88f)
+    } else {
+        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.88f)
+    }
+    val container = if (selected) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.52f)
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
+    Card(
+        onClick = onClick,
+        shape = TrivoxOuterShape,
+        border = BorderStroke(1.dp, border),
+        colors = CardDefaults.cardColors(containerColor = container)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .border(1.dp, border, RoundedCornerShape(16.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(primaryGlyph, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(secondaryGlyph, fontSize = 14.sp)
+                }
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (selected) {
+                Text(
+                    text = "✓",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
 }
 
 @Composable

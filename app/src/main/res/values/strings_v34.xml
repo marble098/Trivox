@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v34_home_tools_title">Home quick layout</string>
+    <string name="v34_home_tools_desc">Simple mode keeps the most important actions visible. Advanced mode keeps every panel available.</string>
+    <string name="v34_mode_simple_title">Simple mode</string>
+    <string name="v34_mode_simple_desc">Big controls, lighter layout, less clutter.</string>
+    <string name="v34_mode_advanced_title">Advanced mode</string>
+    <string name="v34_mode_advanced_desc">Full controls, more details and faster access to every tool.</string>
+    <string name="v34_clear_invalid">Clear invalid</string>
+    <string name="v34_manage_all">Manage all</string>
+    <string name="v34_first_run_title">Choose your default view</string>
+    <string name="v34_first_run_message">You can start with Simple mode for a cleaner layout or Advanced mode for full access. You can change this later in Settings.</string>
+    <string name="v34_choose_simple">Use Simple mode</string>
+    <string name="v34_choose_advanced">Use Advanced mode</string>
+    <string name="v34_theme_hint">Themes now affect more than the background, including cards, actions and emphasis colors.</string>
+</resources>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v34_home_tools_title">چیدمان سریع صفحه خانه</string>
+    <string name="v34_home_tools_desc">حالت ساده فقط مهم‌ترین بخش‌ها را جلو چشم نگه می‌دارد. حالت پیشرفته همه پنل‌ها و جزئیات را نگه می‌دارد.</string>
+    <string name="v34_mode_simple_title">حالت ساده</string>
+    <string name="v34_mode_simple_desc">دکمه‌های بزرگ‌تر، فضای خلوت‌تر و خوانایی بیشتر.</string>
+    <string name="v34_mode_advanced_title">حالت پیشرفته</string>
+    <string name="v34_mode_advanced_desc">دسترسی کامل به همه کنترل‌ها، جزئیات و ابزارها.</string>
+    <string name="v34_clear_invalid">حذف نامعتبرها</string>
+    <string name="v34_manage_all">مدیریت همه</string>
+    <string name="v34_first_run_title">حالت پیش‌فرض نمایش را انتخاب کنید</string>
+    <string name="v34_first_run_message">می‌توانید با حالت ساده برای ظاهر خلوت‌تر یا با حالت پیشرفته برای دسترسی کامل شروع کنید. بعداً از تنظیمات هم قابل تغییر است.</string>
+    <string name="v34_choose_simple">شروع با حالت ساده</string>
+    <string name="v34_choose_advanced">شروع با حالت پیشرفته</string>
+    <string name="v34_theme_hint">از این نسخه به بعد تم‌ها روی رنگ کارت‌ها، دکمه‌ها و بخش‌های تأکیدی هم اثر بیشتری می‌گذارند.</string>
+</resources>
