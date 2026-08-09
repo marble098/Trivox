@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v37_simple_essentials">تنظیمات اصلی</string>
+    <string name="v37_simple_connection">اتصال و حریم خصوصی</string>
+    <string name="v37_experience_title">حالت برنامه</string>
+    <string name="v37_mode_simple_short">فقط کنترل‌های لازم برای استفاده روزمره از VPN.</string>
+    <string name="v37_mode_advanced_short">کنترل کامل پروفایل‌ها، شبکه و ابزارهای عیب‌یابی.</string>
+    <string name="v37_home_personalization">شخصی‌سازی صفحه اصلی</string>
+    <string name="v37_home_usage">نمایش مصرف اینترنت</string>
+    <string name="v37_home_map">نمایش نقشه اتصال</string>
+    <string name="v37_home_details">نمایش جزئیات اتصال</string>
+    <string name="v37_home_leak_guard">نمایش محافظ نشت</string>
+    <string name="v37_config_list">فهرست کانفیگ‌ها</string>
+</resources>
