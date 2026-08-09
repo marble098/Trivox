@@ -5,6 +5,7 @@ package com.trivox.client.ui.compose
 // TRIVOX_V20_SAFE_NATIVE_LIFECYCLE
 
 import android.app.Activity
+import android.os.Build
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
@@ -34,7 +35,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Button as M3Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ColorScheme
@@ -54,6 +56,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -66,6 +70,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -88,29 +93,37 @@ private val TrivoxFont = FontFamily(
 )
 
 private val TrivoxTypography = Typography(
-    bodyLarge = TextStyle(fontFamily = TrivoxFont, fontSize = 14.sp, lineHeight = 20.sp),
-    bodyMedium = TextStyle(fontFamily = TrivoxFont, fontSize = 13.sp, lineHeight = 19.sp),
-    bodySmall = TextStyle(fontFamily = TrivoxFont, fontSize = 11.sp, lineHeight = 16.sp),
-    titleLarge = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Bold, fontSize = 20.sp, lineHeight = 26.sp),
-    titleMedium = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 21.sp),
-    titleSmall = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, lineHeight = 19.sp),
-    labelLarge = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.SemiBold, fontSize = 12.sp),
-    labelMedium = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Medium, fontSize = 11.sp)
+    headlineLarge = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Bold, fontSize = 34.sp, lineHeight = 41.sp),
+    headlineSmall = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, lineHeight = 28.sp),
+    bodyLarge = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Normal, fontSize = 17.sp, lineHeight = 24.sp),
+    bodyMedium = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Normal, fontSize = 15.sp, lineHeight = 22.sp),
+    bodySmall = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Normal, fontSize = 13.sp, lineHeight = 19.sp),
+    titleLarge = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Bold, fontSize = 22.sp, lineHeight = 28.sp),
+    titleMedium = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, lineHeight = 23.sp),
+    titleSmall = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 21.sp),
+    labelLarge = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 20.sp),
+    labelMedium = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Medium, fontSize = 13.sp, lineHeight = 18.sp),
+    labelSmall = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Medium, fontSize = 11.sp, lineHeight = 16.sp)
 )
 
 private val TrivoxShapes = Shapes(
-    extraSmall = RoundedCornerShape(8.dp),
-    small = RoundedCornerShape(11.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(22.dp),
-    extraLarge = RoundedCornerShape(28.dp)
+    extraSmall = ContinuousCornerShape(10.dp),
+    small = ContinuousCornerShape(12.dp),
+    medium = ContinuousCornerShape(16.dp),
+    large = ContinuousCornerShape(22.dp),
+    extraLarge = ContinuousCornerShape(28.dp)
 )
 
 @Composable
 fun TrivoxTheme(activity: Activity, content: @Composable () -> Unit) {
     val settings = SettingsRepository(activity).load()
     val dark = resolveTrivoxDark(settings.themeMode, isSystemInDarkTheme())
-    val scheme = trivoxColorScheme(dark, settings.visualTheme)
+    val adaptiveBase = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (dark) dynamicDarkColorScheme(activity) else dynamicLightColorScheme(activity)
+    } else {
+        null
+    }
+    val scheme = trivoxColorScheme(dark, settings.visualTheme, adaptiveBase)
 
     MaterialTheme(
         colorScheme = scheme,
@@ -132,7 +145,13 @@ fun TrivoxGradientBackground(
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    trivoxGradient(settings.visualTheme, dark)
+                    trivoxGradient(settings.visualTheme, dark).map { accent ->
+                        lerp(
+                            MaterialTheme.colorScheme.background,
+                            accent,
+                            if (dark) 0.18f else 0.12f
+                        )
+                    }
                 )
             )
     ) {
@@ -149,9 +168,10 @@ private fun resolveTrivoxDark(themeMode: ThemeMode, systemDark: Boolean): Boolea
 
 private fun trivoxColorScheme(
     dark: Boolean,
-    visual: VisualTheme
+    visual: VisualTheme,
+    adaptiveBase: ColorScheme? = null
 ): ColorScheme {
-    val base = if (dark) {
+    val base = adaptiveBase ?: if (dark) {
         darkColorScheme(
             primary = Color(0xFF9AB7FF),
             onPrimary = Color(0xFF002E6D),
@@ -199,7 +219,7 @@ private fun trivoxColorScheme(
         )
     }
 
-    return when (visual) {
+    val themed = when (visual) {
         VisualTheme.CLASSIC -> base
         VisualTheme.OCEAN -> if (dark) {
             base.copy(
@@ -267,6 +287,27 @@ private fun trivoxColorScheme(
             )
         }
     }
+
+    val systemBlue = if (dark) TrivoxUiTokens.systemBlueDark else TrivoxUiTokens.systemBlueLight
+    val pageBackground = if (dark) Color.Black else TrivoxUiTokens.systemGray6Light
+    val groupedSurface = if (dark) TrivoxUiTokens.systemGray6Dark else Color.White
+    val groupedSurfaceHigh = if (dark) Color(0xFF2C2C2E) else Color(0xFFE5E5EA)
+
+    return themed.copy(
+        primary = systemBlue,
+        onPrimary = Color.White,
+        primaryContainer = systemBlue.copy(alpha = if (dark) 0.24f else 0.14f),
+        onPrimaryContainer = if (dark) Color(0xFFD9E7FF) else Color(0xFF002A55),
+        background = pageBackground,
+        onBackground = if (dark) Color(0xFFF2F2F7) else Color(0xFF1C1C1E),
+        surface = groupedSurface,
+        onSurface = if (dark) Color(0xFFF2F2F7) else Color(0xFF1C1C1E),
+        surfaceContainer = groupedSurface,
+        surfaceContainerLow = groupedSurface,
+        surfaceContainerHigh = groupedSurfaceHigh,
+        surfaceVariant = groupedSurfaceHigh,
+        outlineVariant = if (dark) Color(0xFF3A3A3C) else Color(0xFFD1D1D6)
+    )
 }
 
 private fun trivoxGradient(visual: VisualTheme, dark: Boolean): List<Color> =
@@ -331,21 +372,23 @@ fun LegacyMirrorScreen(activity: Activity, legacy: ViewGroup, fallbackTitle: Str
         .filterIsInstance<Button>()
         .firstOrNull { it.id == R.id.saveButton && it.visibility == View.VISIBLE }
 
+    val scrollBehavior = rememberTrivoxTopBarScrollBehavior()
+
     Scaffold(
+        modifier = Modifier.trivoxNestedScroll(scrollBehavior),
         containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            TopAppBar(
-                windowInsets = WindowInsets(0, 0, 0, 0),
-                title = { Text(title, fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    TextButton(onClick = { activity.finish() }) { Text("‹") }
-                }
+            TrivoxLargeTopBar(
+                title = title,
+                previousTitle = activity.getString(R.string.app_name),
+                onBack = { activity.finish() },
+                scrollBehavior = scrollBehavior
             )
         },
         bottomBar = {
             if (footerSave != null) {
-                Surface(tonalElevation = 2.dp) {
+                TrivoxGlassBar {
                     M3Button(
                         onClick = { if (footerSave.isEnabled) footerSave.performClick() },
                         enabled = footerSave.isEnabled,
@@ -444,9 +487,9 @@ private fun LegacyLinearGroup(group: LinearLayout, revision: Int, parentTopLevel
         if (decorate) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
+                shape = TrivoxOuterShape,
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    containerColor = MaterialTheme.colorScheme.surface
                 )
             ) {
                 Column(
@@ -602,7 +645,7 @@ private fun LegacySwitch(view: SwitchCompat, revision: Int, modifier: Modifier) 
     val label = view.text?.toString().orEmpty()
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        shape = RoundedCornerShape(15.dp),
+        shape = TrivoxInnerShape,
         modifier = modifier.clickable(enabled = view.isEnabled) {
             checked = !checked
             view.isChecked = checked
@@ -614,7 +657,7 @@ private fun LegacySwitch(view: SwitchCompat, revision: Int, modifier: Modifier) 
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(label, modifier = Modifier.weight(1f), maxLines = 2)
-            Switch(
+            TrivoxToggle(
                 checked = checked,
                 onCheckedChange = {
                     checked = it
@@ -655,6 +698,7 @@ private fun LegacyCheck(view: CompoundButton, revision: Int, modifier: Modifier)
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LegacySpinner(view: Spinner, revision: Int, modifier: Modifier) {
     var expanded by remember(view) { mutableStateOf(false) }
@@ -666,8 +710,8 @@ private fun LegacySpinner(view: Spinner, revision: Int, modifier: Modifier) {
     val selected = view.selectedItem?.toString().orEmpty().ifBlank { "Select" }
 
     Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = TrivoxInnerShape,
+        color = MaterialTheme.colorScheme.surface,
         modifier = modifier.clickable(enabled = view.isEnabled && count > 0) { expanded = true }
     ) {
         Row(
@@ -680,45 +724,52 @@ private fun LegacySpinner(view: Spinner, revision: Int, modifier: Modifier) {
     }
 
     if (expanded) {
-        AlertDialog(
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+        ModalBottomSheet(
             onDismissRequest = { expanded = false },
-            title = { Text(selected) },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    repeat(count) { index ->
-                        val label = adapter?.getItem(index)?.toString().orEmpty()
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    expanded = false
-                                    view.setSelection(index)
-                                }
-                                .padding(vertical = 7.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = index == selectedIndex,
-                                onClick = {
-                                    expanded = false
-                                    view.setSelection(index)
-                                }
-                            )
-                            Text(label, modifier = Modifier.weight(1f))
-                        }
+            sheetState = sheetState,
+            shape = TrivoxOuterShape,
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 18.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    selected,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                repeat(count) { index ->
+                    val label = adapter?.getItem(index)?.toString().orEmpty()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                expanded = false
+                                view.setSelection(index)
+                            }
+                            .padding(horizontal = 4.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = index == selectedIndex,
+                            onClick = {
+                                expanded = false
+                                view.setSelection(index)
+                            }
+                        )
+                        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { expanded = false }) {
+                TextButton(onClick = { expanded = false }, modifier = Modifier.fillMaxWidth()) {
                     Text(view.context.getString(R.string.cancel))
                 }
             }
-        )
+        }
     }
 }

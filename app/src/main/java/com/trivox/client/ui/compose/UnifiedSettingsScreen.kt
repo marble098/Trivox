@@ -69,8 +69,8 @@ internal fun UnifiedSettingsScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        contentPadding = PaddingValues(horizontal = TrivoxUiTokens.pagePadding, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(TrivoxUiTokens.groupSpacing)
     ) {
         item {
             SettingsSection(activity.getString(R.string.v15_settings_interface)) {
@@ -472,28 +472,7 @@ private fun SettingsSection(
     title: String,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        )
-    ) {
-        Column(
-            Modifier.padding(horizontal = 15.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(11.dp)
-        ) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.70f)
-            )
-            content()
-        }
-    }
+    TrivoxInsetGroup(title = title, content = content)
 }
 
 @Composable
@@ -514,9 +493,9 @@ private fun BooleanSetting(
             modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.bodyMedium
         )
-        Switch(
+        TrivoxToggle(
             checked = checked,
-            onCheckedChange = null
+            onCheckedChange = { onCheckedChange(it) }
         )
     }
 }

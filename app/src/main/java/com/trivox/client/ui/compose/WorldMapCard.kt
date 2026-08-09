@@ -353,7 +353,7 @@ internal fun WorldMapCard(
     }
 
     val shape =
-        RoundedCornerShape(24.dp)
+        ContinuousCornerShape(24.dp)
 
     ElevatedCard(
         modifier =
@@ -365,7 +365,7 @@ internal fun WorldMapCard(
                     containerColor =
                         MaterialTheme
                             .colorScheme
-                            .surfaceContainerLow
+                            .surface
                 )
     ) {
         BoxWithConstraints(

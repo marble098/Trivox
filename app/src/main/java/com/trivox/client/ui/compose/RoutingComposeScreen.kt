@@ -70,30 +70,22 @@ fun RoutingComposeScreen(activity: Activity, actions: RoutingComposeActions) {
             }
         }
 
+        val scrollBehavior = rememberTrivoxTopBarScrollBehavior()
+
         Scaffold(
+            modifier = Modifier.trivoxNestedScroll(scrollBehavior),
+            containerColor = MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
-                TopAppBar(
-                    windowInsets = WindowInsets(0, 0, 0, 0),
-                    title = {
-                        Column {
-                            Text(activity.getString(R.string.app_routing), fontWeight = FontWeight.Bold)
-                            Text(
-                                activity.getString(R.string.compose_routing_selected, selected.size),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    },
-                    navigationIcon = {
-                        TextButton(onClick = { activity.finish() }) {
-                            Text("‹")
-                        }
-                    }
+                TrivoxLargeTopBar(
+                    title = activity.getString(R.string.app_routing),
+                    previousTitle = activity.getString(R.string.app_name),
+                    onBack = { activity.finish() },
+                    scrollBehavior = scrollBehavior
                 )
             },
             bottomBar = {
-                Surface(tonalElevation = 2.dp) {
+                TrivoxGlassBar {
                     Button(
                         onClick = actions::routingSave,
                         modifier = Modifier
@@ -115,7 +107,7 @@ fun RoutingComposeScreen(activity: Activity, actions: RoutingComposeActions) {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp)
+                        shape = TrivoxOuterShape
                     ) {
                         Column(
                             Modifier.padding(14.dp),
@@ -173,7 +165,7 @@ fun RoutingComposeScreen(activity: Activity, actions: RoutingComposeActions) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { actions.routingSetShowSystem(!showSystem) },
-                        shape = RoundedCornerShape(16.dp)
+                        shape = TrivoxInnerShape
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -222,7 +214,7 @@ fun RoutingComposeScreen(activity: Activity, actions: RoutingComposeActions) {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { actions.routingToggle(item.packageName) },
-                            shape = RoundedCornerShape(14.dp)
+                            shape = TrivoxInnerShape
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),

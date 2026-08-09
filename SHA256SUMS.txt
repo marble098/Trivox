@@ -87,10 +87,10 @@ ff3087ffbb877efe2b4beed9017e409eec693d1f017c5d9becb70c9cc2e7c6f1  ./app/src/main
 ac90290ded6f5c25887f62b5d722b08e5b057a1cc144ea71bbaac5b5f7a4acbc  ./app/src/main/java/com/trivox/client/ui/ThemedActivity.kt
 856eeb8e2c72ceb08be0651e9bde7e29bc503389c0a4bfaa17b03b8b878bb929  ./app/src/main/java/com/trivox/client/ui/UiInsets.kt
 a6dd44767d64edae8ec54895ddb524009b13034d450baff8d1aae5a3228b96e4  ./app/src/main/java/com/trivox/client/ui/compose/LegacyLayoutBridge.kt
-ad2252059afce10a51944b054e99c9402a72f5ab412a10d753d75503047b9368  ./app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt
-d0af0b76e024009807055a3c35360470077b6512547d1ecc7657e51ed75bc587  ./app/src/main/java/com/trivox/client/ui/compose/RoutingComposeScreen.kt
-dd003439da2e32518b636af3e399e8c84898d19dbd440b62f716c2094db2fefe  ./app/src/main/java/com/trivox/client/ui/compose/TrivoxComposeUi.kt
-62e216aa6a7859321887534826d0e85906a7d020fb37d0eb5479f64a3676594d  ./app/src/main/java/com/trivox/client/ui/compose/UnifiedSettingsScreen.kt
+56936c8a7c46ecdc7ae41a6c46b1d5425c686d51c04c5d07e74b6eb8bb26d36c  ./app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt
+819b04749e31680d4588d610434305ba1013b40210e118cecaaca230bba05d54  ./app/src/main/java/com/trivox/client/ui/compose/RoutingComposeScreen.kt
+7db4f762aec397805624510a1a78ac22bdf68ce7df71b47d0b2e7f98c1ab96d1  ./app/src/main/java/com/trivox/client/ui/compose/TrivoxComposeUi.kt
+b7084b1bdf3d902c59005d620fd054b3d84d7b8c4bf3ea5fbe6fc7e390e2e03a  ./app/src/main/java/com/trivox/client/ui/compose/UnifiedSettingsScreen.kt
 22fc2fea3013958e0f3950f89b1836eef3a950e78b4d49fc7f194828196a4d13  ./app/src/main/java/com/trivox/client/update/UpdateChecker.kt
 6cf684b1ce5e58a5a42adba26fa59d5b44cb4bd940e4690c2aa43714d72e407c  ./app/src/main/java/com/trivox/client/update/VersionComparator.kt
 409e15a4f384ce88ccc0b27c4bb19132c4414b23d53505a2b28434d183235413  ./app/src/main/java/com/trivox/client/util/Diagnostics.kt
@@ -212,7 +212,7 @@ d9775eefee793eb1a110e470ab92688a0a8f5040a619b2435e5ebb397e57b9ea  ./tools/openss
 5e0eaf59e140118cf08891e912a2b945b09adbb3f823f4e6c4e82097742f2c93  ./tools/validate-api-guards.py
 94e56f1059f0981fad2db85aa1e43a8b93a93ebbf37479d016143e91d587fe37  ./tools/validate-string-formats.py
 5fde438fe2bd824a95ea60d22a7c16abb420685868a30d20b6fb7f1d9e3d7eeb  ./tools/verify-compose-migration.sh
-f2cb3e86611434c56c74dabdf38bfa7c1b1c24c2f43c5e4a54ad2113805990fb  ./app/src/main/java/com/trivox/client/ui/compose/WorldMapCard.kt
+ccb3b446e0b3fdf69ca596310507a3fd8a7883abad382ff124c73566a4efa389  ./app/src/main/java/com/trivox/client/ui/compose/WorldMapCard.kt
 d2694c1ef6d46a65e653664dea876ee03f6e912013aee22789252f3faa297407  ./app/src/main/java/com/trivox/client/ui/compose/WorldMapGeo.kt
 fe3e713b919d56dc47b4df13e49a43c0fc3fe1bd2958c5df8ce67bcb69b1cacd  ./app/src/main/res/values-fa/strings_v22.xml
 fbeb3169602037869c7c2b966ddcd85e37f0c3e182b20b2084066ce2f7af07ba  ./app/src/main/res/values/strings_v22.xml
@@ -230,3 +230,9 @@ a674d99f2d9882c76cdcc9b5a020450b79a23553c509a2b36ede6397014e7315  ./app/src/main
 eb6415a6e03bd310e31f0e4dbea1430a47a2f2420472e4ad52c8f4c0b23a77e2  ./app/src/main/res/drawable/ic_launcher_ocean.xml
 a7738ce3e2ca6c00fdab69384b180ac80c6574e2a16e4e2eded7aa961667084f  ./app/src/main/res/values-fa/strings_v26.xml
 4fbb6b1690ab751465330de46a2d694e5dabb42ddfffcfc760c3f4d592a6fd27  ./app/src/main/res/values/strings_v26.xml
+fa4e1e27d7ab47fb17dfeeedf000e12d51b00ebba5e4d560a5def85f9b36b2e0  ./app/src/main/java/com/trivox/client/ui/compose/TrivoxAdaptiveDesign.kt
+bd90170af18d6aee40b05ba116e74aca6be42a8d2cac5c99b73003331d1cec9c  ./app/src/main/res/drawable/ic_sf_configs_fill.xml
+b1c7c98eb2c25975d20435637f64eff8e813ab5e4af11aeb6f0bfc3259b2646c  ./app/src/main/res/drawable/ic_sf_home_fill.xml
+6d67747c6cf4472f8a852cda8cf0122a81a0ec810feeb4c1464fbe605cec8514  ./app/src/main/res/drawable/ic_sf_settings_fill.xml
+f19048790416d4ee774f353636e102ae34fd80f1c811861efb201bc4a9d0eafc  ./app/src/main/res/drawable/ic_sf_subscriptions_fill.xml
+1bae9a0b5b6b3eec2be7d473c38fe23732257c9edf4c0fb3f1d73f05bc78b960  ./app/src/main/res/drawable/ic_sf_tools_fill.xml

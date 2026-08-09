@@ -51,6 +51,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -166,12 +167,15 @@ interface MainComposeActions {
     fun composeUsageHistory(): List<ConnectionUsageStore.SessionRecord>
 }
 
-private enum class MainTab(val iconRes: Int) {
-    HOME(R.drawable.ic_nav_home),
-    CONFIGS(R.drawable.ic_nav_configs),
-    SUBSCRIPTIONS(R.drawable.ic_nav_subscriptions),
-    TOOLS(R.drawable.ic_nav_tools),
-    SETTINGS(R.drawable.ic_nav_settings)
+private enum class MainTab(
+    val outlineIconRes: Int,
+    val filledIconRes: Int
+) {
+    HOME(R.drawable.ic_nav_home, R.drawable.ic_sf_home_fill),
+    CONFIGS(R.drawable.ic_nav_configs, R.drawable.ic_sf_configs_fill),
+    SUBSCRIPTIONS(R.drawable.ic_nav_subscriptions, R.drawable.ic_sf_subscriptions_fill),
+    TOOLS(R.drawable.ic_nav_tools, R.drawable.ic_sf_tools_fill),
+    SETTINGS(R.drawable.ic_nav_settings, R.drawable.ic_sf_settings_fill)
 }
 
 @Composable
@@ -185,9 +189,7 @@ fun MainComposeScreen(activity: Activity, actions: MainComposeActions) {
             if (settings.experienceMode == ExperienceMode.SIMPLE) {
                 if (simpleSettings) {
                     Column(Modifier.fillMaxSize()) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
-                        ) {
+                        TrivoxGlassBar {
                             Row(
                                 Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -221,37 +223,59 @@ fun MainComposeScreen(activity: Activity, actions: MainComposeActions) {
             }
 
             var tab by rememberSaveable { mutableStateOf(MainTab.HOME) }
+            val scrollBehavior = rememberTrivoxTopBarScrollBehavior()
+            LaunchedEffect(tab) {
+                scrollBehavior.state.heightOffset = 0f
+                scrollBehavior.state.contentOffset = 0f
+            }
             Scaffold(
+                modifier = Modifier.trivoxNestedScroll(scrollBehavior),
                 containerColor = Color.Transparent,
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
-                topBar = { MainTopBar(activity, tab) },
+                topBar = {
+                    TrivoxLargeTopBar(
+                        title = tabLabel(activity, tab),
+                        scrollBehavior = scrollBehavior
+                    )
+                },
                 bottomBar = {
-                    NavigationBar(
-                        windowInsets = WindowInsets(0, 0, 0, 0),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.94f),
-                        tonalElevation = 2.dp
-                    ) {
-                        MainTab.entries.forEach { item ->
-                            val selected = tab == item
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = { tab = item },
-                                icon = {
-                                    Icon(
-                                        painter = painterResource(item.iconRes),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(21.dp)
-                                    )
-                                },
-                                label = {
-                                    Text(
-                                        tabLabel(activity, item),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        fontSize = 10.sp
-                                    )
-                                }
-                            )
+                    TrivoxGlassBar {
+                        NavigationBar(
+                            windowInsets = WindowInsets(0, 0, 0, 0),
+                            containerColor = Color.Transparent,
+                            tonalElevation = 0.dp
+                        ) {
+                            MainTab.entries.forEach { item ->
+                                val selected = tab == item
+                                NavigationBarItem(
+                                    selected = selected,
+                                    onClick = { tab = item },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.70f),
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.70f)
+                                    ),
+                                    icon = {
+                                        Icon(
+                                            painter = painterResource(
+                                                if (selected) item.filledIconRes else item.outlineIconRes
+                                            ),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(21.dp)
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            tabLabel(activity, item),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -623,7 +647,7 @@ private fun HomeTab(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.elevatedCardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    containerColor = MaterialTheme.colorScheme.surface
                 )
             ) {
                 Column(
@@ -901,7 +925,7 @@ private fun HomeTab(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Switch(
+                    TrivoxToggle(
                         checked = settings.autoLeakProtection,
                         onCheckedChange = {
                             actions.composeSaveSettings(
@@ -1174,6 +1198,7 @@ private fun ConfigsTab(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ProfileCard(
     activity: Activity,
@@ -1187,8 +1212,11 @@ private fun ProfileCard(
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize()
-            .clickable { actions.composeSelectProfile(profile.id) },
-        shape = RoundedCornerShape(20.dp),
+            .combinedClickable(
+                onClick = { actions.composeSelectProfile(profile.id) },
+                onLongClick = { actions.composeProfileActions(profile.id) }
+            ),
+        shape = TrivoxOuterShape,
         border = BorderStroke(
             if (selected) 1.5.dp else 1.dp,
             if (selected) MaterialTheme.colorScheme.primary
@@ -1263,7 +1291,7 @@ private fun CompactProfileCard(
                 Text(
                     if (profile.tcpTestStatus == TestStatus.TESTING) "TCP…"
                     else activity.getString(R.string.compose_test_tcp),
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 10.sp
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium
                 )
             }
             TextButton(
@@ -1275,7 +1303,7 @@ private fun CompactProfileCard(
                     if (profile.realTestStatus == TestStatus.TESTING)
                         "${activity.getString(R.string.compose_real_label)}…"
                     else activity.getString(R.string.compose_test_real),
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 10.sp
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium
                 )
             }
         }
@@ -1440,13 +1468,13 @@ private fun SubscriptionCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { actions.composeOpenSubscriptions(source.id) },
-        shape = RoundedCornerShape(18.dp),
+        shape = TrivoxOuterShape,
         border = BorderStroke(
             1.dp,
             MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.75f)
         ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
         Column(
@@ -1616,7 +1644,7 @@ private fun ConfigScopeChip(
                 onClick = onClick,
                 onLongClick = onLongClick
             ),
-        shape = RoundedCornerShape(14.dp),
+        shape = TrivoxInnerShape,
         color = if (selected) {
             MaterialTheme.colorScheme.secondaryContainer
         } else {
@@ -1716,22 +1744,7 @@ private fun BatchStateBanner(activity: Activity, state: ComposeBatchState) {
 
 @Composable
 private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        )
-    ) {
-        Column(
-            Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            content()
-        }
-    }
+    TrivoxInsetGroup(title = title, content = content)
 }
 
 @Composable
@@ -1742,7 +1755,7 @@ private fun SmallAction(
     onClick: () -> Unit
 ) {
     OutlinedButton(onClick = onClick, modifier = modifier, enabled = enabled) {
-        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 11.sp)
+        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
     }
 }
 
@@ -1750,7 +1763,7 @@ private fun SmallAction(
 private fun MetricChip(value: String, label: String, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(13.dp),
+        shape = TrivoxInnerShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
         Column(
@@ -1778,7 +1791,7 @@ private fun LatencyMetric(
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(13.dp),
+        shape = TrivoxInnerShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
         Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1824,13 +1837,13 @@ private fun ToolButton(title: String, subtitle: String, onClick: () -> Unit) {
             .fillMaxWidth()
             .height(112.dp)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
+        shape = TrivoxOuterShape,
         border = BorderStroke(
             1.dp,
             MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
         ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
         Column(
@@ -1881,7 +1894,7 @@ private fun SettingToggle(label: String, checked: Boolean, onCheckedChange: (Boo
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        TrivoxToggle(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
@@ -1889,7 +1902,7 @@ private fun SettingToggle(label: String, checked: Boolean, onCheckedChange: (Boo
 private fun EmptyCard(text: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(17.dp),
+        shape = TrivoxOuterShape,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
     ) {
         Text(
