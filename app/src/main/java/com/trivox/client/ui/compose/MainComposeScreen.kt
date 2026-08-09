@@ -1346,11 +1346,21 @@ private fun CompactProfileCard(
                 Text("⋮", fontSize = 20.sp, color = MaterialTheme.colorScheme.primary)
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            LatencyPill("TCP", profile.tcpLatencyMs, profile.tcpTestStatus)
-            LatencyPill(
-                activity.getString(R.string.compose_real_label),
-                profile.realLatencyMs, profile.realTestStatus
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            LatencyCell(
+                label = "TCP",
+                latency = profile.tcpLatencyMs,
+                status = profile.tcpTestStatus,
+                modifier = Modifier.weight(1f)
+            )
+            LatencyCell(
+                label = activity.getString(R.string.compose_real_label),
+                latency = profile.realLatencyMs,
+                status = profile.realTestStatus,
+                modifier = Modifier.weight(1f)
             )
         }
         if (
@@ -1426,11 +1436,21 @@ private fun ListProfileCard(
                 Text("⋮", fontSize = 22.sp, color = MaterialTheme.colorScheme.primary)
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            LatencyPill("TCP", profile.tcpLatencyMs, profile.tcpTestStatus)
-            LatencyPill(
-                activity.getString(R.string.compose_real_label),
-                profile.realLatencyMs, profile.realTestStatus
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            LatencyCell(
+                label = "TCP",
+                latency = profile.tcpLatencyMs,
+                status = profile.tcpTestStatus,
+                modifier = Modifier.weight(1f)
+            )
+            LatencyCell(
+                label = activity.getString(R.string.compose_real_label),
+                latency = profile.realLatencyMs,
+                status = profile.realTestStatus,
+                modifier = Modifier.weight(1f)
             )
         }
         if (
@@ -1488,12 +1508,26 @@ private fun SubscriptionsTab(
     uiRevision: Int,
     modifier: Modifier = Modifier
 ) {
+    var query by rememberSaveable { mutableStateOf("") }
     val sources = remember(uiRevision) { actions.composeSubscriptions() }
+    val settings = remember(uiRevision) { actions.composeSettings() }
     val refreshing = remember(uiRevision) { actions.composeSubscriptionRefreshing() }
+    val communityBusy = actions.composeCommunitySyncBusy()
+    val communityStatus = actions.composeCommunityStatus()
     val sourceCounts = remember(uiRevision) {
         actions.composeProfiles("", null, false)
             .groupingBy { it.subscriptionId }
             .eachCount()
+    }
+    val communityCount = sourceCounts[CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID] ?: 0
+    val filteredSources = remember(query, sources) {
+        val needle = query.trim().lowercase(Locale.ROOT)
+        if (needle.isBlank()) sources
+        else sources.filter { source ->
+            source.name.lowercase(Locale.ROOT).contains(needle) ||
+                source.url.lowercase(Locale.ROOT).contains(needle) ||
+                source.kind.name.lowercase(Locale.ROOT).contains(needle)
+        }
     }
 
     LazyColumn(
@@ -1501,6 +1535,34 @@ private fun SubscriptionsTab(
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                MetricChip(
+                    value = sources.size.toString(),
+                    label = activity.getString(R.string.tab_subscriptions),
+                    modifier = Modifier.weight(1f)
+                )
+                MetricChip(
+                    value = communityCount.toString(),
+                    label = activity.getString(R.string.v26_community_section),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        item {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text(activity.getString(R.string.search)) }
+            )
+        }
+
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
@@ -1510,7 +1572,7 @@ private fun SubscriptionsTab(
                     TrivoxAutoFitButtonText(
                         text = activity.getString(R.string.add_subscription),
                         modifier = Modifier.fillMaxWidth(),
-                        maxFontSize = 15.sp,
+                        maxFontSize = 14.sp,
                         minFontSize = 9.sp
                     )
                 }
@@ -1526,17 +1588,97 @@ private fun SubscriptionsTab(
                             activity.getString(R.string.update_all_subscriptions)
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        maxFontSize = 14.sp,
+                        maxFontSize = 13.sp,
                         minFontSize = 8.sp
                     )
                 }
             }
         }
 
-        if (sources.isEmpty()) {
-            item { EmptyCard(activity.getString(R.string.no_subscriptions)) }
+        item {
+            SectionCard(activity.getString(R.string.v26_community_section)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "@${settings.communityChannelUsername}",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            activity.getString(R.string.v26_community_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh
+                    ) {
+                        Text(
+                            communityCount.toString(),
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = actions::composeCommunitySync,
+                        enabled = settings.communitySourceEnabled && !communityBusy,
+                        modifier = Modifier.weight(1f).height(42.dp).trivoxSpringPress(!communityBusy)
+                    ) {
+                        if (communityBusy) {
+                            CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        TrivoxAutoFitButtonText(
+                            text = activity.getString(R.string.v26_community_sync),
+                            modifier = Modifier.weight(1f),
+                            maxFontSize = 13.sp,
+                            minFontSize = 8.sp
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = actions::composeOpenCommunityChannel,
+                        modifier = Modifier.weight(1f).height(42.dp).trivoxSpringPress()
+                    ) {
+                        TrivoxAutoFitButtonText(
+                            text = activity.getString(R.string.v26_community_open),
+                            modifier = Modifier.fillMaxWidth(),
+                            maxFontSize = 13.sp,
+                            minFontSize = 8.sp
+                        )
+                    }
+                }
+
+                if (communityStatus.isNotBlank()) {
+                    Text(
+                        communityStatus,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+
+        if (filteredSources.isEmpty()) {
+            item {
+                EmptyCard(
+                    if (sources.isEmpty()) activity.getString(R.string.no_subscriptions)
+                    else activity.getString(R.string.no_profiles)
+                )
+            }
         } else {
-            lazyItems(sources, key = { it.id }) { source ->
+            lazyItems(filteredSources, key = { it.id }) { source ->
                 SubscriptionCard(
                     activity = activity,
                     source = source,
@@ -1909,7 +2051,12 @@ private fun LatencyMetric(
 }
 
 @Composable
-private fun LatencyPill(label: String, latency: Long?, status: TestStatus) {
+private fun LatencyCell(
+    label: String,
+    latency: Long?,
+    status: TestStatus,
+    modifier: Modifier = Modifier
+) {
     val container = when (status) {
         TestStatus.ALIVE -> MaterialTheme.colorScheme.secondaryContainer
         TestStatus.DEAD, TestStatus.ERROR -> MaterialTheme.colorScheme.errorContainer
@@ -1922,14 +2069,51 @@ private fun LatencyPill(label: String, latency: Long?, status: TestStatus) {
         TestStatus.TESTING -> MaterialTheme.colorScheme.onPrimaryContainer
         TestStatus.UNTESTED -> MaterialTheme.colorScheme.onSurfaceVariant
     }
-    Surface(shape = RoundedCornerShape(50), color = container) {
-        Text(
-            "$label ${latency?.let { "${it}ms" } ?: testStatusLabel(status)}",
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.bodySmall,
-            color = content,
-            maxLines = 1
-        )
+    val value = latency?.let { "${it} ms" } ?: testStatusLabel(status)
+
+    Surface(
+        modifier = modifier.height(46.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = container,
+        contentColor = content
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = label,
+                    fontSize = 10.sp,
+                    lineHeight = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = content.copy(alpha = 0.78f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = value,
+                    fontSize = 13.sp,
+                    lineHeight = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = content,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            if (status != TestStatus.UNTESTED) {
+                Surface(
+                    modifier = Modifier.size(7.dp),
+                    shape = CircleShape,
+                    color = content.copy(alpha = 0.72f)
+                ) {}
+            }
+        }
     }
 }
 

@@ -50,7 +50,8 @@ class CommunityConfigManager(context: Context) {
 
     fun sync(
         username: String,
-        allowLocalFallback: Boolean = true
+        allowLocalFallback: Boolean = true,
+        mode: String = "advanced"
     ): SyncResult {
         val normalized = normalizeUsername(username)
             ?: return SyncResult(false, source = username, error = "invalid_channel_username")
@@ -61,7 +62,7 @@ class CommunityConfigManager(context: Context) {
             var selectedRoute = ""
             var links: List<String> = emptyList()
 
-            for (candidate in sourceCandidates(normalized)) {
+            for (candidate in sourceCandidates(normalized, mode)) {
                 val attempt = runCatching { fetchUrl(candidate.url) }
                 if (attempt.isFailure) {
                     val error = attempt.exceptionOrNull()
@@ -230,9 +231,23 @@ class CommunityConfigManager(context: Context) {
                     .apply()
             }
 
-    private fun sourceCandidates(username: String): List<SourceCandidate> {
+    private fun sourceCandidates(
+        username: String,
+        mode: String
+    ): List<SourceCandidate> {
         val nonce = System.currentTimeMillis()
+        val normalizedMode = if (mode.equals("simple", ignoreCase = true)) {
+            "simple"
+        } else {
+            "advanced"
+        }
         return buildList {
+            add(
+                SourceCandidate(
+                    label = "Trivox Cloudflare Community",
+                    url = "$WORKER_BASE_URL/api/public/configs.txt?mode=$normalizedMode&trivox_sync=$nonce"
+                )
+            )
             add(
                 SourceCandidate(
                     label = "Fresh relay",
@@ -374,8 +389,9 @@ class CommunityConfigManager(context: Context) {
     companion object {
         const val DEFAULT_CHANNEL = "farahvpn"
         const val COMMUNITY_SUBSCRIPTION_ID = "community:telegram:public"
-        const val DEFAULT_SYNC_AGE_MS = 6 * 60 * 60 * 1000L
+        const val DEFAULT_SYNC_AGE_MS = 10 * 60 * 1000L
 
+        private const val WORKER_BASE_URL = "https://trivoxworker.toriavolx.workers.dev"
         private const val MIRROR_REPOSITORY = "marble098/Trivox"
         private const val MIRROR_BRANCH = "community-cache"
 
@@ -385,16 +401,16 @@ class CommunityConfigManager(context: Context) {
         private const val KEY_LAST_COUNT = "last_count"
         private const val KEY_LAST_ROUTE = "last_route"
 
-        private const val MAX_HTML_CHARS = 2 * 1024 * 1024
-        private const val MAX_DISCOVERED_LINKS = 160
-        private const val MAX_IMPORTED_PROFILES = 60
+        private const val MAX_HTML_CHARS = 4 * 1024 * 1024
+        private const val MAX_DISCOVERED_LINKS = 240
+        private const val MAX_IMPORTED_PROFILES = 120
         private const val MAX_LINK_CHARS = 16 * 1024
         private const val MAX_REPORTED_FAILURES = 5
 
         private const val CONNECT_TIMEOUT_MS = 4_000
         private const val READ_TIMEOUT_MS = 10_000
         private const val USER_AGENT =
-            "Mozilla/5.0 (Android) Trivox/31 FreshCommunitySync"
+            "Mozilla/5.0 (Android) Trivox/32.5 CloudflareCommunity"
 
         private val USERNAME = Regex("^[A-Za-z0-9_]{5,32}$")
         private val CONFIG_LINK = Regex(
