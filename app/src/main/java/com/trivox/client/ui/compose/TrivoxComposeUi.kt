@@ -107,7 +107,6 @@ private val TrivoxShapes = Shapes(
 )
 
 @Composable
-@Composable
 fun TrivoxTheme(activity: Activity, content: @Composable () -> Unit) {
     val settings = SettingsRepository(activity).load()
     val dark = resolveTrivoxDark(settings.themeMode, isSystemInDarkTheme())
