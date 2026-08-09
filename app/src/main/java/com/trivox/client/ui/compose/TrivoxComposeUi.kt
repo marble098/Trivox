@@ -80,6 +80,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.trivox.client.R
+import com.trivox.client.data.AppSettings
 import com.trivox.client.data.SettingsRepository
 import com.trivox.client.data.ThemeMode
 import com.trivox.client.data.VisualTheme
@@ -115,8 +116,12 @@ private val TrivoxShapes = Shapes(
 )
 
 @Composable
-fun TrivoxTheme(activity: Activity, content: @Composable () -> Unit) {
-    val settings = SettingsRepository(activity).load()
+fun TrivoxTheme(
+    activity: Activity,
+    settingsOverride: AppSettings? = null,
+    content: @Composable () -> Unit
+) {
+    val settings = settingsOverride ?: SettingsRepository(activity).load()
     val dark = resolveTrivoxDark(settings.themeMode, isSystemInDarkTheme())
     val adaptiveBase = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         if (dark) dynamicDarkColorScheme(activity) else dynamicLightColorScheme(activity)
@@ -136,9 +141,10 @@ fun TrivoxTheme(activity: Activity, content: @Composable () -> Unit) {
 @Composable
 fun TrivoxGradientBackground(
     activity: Activity,
+    settingsOverride: AppSettings? = null,
     content: @Composable () -> Unit
 ) {
-    val settings = SettingsRepository(activity).load()
+    val settings = settingsOverride ?: SettingsRepository(activity).load()
     val dark = resolveTrivoxDark(settings.themeMode, isSystemInDarkTheme())
     Box(
         modifier = Modifier
@@ -146,10 +152,15 @@ fun TrivoxGradientBackground(
             .background(
                 Brush.verticalGradient(
                     trivoxGradient(settings.visualTheme, dark).map { accent ->
+                        val blend = when (settings.visualTheme) {
+                            VisualTheme.CLASSIC -> if (dark) 0.36f else 0.42f
+                            VisualTheme.GRAPHITE -> if (dark) 0.58f else 0.62f
+                            else -> if (dark) 0.66f else 0.74f
+                        }
                         lerp(
                             MaterialTheme.colorScheme.background,
                             accent,
-                            if (dark) 0.18f else 0.12f
+                            blend
                         )
                     }
                 )
@@ -288,25 +299,85 @@ private fun trivoxColorScheme(
         }
     }
 
-    val systemBlue = if (dark) TrivoxUiTokens.systemBlueDark else TrivoxUiTokens.systemBlueLight
-    val pageBackground = if (dark) Color.Black else TrivoxUiTokens.systemGray6Light
-    val groupedSurface = if (dark) TrivoxUiTokens.systemGray6Dark else Color.White
-    val groupedSurfaceHigh = if (dark) Color(0xFF2C2C2E) else Color(0xFFE5E5EA)
+    val classicAccent =
+        if (dark) TrivoxUiTokens.systemBlueDark else TrivoxUiTokens.systemBlueLight
+    val accent = when (visual) {
+        VisualTheme.CLASSIC -> classicAccent
+        else -> themed.primary
+    }
+    val onAccent = when {
+        !dark -> Color.White
+        visual == VisualTheme.CLASSIC -> Color.White
+        else -> Color(0xFF101114)
+    }
+
+    /*
+     * Keep the iOS-like neutral page foundation from v27, but tint controls,
+     * grouped surfaces, dividers and containers with the selected visual
+     * theme.  The old v27 code replaced every theme primary with System Blue
+     * and every surface with the same neutral colors, which made most themes
+     * look effectively identical.
+     */
+    val pageBackground =
+        if (dark) Color.Black else TrivoxUiTokens.systemGray6Light
+    val neutralSurface =
+        if (dark) TrivoxUiTokens.systemGray6Dark else Color.White
+    val neutralSurfaceHigh =
+        if (dark) Color(0xFF2C2C2E) else Color(0xFFE5E5EA)
+    val neutralOutline =
+        if (dark) Color(0xFF636366) else Color(0xFF8E8E93)
+    val neutralOutlineVariant =
+        if (dark) Color(0xFF3A3A3C) else Color(0xFFD1D1D6)
+
+    val groupedSurface = lerp(
+        neutralSurface,
+        accent,
+        if (dark) 0.060f else 0.026f
+    )
+    val groupedSurfaceLow = lerp(
+        neutralSurface,
+        accent,
+        if (dark) 0.035f else 0.016f
+    )
+    val groupedSurfaceHigh = lerp(
+        neutralSurfaceHigh,
+        accent,
+        if (dark) 0.090f else 0.060f
+    )
+    val themedOutline = lerp(
+        neutralOutline,
+        accent,
+        if (dark) 0.12f else 0.10f
+    )
+    val themedOutlineVariant = lerp(
+        neutralOutlineVariant,
+        accent,
+        if (dark) 0.14f else 0.10f
+    )
 
     return themed.copy(
-        primary = systemBlue,
-        onPrimary = Color.White,
-        primaryContainer = systemBlue.copy(alpha = if (dark) 0.24f else 0.14f),
-        onPrimaryContainer = if (dark) Color(0xFFD9E7FF) else Color(0xFF002A55),
+        primary = accent,
+        onPrimary = onAccent,
+        primaryContainer = lerp(
+            groupedSurface,
+            accent,
+            if (dark) 0.24f else 0.16f
+        ),
+        onPrimaryContainer =
+            if (dark) Color(0xFFF2F2F7) else Color(0xFF1C1C1E),
         background = pageBackground,
-        onBackground = if (dark) Color(0xFFF2F2F7) else Color(0xFF1C1C1E),
+        onBackground =
+            if (dark) Color(0xFFF2F2F7) else Color(0xFF1C1C1E),
         surface = groupedSurface,
-        onSurface = if (dark) Color(0xFFF2F2F7) else Color(0xFF1C1C1E),
+        onSurface =
+            if (dark) Color(0xFFF2F2F7) else Color(0xFF1C1C1E),
         surfaceContainer = groupedSurface,
-        surfaceContainerLow = groupedSurface,
+        surfaceContainerLow = groupedSurfaceLow,
         surfaceContainerHigh = groupedSurfaceHigh,
         surfaceVariant = groupedSurfaceHigh,
-        outlineVariant = if (dark) Color(0xFF3A3A3C) else Color(0xFFD1D1D6)
+        outline = themedOutline,
+        outlineVariant = themedOutlineVariant,
+        surfaceTint = accent
     )
 }
 

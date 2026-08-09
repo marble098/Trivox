@@ -182,12 +182,19 @@ private enum class MainTab(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainComposeScreen(activity: Activity, actions: MainComposeActions) {
-    TrivoxTheme(activity) {
-        val revision = actions.composeRevision()
-        val settings = remember(revision) { actions.composeSettings() }
+    val revision = actions.composeRevision()
+    val settings = remember(revision) { actions.composeSettings() }
+
+    TrivoxTheme(
+        activity = activity,
+        settingsOverride = settings
+    ) {
         var simpleSettings by rememberSaveable { mutableStateOf(false) }
 
-        TrivoxGradientBackground(activity) {
+        TrivoxGradientBackground(
+            activity = activity,
+            settingsOverride = settings
+        ) {
             if (settings.experienceMode == ExperienceMode.SIMPLE) {
                 if (simpleSettings) {
                     Column(Modifier.fillMaxSize()) {
@@ -255,14 +262,14 @@ fun MainComposeScreen(activity: Activity, actions: MainComposeActions) {
                                     colors = NavigationBarItemDefaults.colors(
                                         selectedIconColor = MaterialTheme.colorScheme.primary,
                                         selectedTextColor = MaterialTheme.colorScheme.primary,
-                                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                        indicatorColor = Color.Transparent,
                                         unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.70f),
                                         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.70f)
                                     ),
                                     icon = {
                                         Icon(
                                             painter = painterResource(
-                                                if (selected) item.filledIconRes else item.outlineIconRes
+                                                item.outlineIconRes
                                             ),
                                             contentDescription = null,
                                             modifier = Modifier.size(21.dp)

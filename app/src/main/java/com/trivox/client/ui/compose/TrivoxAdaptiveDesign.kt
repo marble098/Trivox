@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -198,15 +199,22 @@ internal fun TrivoxGlassBar(
     content: @Composable BoxScope.() -> Unit
 ) {
     val surface = MaterialTheme.colorScheme.surface
-    val edge = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.46f)
+    val primary = MaterialTheme.colorScheme.primary
+    val glassTop = lerp(surface, primary, 0.045f)
+    val glassBottom = lerp(surface, primary, 0.018f)
+    val edge = lerp(
+        MaterialTheme.colorScheme.outlineVariant,
+        primary,
+        0.18f
+    ).copy(alpha = 0.50f)
     Box(
         modifier = modifier
             .fillMaxWidth()
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        surface.copy(alpha = 0.86f),
-                        surface.copy(alpha = 0.72f)
+                        glassTop.copy(alpha = 0.90f),
+                        glassBottom.copy(alpha = 0.78f)
                     )
                 )
             )
@@ -328,8 +336,14 @@ internal fun TrivoxLargeTopBar(
 ) {
     val collapsed = scrollBehavior.state.collapsedFraction.coerceIn(0f, 1f)
     val surface = MaterialTheme.colorScheme.surface
-    val glassEdge =
-        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.38f)
+    val primary = MaterialTheme.colorScheme.primary
+    val glassSurface = lerp(surface, primary, 0.035f)
+    val glassScrolledSurface = lerp(surface, primary, 0.055f)
+    val glassEdge = lerp(
+        MaterialTheme.colorScheme.outlineVariant,
+        primary,
+        0.16f
+    ).copy(alpha = 0.44f)
 
     LargeTopAppBar(
         modifier = Modifier.drawBehind {
@@ -340,6 +354,8 @@ internal fun TrivoxLargeTopBar(
                 strokeWidth = 1f
             )
         },
+        collapsedHeight = 64.dp,
+        expandedHeight = 104.dp,
         title = {
             Box(Modifier.fillMaxWidth()) {
                 Text(
@@ -401,9 +417,9 @@ internal fun TrivoxLargeTopBar(
                 }
             }
         },
-        colors = TopAppBarDefaults.largeTopAppBarColors(
-            containerColor = surface.copy(alpha = 0.78f),
-            scrolledContainerColor = surface.copy(alpha = 0.90f),
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = glassSurface.copy(alpha = 0.86f),
+            scrolledContainerColor = glassScrolledSurface.copy(alpha = 0.94f),
             titleContentColor = MaterialTheme.colorScheme.onSurface,
             navigationIconContentColor = MaterialTheme.colorScheme.primary
         ),
