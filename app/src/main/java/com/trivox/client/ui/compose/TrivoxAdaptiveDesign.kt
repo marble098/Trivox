@@ -242,11 +242,13 @@ internal fun TrivoxLargeTopBar(
 ) {
     val collapsed = scrollBehavior.state.collapsedFraction.coerceIn(0f, 1f)
     val surface = MaterialTheme.colorScheme.surface
+    val glassEdge =
+        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.38f)
 
     LargeTopAppBar(
         modifier = Modifier.drawBehind {
             drawLine(
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.38f),
+                color = glassEdge,
                 start = androidx.compose.ui.geometry.Offset(0f, size.height - 0.5f),
                 end = androidx.compose.ui.geometry.Offset(size.width, size.height - 0.5f),
                 strokeWidth = 1f

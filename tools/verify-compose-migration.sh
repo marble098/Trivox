@@ -145,7 +145,12 @@ grep -Fq 'current.realTestStatus = TestStatus.TESTING' "$main_activity" || \
   fail "Real Delay tests do not publish method-specific running state"
 grep -Fq 'repairStaleTestingStates' "$main_activity" || fail "stale testing-state recovery missing"
 grep -Fq 'RadioButton' "$routing_compose" || fail "responsive routing policy selector missing"
-grep -Fq 'AlertDialog' "$legacy_compose" || fail "safe spinner dialog renderer missing"
+grep -Fq 'ModalBottomSheet' "$legacy_compose" || \
+  fail "safe spinner bottom-sheet renderer missing"
+grep -Fq 'rememberModalBottomSheetState' "$legacy_compose" || \
+  fail "spinner bottom-sheet state handling missing"
+grep -Fq 'skipPartiallyExpanded = false' "$legacy_compose" || \
+  fail "spinner bottom-sheet swipe/partial state contract missing"
 
 echo "Compose Material 3 migration verification passed."
 

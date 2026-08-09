@@ -211,7 +211,7 @@ d9775eefee793eb1a110e470ab92688a0a8f5040a619b2435e5ebb397e57b9ea  ./tools/openss
 03d4961aeb69ca9e3278ec4c3f1757a8a9237cf5ecf79825be386e19f70d949e  ./tools/validate-android-resources.py
 5e0eaf59e140118cf08891e912a2b945b09adbb3f823f4e6c4e82097742f2c93  ./tools/validate-api-guards.py
 94e56f1059f0981fad2db85aa1e43a8b93a93ebbf37479d016143e91d587fe37  ./tools/validate-string-formats.py
-5fde438fe2bd824a95ea60d22a7c16abb420685868a30d20b6fb7f1d9e3d7eeb  ./tools/verify-compose-migration.sh
+e40e5100bbb7b41976372c1193675843215a6b38adb3fc50f81c87696b599a5d  ./tools/verify-compose-migration.sh
 ccb3b446e0b3fdf69ca596310507a3fd8a7883abad382ff124c73566a4efa389  ./app/src/main/java/com/trivox/client/ui/compose/WorldMapCard.kt
 d2694c1ef6d46a65e653664dea876ee03f6e912013aee22789252f3faa297407  ./app/src/main/java/com/trivox/client/ui/compose/WorldMapGeo.kt
 fe3e713b919d56dc47b4df13e49a43c0fc3fe1bd2958c5df8ce67bcb69b1cacd  ./app/src/main/res/values-fa/strings_v22.xml
@@ -230,7 +230,7 @@ a674d99f2d9882c76cdcc9b5a020450b79a23553c509a2b36ede6397014e7315  ./app/src/main
 eb6415a6e03bd310e31f0e4dbea1430a47a2f2420472e4ad52c8f4c0b23a77e2  ./app/src/main/res/drawable/ic_launcher_ocean.xml
 a7738ce3e2ca6c00fdab69384b180ac80c6574e2a16e4e2eded7aa961667084f  ./app/src/main/res/values-fa/strings_v26.xml
 4fbb6b1690ab751465330de46a2d694e5dabb42ddfffcfc760c3f4d592a6fd27  ./app/src/main/res/values/strings_v26.xml
-fa4e1e27d7ab47fb17dfeeedf000e12d51b00ebba5e4d560a5def85f9b36b2e0  ./app/src/main/java/com/trivox/client/ui/compose/TrivoxAdaptiveDesign.kt
+4c452f655ed1515f1f30335ea549055b1bd03c709a675b6deaea591de0c66148  ./app/src/main/java/com/trivox/client/ui/compose/TrivoxAdaptiveDesign.kt
 bd90170af18d6aee40b05ba116e74aca6be42a8d2cac5c99b73003331d1cec9c  ./app/src/main/res/drawable/ic_sf_configs_fill.xml
 b1c7c98eb2c25975d20435637f64eff8e813ab5e4af11aeb6f0bfc3259b2646c  ./app/src/main/res/drawable/ic_sf_home_fill.xml
 6d67747c6cf4472f8a852cda8cf0122a81a0ec810feeb4c1464fbe605cec8514  ./app/src/main/res/drawable/ic_sf_settings_fill.xml
