@@ -43,6 +43,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -178,6 +179,7 @@ private enum class MainTab(
     SETTINGS(R.drawable.ic_nav_settings, R.drawable.ic_sf_settings_fill)
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainComposeScreen(activity: Activity, actions: MainComposeActions) {
     TrivoxTheme(activity) {

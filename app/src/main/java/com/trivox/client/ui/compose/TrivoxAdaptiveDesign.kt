@@ -7,6 +7,8 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CornerBasedShape
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -44,49 +46,133 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlin.math.min
 
-internal class ContinuousCornerShape(
-    private val radius: Dp
-) : Shape {
+internal class ContinuousCornerShape private constructor(
+    topStart: CornerSize,
+    topEnd: CornerSize,
+    bottomEnd: CornerSize,
+    bottomStart: CornerSize
+) : CornerBasedShape(
+    topStart = topStart,
+    topEnd = topEnd,
+    bottomEnd = bottomEnd,
+    bottomStart = bottomStart
+) {
+    constructor(radius: Dp) : this(
+        topStart = CornerSize(radius),
+        topEnd = CornerSize(radius),
+        bottomEnd = CornerSize(radius),
+        bottomStart = CornerSize(radius)
+    )
+
+    override fun copy(
+        topStart: CornerSize,
+        topEnd: CornerSize,
+        bottomEnd: CornerSize,
+        bottomStart: CornerSize
+    ): CornerBasedShape = ContinuousCornerShape(
+        topStart = topStart,
+        topEnd = topEnd,
+        bottomEnd = bottomEnd,
+        bottomStart = bottomStart
+    )
+
     override fun createOutline(
         size: Size,
-        layoutDirection: LayoutDirection,
-        density: Density
+        topStart: Float,
+        topEnd: Float,
+        bottomEnd: Float,
+        bottomStart: Float,
+        layoutDirection: LayoutDirection
     ): Outline {
-        val r = with(density) { radius.toPx() }
-            .coerceIn(0f, min(size.width, size.height) / 2f)
-        if (r <= 0f) {
+        val maxRadius = min(size.width, size.height) / 2f
+
+        val topLeft = (
+            if (layoutDirection == LayoutDirection.Ltr) topStart else topEnd
+        ).coerceIn(0f, maxRadius)
+        val topRight = (
+            if (layoutDirection == LayoutDirection.Ltr) topEnd else topStart
+        ).coerceIn(0f, maxRadius)
+        val bottomRight = (
+            if (layoutDirection == LayoutDirection.Ltr) bottomEnd else bottomStart
+        ).coerceIn(0f, maxRadius)
+        val bottomLeft = (
+            if (layoutDirection == LayoutDirection.Ltr) bottomStart else bottomEnd
+        ).coerceIn(0f, maxRadius)
+
+        if (
+            topLeft <= 0f &&
+            topRight <= 0f &&
+            bottomRight <= 0f &&
+            bottomLeft <= 0f
+        ) {
             return Outline.Rectangle(
-                androidx.compose.ui.geometry.Rect(0f, 0f, size.width, size.height)
+                androidx.compose.ui.geometry.Rect(
+                    0f,
+                    0f,
+                    size.width,
+                    size.height
+                )
             )
         }
 
-        val c = r * 0.46f
-        val p = Path().apply {
-            moveTo(r, 0f)
-            lineTo(size.width - r, 0f)
-            cubicTo(size.width - r + c, 0f, size.width, r - c, size.width, r)
-            lineTo(size.width, size.height - r)
+        fun control(radius: Float): Float = radius * 0.46f
+
+        val topLeftControl = control(topLeft)
+        val topRightControl = control(topRight)
+        val bottomRightControl = control(bottomRight)
+        val bottomLeftControl = control(bottomLeft)
+
+        val path = Path().apply {
+            moveTo(topLeft, 0f)
+
+            lineTo(size.width - topRight, 0f)
+            cubicTo(
+                size.width - topRight + topRightControl,
+                0f,
+                size.width,
+                topRight - topRightControl,
+                size.width,
+                topRight
+            )
+
+            lineTo(size.width, size.height - bottomRight)
             cubicTo(
                 size.width,
-                size.height - r + c,
-                size.width - r + c,
+                size.height - bottomRight + bottomRightControl,
+                size.width - bottomRight + bottomRightControl,
                 size.height,
-                size.width - r,
+                size.width - bottomRight,
                 size.height
             )
-            lineTo(r, size.height)
-            cubicTo(r - c, size.height, 0f, size.height - r + c, 0f, size.height - r)
-            lineTo(0f, r)
-            cubicTo(0f, r - c, r - c, 0f, r, 0f)
+
+            lineTo(bottomLeft, size.height)
+            cubicTo(
+                bottomLeft - bottomLeftControl,
+                size.height,
+                0f,
+                size.height - bottomLeft + bottomLeftControl,
+                0f,
+                size.height - bottomLeft
+            )
+
+            lineTo(0f, topLeft)
+            cubicTo(
+                0f,
+                topLeft - topLeftControl,
+                topLeft - topLeftControl,
+                0f,
+                topLeft,
+                0f
+            )
             close()
         }
-        return Outline.Generic(p)
+
+        return Outline.Generic(path)
     }
 }
 
