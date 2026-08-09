@@ -6,6 +6,7 @@ package com.trivox.client.ui.compose
 
 import android.app.Activity
 import android.os.SystemClock
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -191,6 +192,11 @@ fun MainComposeScreen(activity: Activity, actions: MainComposeActions) {
         settingsOverride = settings
     ) {
         var simpleSettings by rememberSaveable { mutableStateOf(false) }
+        BackHandler(
+            enabled = settings.experienceMode == ExperienceMode.SIMPLE && simpleSettings
+        ) {
+            simpleSettings = false
+        }
 
         TrivoxGradientBackground(
             activity = activity,
@@ -453,11 +459,6 @@ private fun SimpleHomeScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold
                 )
-                Text(
-                    activity.getString(R.string.v26_community_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
                         onClick = actions::composeCommunitySync,
@@ -607,11 +608,6 @@ private fun UsageHistoryCard(
                 )
             }
         }
-        Text(
-            activity.getString(R.string.v26_usage_estimate_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f)
-        )
     }
 }
 
@@ -868,12 +864,15 @@ private fun HomeTab(
         }
 
         
-        item {
-            UsageHistoryCard(activity, actions, runtime)
+        if (settings.homeShowUsage) {
+            item {
+                UsageHistoryCard(activity, actions, runtime)
+            }
         }
 
-        item {
-            WorldMapCard(
+        if (settings.homeShowMap) {
+            item {
+                WorldMapCard(
                 connected =
                     runtime.state ==
                         ConnectionState.CONNECTED,
@@ -908,11 +907,13 @@ private fun HomeTab(
                     },
                 hideIp =
                     settings.hideIpOnMain
-            )
+                )
+            }
         }
 
-        item {
-            SectionCard(activity.getString(R.string.compose_latency_section)) {
+        if (settings.homeShowConnectionDetails) {
+            item {
+                SectionCard(activity.getString(R.string.compose_latency_section)) {
                 if (selected != null) {
                     ConnectionIpDetails(
                         activity = activity,
@@ -973,9 +974,11 @@ private fun HomeTab(
                 }
             }
         }
+        }
 
-        item {
-            SectionCard(activity.getString(R.string.v19_leak_guard_title)) {
+        if (settings.homeShowLeakGuard) {
+            item {
+                SectionCard(activity.getString(R.string.v19_leak_guard_title)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -985,11 +988,6 @@ private fun HomeTab(
                             activity.getString(R.string.v19_leak_guard_toggle),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            activity.getString(R.string.v21_leak_auto_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     TrivoxToggle(
@@ -1041,7 +1039,8 @@ private fun HomeTab(
             }
         }
 
-            }
+        }
+    }
 }
 
 @Composable
@@ -1185,14 +1184,6 @@ private fun ConfigsTab(
                 )
             }
             item {
-                ScopeOverflowPill(
-                    label = "⋮",
-                    onClick = {
-                        actions.composeSubscriptionActions("trivox-scope-all")
-                    }
-                )
-            }
-            item {
                 ConfigScopeChip(
                     label = activity.getString(R.string.v21_scope_favorites),
                     count = favoriteProfileCount,
@@ -1231,17 +1222,12 @@ private fun ConfigsTab(
                     },
                     onLongClick = {
                         actions.composeSubscriptionActions(source.id)
+                    },
+                    onMenuClick = {
+                        actions.composeSubscriptionActions(source.id)
                     }
                 )
             }
-        }
-
-        if (sources.isNotEmpty()) {
-            Text(
-                activity.getString(R.string.v15_subscription_long_press_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
 
         if (profiles.isEmpty()) {
@@ -1335,18 +1321,31 @@ private fun CompactProfileCard(
 ) {
     Column(
         Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(9.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(verticalAlignment = Alignment.Top) {
-            Column(Modifier.weight(1f)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    ProtocolBadge(profile)
+                    if (profile.favorite) FavoriteBadge()
+                }
                 Text(
-                    (if (profile.favorite) "★ " else "") + profile.name,
+                    profile.name,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(Modifier.height(3.dp))
                 Text(
                     profileEndpoint(profile, hideIp),
                     style = MaterialTheme.typography.bodySmall,
@@ -1355,40 +1354,37 @@ private fun CompactProfileCard(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Box(
-                Modifier.size(32.dp).clickable {
-                    actions.composeProfileActions(profile.id)
-                },
-                contentAlignment = Alignment.Center
-            ) {
-                Text("⋮", fontSize = 20.sp, color = MaterialTheme.colorScheme.primary)
-            }
+            ProfileOverflowButton { actions.composeProfileActions(profile.id) }
         }
+
         LatencyCell(
             label = activity.getString(R.string.compose_real_label),
             latency = profile.realLatencyMs,
             status = profile.realTestStatus,
             modifier = Modifier.fillMaxWidth()
         )
-        if (
-            profile.realTestStatus == TestStatus.TESTING
-        ) LinearProgressIndicator(Modifier.fillMaxWidth())
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            TextButton(
-                onClick = { actions.composePingProfile(profile.id, PingMethod.XRAY_HTTP) },
-                enabled = profile.realTestStatus != TestStatus.TESTING,
-                modifier = Modifier.weight(1f).height(36.dp)
-            ) {
-                TrivoxAutoFitButtonText(
-                    text = if (profile.realTestStatus == TestStatus.TESTING)
-                        "${activity.getString(R.string.compose_real_label)}…"
-                    else activity.getString(R.string.compose_test_real),
-                    modifier = Modifier.fillMaxWidth(),
-                    maxFontSize = 13.sp,
-                    minFontSize = 8.sp,
-                    style = MaterialTheme.typography.labelMedium
-                )
-            }
+        if (profile.realTestStatus == TestStatus.TESTING) {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+        }
+        FilledTonalButton(
+            onClick = { actions.composePingProfile(profile.id, PingMethod.XRAY_HTTP) },
+            enabled = profile.realTestStatus != TestStatus.TESTING,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(38.dp)
+                .trivoxSpringPress(profile.realTestStatus != TestStatus.TESTING)
+        ) {
+            TrivoxAutoFitButtonText(
+                text = if (profile.realTestStatus == TestStatus.TESTING) {
+                    "${activity.getString(R.string.compose_real_label)}…"
+                } else {
+                    activity.getString(R.string.compose_test_real)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                maxFontSize = 13.sp,
+                minFontSize = 8.sp,
+                style = MaterialTheme.typography.labelMedium
+            )
         }
     }
 }
@@ -1402,67 +1398,141 @@ private fun ListProfileCard(
 ) {
     Column(
         Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
-        verticalArrangement = Arrangement.spacedBy(9.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(verticalAlignment = Alignment.Top) {
-            Column(Modifier.weight(1f)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    ProtocolBadge(profile)
+                    if (profile.favorite) FavoriteBadge()
+                }
                 Text(
-                    (if (profile.favorite) "★ " else "") + profile.name,
+                    profile.name,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     profileEndpoint(profile, hideIp),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-            Box(
-                Modifier.size(36.dp).clickable {
-                    actions.composeProfileActions(profile.id)
-                },
-                contentAlignment = Alignment.Center
-            ) {
-                Text("⋮", fontSize = 22.sp, color = MaterialTheme.colorScheme.primary)
-            }
+            LatencyCell(
+                label = activity.getString(R.string.compose_real_label),
+                latency = profile.realLatencyMs,
+                status = profile.realTestStatus,
+                modifier = Modifier.width(104.dp)
+            )
+            ProfileOverflowButton { actions.composeProfileActions(profile.id) }
         }
-        LatencyCell(
-            label = activity.getString(R.string.compose_real_label),
-            latency = profile.realLatencyMs,
-            status = profile.realTestStatus,
-            modifier = Modifier.fillMaxWidth()
-        )
-        if (
-            profile.realTestStatus == TestStatus.TESTING
-        ) LinearProgressIndicator(Modifier.fillMaxWidth())
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(
-                onClick = { actions.composePingProfile(profile.id, PingMethod.XRAY_HTTP) },
-                enabled = profile.realTestStatus != TestStatus.TESTING,
-                modifier = Modifier.weight(1f).height(40.dp).trivoxSpringPress(profile.realTestStatus != TestStatus.TESTING)
-            ) {
-                TrivoxAutoFitButtonText(
-                    text = if (profile.realTestStatus == TestStatus.TESTING)
-                        "${activity.getString(R.string.compose_real_label)}…"
-                    else activity.getString(R.string.compose_test_real),
-                    modifier = Modifier.fillMaxWidth(),
-                    maxFontSize = 14.sp,
-                    minFontSize = 8.sp
-                )
-            }
+
+        if (profile.realTestStatus == TestStatus.TESTING) {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
         }
+
         if (
             profile.exitCountry.isNotBlank() ||
             (!hideIp && profile.exitIp.isNotBlank())
         ) {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Surface(
+                shape = TrivoxCompactShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh
+            ) {
+                Text(
+                    buildExitLine(profile, hideIp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        FilledTonalButton(
+            onClick = { actions.composePingProfile(profile.id, PingMethod.XRAY_HTTP) },
+            enabled = profile.realTestStatus != TestStatus.TESTING,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .trivoxSpringPress(profile.realTestStatus != TestStatus.TESTING)
+        ) {
+            TrivoxAutoFitButtonText(
+                text = if (profile.realTestStatus == TestStatus.TESTING) {
+                    "${activity.getString(R.string.compose_real_label)}…"
+                } else {
+                    activity.getString(R.string.compose_test_real)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                maxFontSize = 14.sp,
+                minFontSize = 8.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProtocolBadge(profile: ConfigProfile) {
+    Surface(
+        shape = TrivoxCompactShape,
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+    ) {
+        Text(
+            text = profile.protocol.uppercase(Locale.ROOT),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun FavoriteBadge() {
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+    ) {
+        Text(
+            text = "★",
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+            style = MaterialTheme.typography.labelSmall
+        )
+    }
+}
+
+@Composable
+private fun ProfileOverflowButton(onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier
+            .size(36.dp)
+            .trivoxSpringPress()
+            .clickable(onClick = onClick),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.primary
+    ) {
+        Box(contentAlignment = Alignment.Center) {
             Text(
-                buildExitLine(profile, hideIp),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1, overflow = TextOverflow.Ellipsis
+                text = "⋮",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
             )
         }
     }
@@ -1574,13 +1644,6 @@ private fun SubscriptionsTab(
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold
                         )
-                        Text(
-                            activity.getString(R.string.v26_community_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
                     }
                     Surface(
                         shape = CircleShape,
@@ -1675,7 +1738,7 @@ private fun SubscriptionCard(
             MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.92f)
         ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Column(
@@ -1717,10 +1780,8 @@ private fun SubscriptionCard(
                     )
                 }
                 Spacer(Modifier.width(4.dp))
-                TextButton(onClick = {
+                ProfileOverflowButton {
                     actions.composeSubscriptionActions(source.id)
-                }) {
-                    Text("⋮", fontSize = 18.sp)
                 }
             }
 
@@ -1807,24 +1868,6 @@ private fun SettingsTab(
     )
 }
 
-@Composable
-private fun ScopeOverflowPill(
-    label: String,
-    onClick: () -> Unit
-) {
-    OutlinedButton(
-        onClick = onClick,
-        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-        modifier = Modifier.height(40.dp)
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold
-        )
-    }
-}
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ConfigScopeChip(
@@ -1832,7 +1875,8 @@ private fun ConfigScopeChip(
     count: Int? = null,
     selected: Boolean,
     onClick: () -> Unit,
-    onLongClick: (() -> Unit)? = null
+    onLongClick: (() -> Unit)? = null,
+    onMenuClick: (() -> Unit)? = null
 ) {
     Surface(
         modifier = Modifier
@@ -1891,6 +1935,21 @@ private fun ConfigScopeChip(
                         Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            if (onMenuClick != null) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clickable(onClick = onMenuClick),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "⋮",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }

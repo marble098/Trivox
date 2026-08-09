@@ -344,6 +344,10 @@ data class AppSettings(
     var livePingEnabled: Boolean = true,
     var livePingIntervalSeconds: Int = 15,
     var hideIpOnMain: Boolean = false,
+    var homeShowUsage: Boolean = true,
+    var homeShowMap: Boolean = true,
+    var homeShowConnectionDetails: Boolean = true,
+    var homeShowLeakGuard: Boolean = true,
     var sortMode: ProfileSortMode = ProfileSortMode.SMART,
     var darkMode: Boolean = false,
     var themeMode: ThemeMode = ThemeMode.SYSTEM,
@@ -457,6 +461,10 @@ data class AppSettings(
         .put("livePingEnabled", livePingEnabled)
         .put("livePingIntervalSeconds", livePingIntervalSeconds)
         .put("hideIpOnMain", hideIpOnMain)
+        .put("homeShowUsage", homeShowUsage)
+        .put("homeShowMap", homeShowMap)
+        .put("homeShowConnectionDetails", homeShowConnectionDetails)
+        .put("homeShowLeakGuard", homeShowLeakGuard)
         .put("sortMode", sortMode.name)
         .put("darkMode", darkMode)
         .put("themeMode", themeMode.name)
@@ -551,6 +559,10 @@ data class AppSettings(
                 livePingEnabled = json.optBoolean("livePingEnabled", true),
                 livePingIntervalSeconds = json.optInt("livePingIntervalSeconds", 15),
                 hideIpOnMain = json.optBoolean("hideIpOnMain", false),
+                homeShowUsage = json.optBoolean("homeShowUsage", true),
+                homeShowMap = json.optBoolean("homeShowMap", true),
+                homeShowConnectionDetails = json.optBoolean("homeShowConnectionDetails", true),
+                homeShowLeakGuard = json.optBoolean("homeShowLeakGuard", true),
                 sortMode = ProfileSortMode.fromStored(json.optString("sortMode")),
                 darkMode = legacyDark,
                 themeMode = ThemeMode.fromStored(json.optString("themeMode"), legacyDark),

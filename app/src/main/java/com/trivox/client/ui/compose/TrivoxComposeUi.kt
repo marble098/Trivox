@@ -95,25 +95,25 @@ private val TrivoxFont = FontFamily(
 )
 
 private val TrivoxTypography = Typography(
-    headlineLarge = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Bold, fontSize = 34.sp, lineHeight = 41.sp),
-    headlineSmall = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, lineHeight = 28.sp),
-    bodyLarge = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Normal, fontSize = 17.sp, lineHeight = 24.sp),
-    bodyMedium = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Normal, fontSize = 15.sp, lineHeight = 22.sp),
-    bodySmall = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Normal, fontSize = 13.sp, lineHeight = 19.sp),
-    titleLarge = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Bold, fontSize = 22.sp, lineHeight = 28.sp),
-    titleMedium = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, lineHeight = 23.sp),
-    titleSmall = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 21.sp),
-    labelLarge = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 20.sp),
-    labelMedium = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Medium, fontSize = 13.sp, lineHeight = 18.sp),
-    labelSmall = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Medium, fontSize = 11.sp, lineHeight = 16.sp)
+    headlineLarge = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Bold, fontSize = 32.sp, lineHeight = 38.sp),
+    headlineSmall = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Bold, fontSize = 22.sp, lineHeight = 27.sp),
+    bodyLarge = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 23.sp),
+    bodyMedium = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Normal, fontSize = 14.sp, lineHeight = 20.sp),
+    bodySmall = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Normal, fontSize = 12.sp, lineHeight = 18.sp),
+    titleLarge = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Bold, fontSize = 21.sp, lineHeight = 27.sp),
+    titleMedium = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, lineHeight = 22.sp),
+    titleSmall = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 20.sp),
+    labelLarge = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 19.sp),
+    labelMedium = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Medium, fontSize = 12.sp, lineHeight = 17.sp),
+    labelSmall = TextStyle(fontFamily = TrivoxFont, fontWeight = FontWeight.Medium, fontSize = 10.sp, lineHeight = 15.sp)
 )
 
 private val TrivoxShapes = Shapes(
-    extraSmall = ContinuousCornerShape(8.dp),
-    small = ContinuousCornerShape(9.dp),
-    medium = ContinuousCornerShape(11.dp),
-    large = ContinuousCornerShape(16.dp),
-    extraLarge = ContinuousCornerShape(20.dp)
+    extraSmall = ContinuousCornerShape(10.dp),
+    small = ContinuousCornerShape(12.dp),
+    medium = ContinuousCornerShape(16.dp),
+    large = ContinuousCornerShape(22.dp),
+    extraLarge = ContinuousCornerShape(28.dp)
 )
 
 @Composable
@@ -565,7 +565,7 @@ private fun LegacyLinearGroup(group: LinearLayout, revision: Int, parentTopLevel
                     MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.90f)
                 ),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                 )
             ) {
                 Column(
