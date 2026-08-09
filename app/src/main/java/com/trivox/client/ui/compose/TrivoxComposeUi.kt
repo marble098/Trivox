@@ -108,11 +108,11 @@ private val TrivoxTypography = Typography(
 )
 
 private val TrivoxShapes = Shapes(
-    extraSmall = ContinuousCornerShape(10.dp),
-    small = ContinuousCornerShape(12.dp),
-    medium = ContinuousCornerShape(16.dp),
-    large = ContinuousCornerShape(22.dp),
-    extraLarge = ContinuousCornerShape(28.dp)
+    extraSmall = ContinuousCornerShape(8.dp),
+    small = ContinuousCornerShape(10.dp),
+    medium = ContinuousCornerShape(12.dp),
+    large = ContinuousCornerShape(18.dp),
+    extraLarge = ContinuousCornerShape(22.dp)
 )
 
 @Composable
@@ -327,7 +327,7 @@ private fun trivoxColorScheme(
     val neutralOutline =
         if (dark) Color(0xFF636366) else Color(0xFF8E8E93)
     val neutralOutlineVariant =
-        if (dark) Color(0xFF3A3A3C) else Color(0xFFD1D1D6)
+        if (dark) Color(0xFF48484A) else Color(0xFFC7C7CC)
 
     val groupedSurface = lerp(
         neutralSurface,
@@ -559,6 +559,10 @@ private fun LegacyLinearGroup(group: LinearLayout, revision: Int, parentTopLevel
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = TrivoxOuterShape,
+                border = BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.82f)
+                ),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
@@ -674,7 +678,7 @@ private fun LegacyButton(view: Button, revision: Int, modifier: Modifier) {
     M3Button(
         onClick = { if (view.isEnabled) view.performClick() },
         enabled = view.isEnabled,
-        modifier = modifier
+        modifier = modifier.trivoxSpringPress(view.isEnabled)
     ) {
         Text(label, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
@@ -717,6 +721,10 @@ private fun LegacySwitch(view: SwitchCompat, revision: Int, modifier: Modifier) 
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         shape = TrivoxInnerShape,
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.78f)
+        ),
         modifier = modifier.clickable(enabled = view.isEnabled) {
             checked = !checked
             view.isChecked = checked

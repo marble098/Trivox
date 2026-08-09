@@ -1,0 +1,183 @@
+name: Refresh Community Mirror
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 * * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: trivox-community-mirror
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    name: Refresh farahvpn cache
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch and sanitize public community configs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/trivox-community
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import datetime as dt
+          import hashlib
+          import html
+          import json
+          import re
+          import urllib.request
+          from pathlib import Path
+
+          CHANNEL = "farahvpn"
+          MAX_BYTES = 3 * 1024 * 1024
+          MAX_LINKS = 160
+          OUT = Path("/tmp/trivox-community")
+          LINK = re.compile(
+              r"(?i)(?:vless|vmess|trojan|ss|shadowsocks|hy2|"
+              r"hysteria2|hysteria|wg|wireguard|ssh|openssh)://"
+              r"""[^\s<>"']+"""
+          )
+
+          routes = [
+              ("telegram", f"https://t.me/s/{CHANNEL}"),
+              ("text-relay", f"https://r.jina.ai/https://t.me/s/{CHANNEL}"),
+          ]
+
+          def fetch(url: str) -> str:
+              request = urllib.request.Request(
+                  url,
+                  headers={
+                      "User-Agent": "Mozilla/5.0 TrivoxCommunityMirror/1.0",
+                      "Accept": "text/html,text/plain,*/*;q=0.5",
+                      "Cache-Control": "no-cache",
+                  },
+              )
+              with urllib.request.urlopen(request, timeout=18) as response:
+                  status = getattr(response, "status", 200)
+                  if not 200 <= status < 300:
+                      raise RuntimeError(f"HTTP {status}")
+                  data = response.read(MAX_BYTES + 1)
+                  if len(data) > MAX_BYTES:
+                      raise RuntimeError("payload_too_large")
+                  return data.decode("utf-8", errors="replace")
+
+          selected_route = ""
+          links = []
+          failures = []
+
+          for label, url in routes:
+              try:
+                  payload = html.unescape(fetch(url))
+                  seen = set()
+                  discovered = []
+                  for match in LINK.finditer(payload):
+                      candidate = match.group(0).strip().rstrip(
+                          ".,;)]}”\"'`"
+                      )
+                      if 8 <= len(candidate) <= 16 * 1024 and candidate not in seen:
+                          seen.add(candidate)
+                          discovered.append(candidate)
+                          if len(discovered) >= MAX_LINKS:
+                              break
+                  if discovered:
+                      selected_route = label
+                      links = discovered
+                      break
+                  failures.append(f"{label}: no_supported_links")
+              except Exception as exc:
+                  failures.append(
+                      f"{label}: {type(exc).__name__}: {exc}"
+                  )
+
+          if not links:
+              raise SystemExit(
+                  "No community configs fetched: " + " | ".join(failures)
+              )
+
+          generated = dt.datetime.now(dt.timezone.utc).replace(
+              microsecond=0
+          ).isoformat()
+          body = (
+              "# Trivox community mirror\n"
+              f"# channel=@{CHANNEL}\n"
+              f"# generated_at={generated}\n"
+              f"# source_route={selected_route}\n"
+              f"# count={len(links)}\n"
+              + "\n".join(links)
+              + "\n"
+          )
+          raw = body.encode("utf-8")
+          sha = hashlib.sha256(raw).hexdigest()
+
+          (OUT / f"{CHANNEL}.txt").write_bytes(raw)
+          (OUT / f"{CHANNEL}.json").write_text(
+              json.dumps(
+                  {
+                      "channel": CHANNEL,
+                      "generated_at": generated,
+                      "source_route": selected_route,
+                      "count": len(links),
+                      "sha256": sha,
+                  },
+                  indent=2,
+                  sort_keys=True,
+              )
+              + "\n",
+              encoding="utf-8",
+          )
+          print(
+              f"Prepared @{CHANNEL}: {len(links)} links "
+              f"through {selected_route}, sha256={sha}"
+          )
+          PY
+
+      - name: Publish isolated community-cache branch
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "Trivox Community Mirror"
+          git config user.email "actions@users.noreply.github.com"
+
+          if git ls-remote --exit-code --heads origin community-cache >/dev/null 2>&1; then
+            git fetch origin community-cache
+            git switch -C community-cache origin/community-cache
+          else
+            git switch --orphan community-cache
+            git rm -rf . >/dev/null 2>&1 || true
+          fi
+
+          mkdir -p community
+          cp /tmp/trivox-community/farahvpn.txt community/farahvpn.txt
+          cp /tmp/trivox-community/farahvpn.json community/farahvpn.json
+
+          cat > README.md <<'EOF'
+          # Trivox Community Cache
+
+          This branch is generated automatically by GitHub Actions.
+          It contains sanitized public proxy links mirrored from configured
+          public community sources so clients are not dependent on Telegram
+          being directly reachable from the user's network.
+          EOF
+
+          git add README.md community/farahvpn.txt community/farahvpn.json
+
+          if git diff --cached --quiet; then
+            echo "Community mirror is unchanged."
+            exit 0
+          fi
+
+          git commit -m "Refresh farahvpn community cache"
+          git push origin community-cache

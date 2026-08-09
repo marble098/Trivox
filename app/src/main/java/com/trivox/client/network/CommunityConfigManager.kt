@@ -11,9 +11,17 @@ import java.net.URL
 import java.util.Locale
 
 /**
- * Lightweight public-source importer for Telegram's public web preview.
- * It never authenticates as the user, never reads private Telegram data and
- * never blocks a connection because channel membership cannot be verified.
+ * Lightweight community-source importer.
+ *
+ * Bootstrap order for the default source:
+ *  1) Trivox-owned GitHub mirror
+ *  2) jsDelivr mirror of the same Trivox cache branch
+ *  3) Telegram public preview
+ *  4) bounded text-rendering relay
+ *  5) previously imported local cache
+ *
+ * This avoids making Telegram availability a prerequisite for first-run simple
+ * mode in networks where t.me returns HTTP 451 or is otherwise filtered.
  */
 class CommunityConfigManager(context: Context) {
     data class SyncResult(
@@ -21,6 +29,11 @@ class CommunityConfigManager(context: Context) {
         val imported: Int = 0,
         val source: String = "",
         val error: String = ""
+    )
+
+    private data class SourceCandidate(
+        val label: String,
+        val url: String
     )
 
     private val app = context.applicationContext
@@ -40,19 +53,74 @@ class CommunityConfigManager(context: Context) {
         val normalized = normalizeUsername(username)
             ?: return SyncResult(false, source = username, error = "invalid_channel_username")
         val sourceLabel = "@$normalized"
+
         return runCatching {
-            val html = runCatching {
-                fetchUrl("https://t.me/s/$normalized")
-            }.getOrElse { directError ->
-                Diagnostics.warning(
-                    "Direct Telegram public preview failed; trying bounded text mirror: " +
-                        (directError.message ?: directError.javaClass.simpleName)
-                )
-                fetchUrl("https://r.jina.ai/https://t.me/s/$normalized")
+            val failures = ArrayList<String>()
+            var selectedRoute = ""
+            var links: List<String> = emptyList()
+
+            for (candidate in sourceCandidates(normalized)) {
+                val attempt = runCatching { fetchUrl(candidate.url) }
+                if (attempt.isFailure) {
+                    val error = attempt.exceptionOrNull()
+                        ?: IllegalStateException("unknown_route_error")
+                    val reason = compactFailure(error)
+                    failures += "${candidate.label}=$reason"
+
+                    if (reason.contains("HTTP 451", ignoreCase = true)) {
+                        Diagnostics.warning(
+                            "Community route ${candidate.label} is unavailable with HTTP 451; " +
+                                "continuing with mirror/fallback routes"
+                        )
+                    } else {
+                        Diagnostics.debug(
+                            "Community route ${candidate.label} failed: $reason"
+                        )
+                    }
+                    continue
+                }
+
+                val discovered = extractConfigLinks(attempt.getOrThrow())
+                if (discovered.isEmpty()) {
+                    failures += "${candidate.label}=no_supported_links"
+                    Diagnostics.debug(
+                        "Community route ${candidate.label} returned no supported links"
+                    )
+                    continue
+                }
+
+                links = discovered
+                selectedRoute = candidate.label
+                break
             }
-            val links = extractConfigLinks(html)
+
             if (links.isEmpty()) {
-                error("No supported public proxy links were found in $sourceLabel")
+                val cached = managedProfiles()
+                if (cached.isNotEmpty()) {
+                    Diagnostics.warning(
+                        "All community network routes failed; preserving and using " +
+                            "${cached.size} previously imported profiles"
+                    )
+                    return SyncResult(
+                        success = true,
+                        imported = cached.size,
+                        source = "$sourceLabel • local cache"
+                    )
+                }
+
+                error(
+                    buildString {
+                        append("Community sync unavailable after mirror and Telegram fallbacks")
+                        if (failures.isNotEmpty()) {
+                            append(": ")
+                            append(
+                                failures
+                                    .take(MAX_REPORTED_FAILURES)
+                                    .joinToString("; ")
+                            )
+                        }
+                    }
+                )
             }
 
             val parsed = ArrayList<ConfigProfile>()
@@ -62,8 +130,13 @@ class CommunityConfigManager(context: Context) {
                 runCatching { ConfigParser.parseText(link) }
                     .getOrNull()
                     ?.forEach { profile ->
-                        val identity = profile.raw.trim().ifBlank { profile.outboundJson.trim() }
-                        if (seen.add(identity) && parsed.size < MAX_IMPORTED_PROFILES) {
+                        val identity = profile.raw.trim().ifBlank {
+                            profile.outboundJson.trim()
+                        }
+                        if (
+                            seen.add(identity) &&
+                            parsed.size < MAX_IMPORTED_PROFILES
+                        ) {
                             parsed += profile.copy(
                                 group = "$sourceLabel • Community",
                                 subscriptionId = COMMUNITY_SUBSCRIPTION_ID
@@ -71,36 +144,64 @@ class CommunityConfigManager(context: Context) {
                         }
                     }
             }
+
             if (parsed.isEmpty()) {
-                error("Public channel content did not contain a valid Trivox configuration")
+                val cached = managedProfiles()
+                if (cached.isNotEmpty()) {
+                    Diagnostics.warning(
+                        "Community route $selectedRoute contained no parseable profiles; " +
+                            "keeping local cache"
+                    )
+                    return SyncResult(
+                        success = true,
+                        imported = cached.size,
+                        source = "$sourceLabel • local cache"
+                    )
+                }
+                error(
+                    "Community source content did not contain a valid Trivox configuration"
+                )
             }
 
             val repository = ConfigRepository(app)
-            val activeCommunity = repository.find(ConnectionRuntime.current().profileId)
-                ?.takeIf { it.subscriptionId == COMMUNITY_SUBSCRIPTION_ID }
+            val activeCommunity = repository
+                .find(ConnectionRuntime.current().profileId)
+                ?.takeIf {
+                    it.subscriptionId == COMMUNITY_SUBSCRIPTION_ID
+                }
+
             val safeProfiles = parsed.toMutableList()
             if (
                 activeCommunity != null &&
-                safeProfiles.none { it.raw.trim() == activeCommunity.raw.trim() }
+                safeProfiles.none {
+                    it.raw.trim() == activeCommunity.raw.trim()
+                }
             ) {
-                // Never delete the profile object backing a live session during
-                // a background refresh. It is naturally removed on a later sync.
                 safeProfiles += activeCommunity
             }
+
             repository.replaceSubscription(
                 COMMUNITY_SUBSCRIPTION_ID,
                 safeProfiles
             )
+
             prefs.edit()
                 .putString(KEY_USERNAME, normalized)
                 .putLong(KEY_LAST_SUCCESS, System.currentTimeMillis())
                 .putInt(KEY_LAST_COUNT, parsed.size)
+                .putString(KEY_LAST_ROUTE, selectedRoute)
                 .apply()
 
             Diagnostics.info(
-                "Community source synchronized; source=$sourceLabel, profiles=${parsed.size}"
+                "Community source synchronized; source=$sourceLabel, " +
+                    "route=$selectedRoute, profiles=${parsed.size}"
             )
-            SyncResult(true, parsed.size, sourceLabel)
+
+            SyncResult(
+                success = true,
+                imported = parsed.size,
+                source = "$sourceLabel • $selectedRoute"
+            )
         }.getOrElse { error ->
             Diagnostics.recordThrowable("Community source sync", error)
             SyncResult(
@@ -117,8 +218,51 @@ class CommunityConfigManager(context: Context) {
         }
 
     fun clearManagedProfiles(): Int =
-        ConfigRepository(app).deleteSubscription(COMMUNITY_SUBSCRIPTION_ID).also {
-            prefs.edit().remove(KEY_LAST_SUCCESS).remove(KEY_LAST_COUNT).apply()
+        ConfigRepository(app)
+            .deleteSubscription(COMMUNITY_SUBSCRIPTION_ID)
+            .also {
+                prefs.edit()
+                    .remove(KEY_LAST_SUCCESS)
+                    .remove(KEY_LAST_COUNT)
+                    .remove(KEY_LAST_ROUTE)
+                    .apply()
+            }
+
+    private fun sourceCandidates(username: String): List<SourceCandidate> =
+        buildList {
+            if (username == DEFAULT_CHANNEL) {
+                add(
+                    SourceCandidate(
+                        label = "Trivox mirror",
+                        url =
+                            "https://raw.githubusercontent.com/" +
+                                "$MIRROR_REPOSITORY/$MIRROR_BRANCH/community/" +
+                                "$username.txt"
+                    )
+                )
+                add(
+                    SourceCandidate(
+                        label = "CDN mirror",
+                        url =
+                            "https://cdn.jsdelivr.net/gh/" +
+                                "$MIRROR_REPOSITORY@$MIRROR_BRANCH/community/" +
+                                "$username.txt"
+                    )
+                )
+            }
+
+            add(
+                SourceCandidate(
+                    label = "Telegram",
+                    url = "https://t.me/s/$username"
+                )
+            )
+            add(
+                SourceCandidate(
+                    label = "Text relay",
+                    url = "https://r.jina.ai/https://t.me/s/$username"
+                )
+            )
         }
 
     private fun fetchUrl(url: String): String {
@@ -128,33 +272,50 @@ class CommunityConfigManager(context: Context) {
             connection.connectTimeout = CONNECT_TIMEOUT_MS
             connection.readTimeout = READ_TIMEOUT_MS
             connection.useCaches = false
-            connection.setRequestProperty("Accept", "text/html,application/xhtml+xml")
-            connection.setRequestProperty("Accept-Language", "en-US,en;q=0.8")
-            connection.setRequestProperty("User-Agent", USER_AGENT)
+            connection.setRequestProperty(
+                "Accept",
+                "text/plain,text/html,application/xhtml+xml,*/*;q=0.5"
+            )
+            connection.setRequestProperty(
+                "Accept-Language",
+                "en-US,en;q=0.8"
+            )
+            connection.setRequestProperty(
+                "Cache-Control",
+                "no-cache"
+            )
+            connection.setRequestProperty(
+                "User-Agent",
+                USER_AGENT
+            )
+
             val status = connection.responseCode
             if (status !in 200..299) {
-                error("Community source endpoint returned HTTP $status")
+                error("HTTP $status")
             }
-            connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
-                val out = StringBuilder()
-                val buffer = CharArray(16 * 1024)
-                while (true) {
-                    val read = reader.read(buffer)
-                    if (read < 0) break
-                    if (out.length + read > MAX_HTML_CHARS) {
-                        error("Telegram public preview exceeded the safety limit")
+
+            connection.inputStream
+                .bufferedReader(Charsets.UTF_8)
+                .use { reader ->
+                    val out = StringBuilder()
+                    val buffer = CharArray(16 * 1024)
+                    while (true) {
+                        val read = reader.read(buffer)
+                        if (read < 0) break
+                        if (out.length + read > MAX_HTML_CHARS) {
+                            error("community_payload_too_large")
+                        }
+                        out.append(buffer, 0, read)
                     }
-                    out.append(buffer, 0, read)
+                    out.toString()
                 }
-                out.toString()
-            }
         } finally {
             connection.disconnect()
         }
     }
 
-    private fun extractConfigLinks(html: String): List<String> {
-        val decoded = decodeHtmlEntities(html)
+    private fun extractConfigLinks(content: String): List<String> {
+        val decoded = decodeHtmlEntities(content)
         val result = LinkedHashSet<String>()
 
         fun collect(value: String) {
@@ -162,21 +323,23 @@ class CommunityConfigManager(context: Context) {
                 if (result.size >= MAX_DISCOVERED_LINKS) return@forEach
                 val candidate = match.value
                     .trim()
-                    .trimEnd('.', ',', ';', ')', ']', '}', '”', '"', '\'')
+                    .trimEnd(
+                        '.', ',', ';', ')', ']', '}', '”', '"', '\'',
+                        '`'
+                    )
                 if (candidate.length in 8..MAX_LINK_CHARS) {
                     result += candidate
                 }
             }
         }
 
-        // Telegram often keeps the full config in an href attribute; scan raw
-        // decoded HTML first, then the visible text as a second chance.
         collect(decoded)
         collect(
             decoded
                 .replace(Regex("(?i)<br\\s*/?>"), "\n")
                 .replace(Regex("<[^>]{1,512}>"), " ")
         )
+
         return result.toList()
     }
 
@@ -188,6 +351,7 @@ class CommunityConfigManager(context: Context) {
             .replace("&lt;", "<")
             .replace("&gt;", ">")
             .replace("&nbsp;", " ")
+
         text = NUMERIC_ENTITY.replace(text) { match ->
             val raw = match.groupValues[1]
             val codePoint = if (raw.startsWith("x", true)) {
@@ -195,34 +359,54 @@ class CommunityConfigManager(context: Context) {
             } else {
                 raw.toIntOrNull()
             }
-            codePoint?.takeIf { it in 0..0x10FFFF }
+            codePoint
+                ?.takeIf { it in 0..0x10FFFF }
                 ?.let { String(Character.toChars(it)) }
                 ?: match.value
         }
         return text
     }
 
+    private fun compactFailure(error: Throwable): String =
+        error.message
+            ?.replace(Regex("\\s+"), " ")
+            ?.take(96)
+            ?.ifBlank { null }
+            ?: error.javaClass.simpleName
+
     companion object {
         const val DEFAULT_CHANNEL = "farahvpn"
         const val COMMUNITY_SUBSCRIPTION_ID = "community:telegram:public"
         const val DEFAULT_SYNC_AGE_MS = 6 * 60 * 60 * 1000L
 
-        private const val PREFS = "trivox_community_source_v26"
+        private const val MIRROR_REPOSITORY = "marble098/Trivox"
+        private const val MIRROR_BRANCH = "community-cache"
+
+        private const val PREFS = "trivox_community_source_v29"
         private const val KEY_USERNAME = "username"
         private const val KEY_LAST_SUCCESS = "last_success"
         private const val KEY_LAST_COUNT = "last_count"
+        private const val KEY_LAST_ROUTE = "last_route"
+
         private const val MAX_HTML_CHARS = 2 * 1024 * 1024
         private const val MAX_DISCOVERED_LINKS = 160
         private const val MAX_IMPORTED_PROFILES = 60
         private const val MAX_LINK_CHARS = 16 * 1024
+        private const val MAX_REPORTED_FAILURES = 5
+
         private const val CONNECT_TIMEOUT_MS = 4_000
         private const val READ_TIMEOUT_MS = 6_000
-        private const val USER_AGENT = "Mozilla/5.0 (Android) Trivox/26 CommunitySync"
+        private const val USER_AGENT =
+            "Mozilla/5.0 (Android) Trivox/29 CommunitySync"
+
         private val USERNAME = Regex("^[A-Za-z0-9_]{5,32}$")
         private val CONFIG_LINK = Regex(
-            "(?i)(?:vless|vmess|trojan|ss|shadowsocks|hy2|hysteria2|hysteria|wg|wireguard|ssh|openssh)://[^\\s<>\\\"']+"
+            "(?i)(?:vless|vmess|trojan|ss|shadowsocks|hy2|" +
+                "hysteria2|hysteria|wg|wireguard|ssh|openssh)://" +
+                "[^\\s<>\\\"']+"
         )
-        private val NUMERIC_ENTITY = Regex("&#(x?[0-9A-Fa-f]+);")
+        private val NUMERIC_ENTITY =
+            Regex("&#(x?[0-9A-Fa-f]+);")
 
         fun normalizeUsername(value: String): String? = value
             .trim()

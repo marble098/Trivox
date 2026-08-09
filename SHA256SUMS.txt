@@ -87,9 +87,9 @@ ff3087ffbb877efe2b4beed9017e409eec693d1f017c5d9becb70c9cc2e7c6f1  ./app/src/main
 ac90290ded6f5c25887f62b5d722b08e5b057a1cc144ea71bbaac5b5f7a4acbc  ./app/src/main/java/com/trivox/client/ui/ThemedActivity.kt
 856eeb8e2c72ceb08be0651e9bde7e29bc503389c0a4bfaa17b03b8b878bb929  ./app/src/main/java/com/trivox/client/ui/UiInsets.kt
 a6dd44767d64edae8ec54895ddb524009b13034d450baff8d1aae5a3228b96e4  ./app/src/main/java/com/trivox/client/ui/compose/LegacyLayoutBridge.kt
-18c84d53d445501dc520a5eb96259356201773d0d53c3d91738c36e7e8a8e1a1  ./app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt
+d018a13535eff29c8290d98f7f4816ebbbde9913df2586dad464b75be8b12c84  ./app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt
 819b04749e31680d4588d610434305ba1013b40210e118cecaaca230bba05d54  ./app/src/main/java/com/trivox/client/ui/compose/RoutingComposeScreen.kt
-3f59b1779aa79681b618f71713bd5aa6eeb14fe6a650370674c5aabf6ac1a9b3  ./app/src/main/java/com/trivox/client/ui/compose/TrivoxComposeUi.kt
+f6cb3fa6da573d7e5a0e7ea1b734b959ee28ef564b175bfab3d431fc51886ba7  ./app/src/main/java/com/trivox/client/ui/compose/TrivoxComposeUi.kt
 b7084b1bdf3d902c59005d620fd054b3d84d7b8c4bf3ea5fbe6fc7e390e2e03a  ./app/src/main/java/com/trivox/client/ui/compose/UnifiedSettingsScreen.kt
 22fc2fea3013958e0f3950f89b1836eef3a950e78b4d49fc7f194828196a4d13  ./app/src/main/java/com/trivox/client/update/UpdateChecker.kt
 6cf684b1ce5e58a5a42adba26fa59d5b44cb4bd940e4690c2aa43714d72e407c  ./app/src/main/java/com/trivox/client/update/VersionComparator.kt
@@ -222,7 +222,7 @@ cf935b9a712a944acbd5343272e13349e5665e1684e11c6c5018f692e7918662  ./app/src/main
 aef6251bc53f84fa2c3f1f2393e1478ed64a515d6ecffad75408af438f33e467  ./app/src/test/java/com/trivox/client/ui/compose/WorldMapGeometryV24Test.kt
 f2f40235b4896d7bcb6f5be1dd75d320f8948f147b8399e1170fe34384e36e0f  ./docs/TRIVOX_V24_STABILITY_AUDIT.md
 77a78860c54cf99c5d5ea253cf5bd1405894b8b300a8331d19f7aac4e32ce9b0  ./app/src/main/java/com/trivox/client/service/ConnectionSwitchCoordinator.kt
-079fa1f4fdf906702255851c243648277efc43879ef9a88f085ce2710f93bfd1  ./app/src/main/java/com/trivox/client/network/CommunityConfigManager.kt
+e9e6f29e047a66230bdd06e5d682cde66dc0028761f55b2150ca4c729865dab1  ./app/src/main/java/com/trivox/client/network/CommunityConfigManager.kt
 c12cf0d502730ece2a15f06e0145b540ff29fefe7586ead222c1b01f67f5bb1e  ./app/src/main/java/com/trivox/client/service/ConnectionUsageStore.kt
 2013bb80a6e43ecab2057e319b09aaaffe39be0d4c18e7e708d1810242d88cd1  ./app/src/main/java/com/trivox/client/ui/LauncherIconManager.kt
 a674d99f2d9882c76cdcc9b5a020450b79a23553c509a2b36ede6397014e7315  ./app/src/main/res/drawable/ic_launcher_aurora.xml
@@ -230,9 +230,10 @@ a674d99f2d9882c76cdcc9b5a020450b79a23553c509a2b36ede6397014e7315  ./app/src/main
 eb6415a6e03bd310e31f0e4dbea1430a47a2f2420472e4ad52c8f4c0b23a77e2  ./app/src/main/res/drawable/ic_launcher_ocean.xml
 a7738ce3e2ca6c00fdab69384b180ac80c6574e2a16e4e2eded7aa961667084f  ./app/src/main/res/values-fa/strings_v26.xml
 4fbb6b1690ab751465330de46a2d694e5dabb42ddfffcfc760c3f4d592a6fd27  ./app/src/main/res/values/strings_v26.xml
-7989f05128c731fe4b44017e101b2a962846668e060fda9bf32fa31caa28b52b  ./app/src/main/java/com/trivox/client/ui/compose/TrivoxAdaptiveDesign.kt
+b6fbfb635ff39230694a5f50e7b1536578811e13d16bae46e6a5bb39fb115f1a  ./app/src/main/java/com/trivox/client/ui/compose/TrivoxAdaptiveDesign.kt
 bd90170af18d6aee40b05ba116e74aca6be42a8d2cac5c99b73003331d1cec9c  ./app/src/main/res/drawable/ic_sf_configs_fill.xml
 b1c7c98eb2c25975d20435637f64eff8e813ab5e4af11aeb6f0bfc3259b2646c  ./app/src/main/res/drawable/ic_sf_home_fill.xml
 6d67747c6cf4472f8a852cda8cf0122a81a0ec810feeb4c1464fbe605cec8514  ./app/src/main/res/drawable/ic_sf_settings_fill.xml
 f19048790416d4ee774f353636e102ae34fd80f1c811861efb201bc4a9d0eafc  ./app/src/main/res/drawable/ic_sf_subscriptions_fill.xml
 1bae9a0b5b6b3eec2be7d473c38fe23732257c9edf4c0fb3f1d73f05bc78b960  ./app/src/main/res/drawable/ic_sf_tools_fill.xml
+ae39d89ce80297ac0d3ce524c2e37fa0259d390745aa915543e687e09818acd1  ./.github/workflows/community-mirror.yml

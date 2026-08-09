@@ -11,6 +11,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -348,8 +349,16 @@ private fun SimpleHomeScreen(
     ) {
         item {
             ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(28.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(
+                        BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.84f)
+                        ),
+                        TrivoxOuterShape
+                    ),
+                shape = TrivoxOuterShape,
                 colors = CardDefaults.elevatedCardColors(
                     containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f)
                 )
@@ -378,8 +387,13 @@ private fun SimpleHomeScreen(
                     )
                     Button(
                         onClick = actions::composeSimpleToggleConnection,
-                        modifier = Modifier.fillMaxWidth().height(68.dp),
-                        shape = RoundedCornerShape(22.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(68.dp)
+                            .trivoxSpringPress(
+                                runtime.state != ConnectionState.STOPPING
+                            ),
+                        shape = TrivoxInnerShape,
                         enabled = runtime.state != ConnectionState.STOPPING
                     ) {
                         if (runtime.state in setOf(
@@ -446,7 +460,7 @@ private fun SimpleHomeScreen(
                     }
                     OutlinedButton(
                         onClick = actions::composeOpenCommunityChannel,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f).trivoxSpringPress()
                     ) {
                         Text(activity.getString(R.string.v26_community_open))
                     }
@@ -653,8 +667,16 @@ private fun HomeTab(
     ) {
         item {
             ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(
+                        BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.86f)
+                        ),
+                        TrivoxOuterShape
+                    ),
+                shape = TrivoxOuterShape,
                 colors = CardDefaults.elevatedCardColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
@@ -703,7 +725,7 @@ private fun HomeTab(
                     if (runtime.error.isNotBlank()) {
                         Surface(
                             color = MaterialTheme.colorScheme.errorContainer,
-                            shape = RoundedCornerShape(12.dp)
+                            shape = TrivoxCompactShape
                         ) {
                             Text(
                                 runtime.error,
@@ -756,9 +778,12 @@ private fun HomeTab(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp)
+                            .trivoxSpringPress(
+                                runtime.state != ConnectionState.STOPPING
+                            )
                             .animateContentSize(),
                         enabled = runtime.state != ConnectionState.STOPPING,
-                        shape = RoundedCornerShape(16.dp),
+                        shape = TrivoxInnerShape,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = connectionColor,
                             contentColor = connectionContentColor
@@ -791,7 +816,9 @@ private fun HomeTab(
                     if (runtime.state == ConnectionState.CONNECTED) {
                         OutlinedButton(
                             onClick = actions::composePause,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .trivoxSpringPress()
                         ) {
                             Text(activity.getString(R.string.pause_connection))
                         }
@@ -969,7 +996,7 @@ private fun HomeTab(
 
                 if (leakStatus.isNotBlank()) {
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
+                        shape = TrivoxCompactShape,
                         color = MaterialTheme.colorScheme.surfaceContainerHigh
                     ) {
                         Text(
@@ -1221,6 +1248,7 @@ private fun ProfileCard(
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize()
+            .trivoxSpringPress()
             .combinedClickable(
                 onClick = { actions.composeSelectProfile(profile.id) },
                 onLongClick = { actions.composeProfileActions(profile.id) }
@@ -1429,13 +1457,13 @@ private fun SubscriptionsTab(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = { actions.composeOpenSubscriptions(null) },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f).trivoxSpringPress()
                 ) {
                     Text(activity.getString(R.string.add_subscription))
                 }
                 OutlinedButton(
                     onClick = actions::composeRefreshSubscriptions,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).trivoxSpringPress(!refreshing),
                     enabled = !refreshing
                 ) {
                     Text(
@@ -1476,11 +1504,12 @@ private fun SubscriptionCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .trivoxSpringPress()
             .clickable { actions.composeOpenSubscriptions(source.id) },
         shape = TrivoxOuterShape,
         border = BorderStroke(
             1.dp,
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.75f)
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.90f)
         ),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
@@ -1649,6 +1678,7 @@ private fun ConfigScopeChip(
     Surface(
         modifier = Modifier
             .animateContentSize()
+            .trivoxSpringPress()
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
@@ -1763,7 +1793,11 @@ private fun SmallAction(
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
-    OutlinedButton(onClick = onClick, modifier = modifier, enabled = enabled) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier.trivoxSpringPress(enabled),
+        enabled = enabled
+    ) {
         Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
     }
 }
@@ -1845,11 +1879,12 @@ private fun ToolButton(title: String, subtitle: String, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .height(112.dp)
+            .trivoxSpringPress()
             .clickable(onClick = onClick),
         shape = TrivoxOuterShape,
         border = BorderStroke(
             1.dp,
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.90f)
         ),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
