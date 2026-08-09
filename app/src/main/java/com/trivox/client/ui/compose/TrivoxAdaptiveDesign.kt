@@ -357,8 +357,8 @@ internal fun TrivoxLargeTopBar(
         // v28.2: device-tested compact geometry. Keep status-bar safety
         // and the large-title transition, but remove the remaining tall
         // header in both expanded and collapsed states.
-        collapsedHeight = 44.dp,
-        expandedHeight = 56.dp,
+        collapsedHeight = 24.dp,
+        expandedHeight = 32.dp,
         title = {
             Box(Modifier.fillMaxWidth()) {
                 Text(
