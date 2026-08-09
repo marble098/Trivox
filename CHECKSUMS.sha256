@@ -89,7 +89,7 @@ a6dd44767d64edae8ec54895ddb524009b13034d450baff8d1aae5a3228b96e4  ./app/src/main
 aaf47684d47a387969761bd4063ee7537632924a66a87b2f23d8bdc7677f8880  ./app/src/main/java/com/trivox/client/ui/compose/MainComposeScreen.kt
 819b04749e31680d4588d610434305ba1013b40210e118cecaaca230bba05d54  ./app/src/main/java/com/trivox/client/ui/compose/RoutingComposeScreen.kt
 b8a6c4b6203ab48b37e990a69f663516007d8575d1182279b42ec54556355f9e  ./app/src/main/java/com/trivox/client/ui/compose/TrivoxComposeUi.kt
-cce3586772b5df19b867973790ae712c3cea43ce1e59ef71d581fff9cfd77c5c  ./app/src/main/java/com/trivox/client/ui/compose/UnifiedSettingsScreen.kt
+d913a97a1dfa8b6a56eb3a8841cb647f36384436814ec62e1b49c8c1f30e876a  ./app/src/main/java/com/trivox/client/ui/compose/UnifiedSettingsScreen.kt
 22fc2fea3013958e0f3950f89b1836eef3a950e78b4d49fc7f194828196a4d13  ./app/src/main/java/com/trivox/client/update/UpdateChecker.kt
 6cf684b1ce5e58a5a42adba26fa59d5b44cb4bd940e4690c2aa43714d72e407c  ./app/src/main/java/com/trivox/client/update/VersionComparator.kt
 409e15a4f384ce88ccc0b27c4bb19132c4414b23d53505a2b28434d183235413  ./app/src/main/java/com/trivox/client/util/Diagnostics.kt

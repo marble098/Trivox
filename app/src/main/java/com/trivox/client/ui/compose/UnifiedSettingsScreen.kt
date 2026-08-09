@@ -332,8 +332,7 @@ internal fun UnifiedSettingsScreen(
                     if (settings.dnsMode == DnsMode.CUSTOM) {
                         StringSetting(
                             label = activity.getString(R.string.v15_custom_dns),
-                            value = settings.customDns.joinToString("
-"),
+                            value = settings.customDns.joinToString("\n"),
                             singleLine = false,
                             validator = ::validDnsList
                         ) { text ->
