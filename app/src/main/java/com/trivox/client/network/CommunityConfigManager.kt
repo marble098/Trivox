@@ -2,7 +2,6 @@ package com.trivox.client.network
 
 import android.content.Context
 import com.trivox.client.config.ConfigParser
-import com.trivox.client.core.ConnectionRuntime
 import com.trivox.client.data.ConfigProfile
 import com.trivox.client.data.ConfigRepository
 import com.trivox.client.util.Diagnostics
@@ -49,7 +48,10 @@ class CommunityConfigManager(context: Context) {
 
     fun lastSuccessAt(): Long = prefs.getLong(KEY_LAST_SUCCESS, 0L)
 
-    fun sync(username: String): SyncResult {
+    fun sync(
+        username: String,
+        allowLocalFallback: Boolean = true
+    ): SyncResult {
         val normalized = normalizeUsername(username)
             ?: return SyncResult(false, source = username, error = "invalid_channel_username")
         val sourceLabel = "@$normalized"
@@ -96,7 +98,7 @@ class CommunityConfigManager(context: Context) {
 
             if (links.isEmpty()) {
                 val cached = managedProfiles()
-                if (cached.isNotEmpty()) {
+                if (allowLocalFallback && cached.isNotEmpty()) {
                     Diagnostics.warning(
                         "All community network routes failed; preserving and using " +
                             "${cached.size} previously imported profiles"
@@ -147,7 +149,7 @@ class CommunityConfigManager(context: Context) {
 
             if (parsed.isEmpty()) {
                 val cached = managedProfiles()
-                if (cached.isNotEmpty()) {
+                if (allowLocalFallback && cached.isNotEmpty()) {
                     Diagnostics.warning(
                         "Community route $selectedRoute contained no parseable profiles; " +
                             "keeping local cache"
@@ -164,25 +166,25 @@ class CommunityConfigManager(context: Context) {
             }
 
             val repository = ConfigRepository(app)
-            val activeCommunity = repository
-                .find(ConnectionRuntime.current().profileId)
-                ?.takeIf {
-                    it.subscriptionId == COMMUNITY_SUBSCRIPTION_ID
-                }
+            val selectedBefore = repository.selectedId()
+            val selectedWasCommunity = repository
+                .find(selectedBefore)
+                ?.subscriptionId == COMMUNITY_SUBSCRIPTION_ID
+            val previousCount = repository.countForSubscription(
+                COMMUNITY_SUBSCRIPTION_ID
+            )
 
-            val safeProfiles = parsed.toMutableList()
-            if (
-                activeCommunity != null &&
-                safeProfiles.none {
-                    it.raw.trim() == activeCommunity.raw.trim()
-                }
-            ) {
-                safeProfiles += activeCommunity
-            }
-
+            // Replace the whole validated community snapshot in one atomic write.
             repository.replaceSubscription(
                 COMMUNITY_SUBSCRIPTION_ID,
-                safeProfiles
+                parsed
+            )
+
+            if (selectedWasCommunity && repository.find(selectedBefore) == null) {
+                repository.select(parsed.firstOrNull()?.id)
+            }
+            Diagnostics.info(
+                "Community bucket replaced; old=$previousCount, new=${parsed.size}, route=$selectedRoute"
             )
 
             prefs.edit()
@@ -228,42 +230,37 @@ class CommunityConfigManager(context: Context) {
                     .apply()
             }
 
-    private fun sourceCandidates(username: String): List<SourceCandidate> =
-        buildList {
+    private fun sourceCandidates(username: String): List<SourceCandidate> {
+        val nonce = System.currentTimeMillis()
+        return buildList {
+            add(
+                SourceCandidate(
+                    label = "Fresh relay",
+                    url = "https://r.jina.ai/https://t.me/s/$username?trivox_sync=$nonce"
+                )
+            )
             if (username == DEFAULT_CHANNEL) {
                 add(
                     SourceCandidate(
                         label = "Trivox mirror",
-                        url =
-                            "https://raw.githubusercontent.com/" +
-                                "$MIRROR_REPOSITORY/$MIRROR_BRANCH/community/" +
-                                "$username.txt"
+                        url = "https://raw.githubusercontent.com/$MIRROR_REPOSITORY/$MIRROR_BRANCH/community/$username.txt?trivox_sync=$nonce"
                     )
                 )
                 add(
                     SourceCandidate(
                         label = "CDN mirror",
-                        url =
-                            "https://cdn.jsdelivr.net/gh/" +
-                                "$MIRROR_REPOSITORY@$MIRROR_BRANCH/community/" +
-                                "$username.txt"
+                        url = "https://cdn.jsdelivr.net/gh/$MIRROR_REPOSITORY@$MIRROR_BRANCH/community/$username.txt?trivox_sync=$nonce"
                     )
                 )
             }
-
             add(
                 SourceCandidate(
-                    label = "Telegram",
-                    url = "https://t.me/s/$username"
-                )
-            )
-            add(
-                SourceCandidate(
-                    label = "Text relay",
-                    url = "https://r.jina.ai/https://t.me/s/$username"
+                    label = "Telegram direct",
+                    url = "https://t.me/s/$username?trivox_sync=$nonce"
                 )
             )
         }
+    }
 
     private fun fetchUrl(url: String): String {
         val connection = URL(url).openConnection() as HttpURLConnection
@@ -395,9 +392,9 @@ class CommunityConfigManager(context: Context) {
         private const val MAX_REPORTED_FAILURES = 5
 
         private const val CONNECT_TIMEOUT_MS = 4_000
-        private const val READ_TIMEOUT_MS = 6_000
+        private const val READ_TIMEOUT_MS = 10_000
         private const val USER_AGENT =
-            "Mozilla/5.0 (Android) Trivox/29 CommunitySync"
+            "Mozilla/5.0 (Android) Trivox/31 FreshCommunitySync"
 
         private val USERNAME = Regex("^[A-Za-z0-9_]{5,32}$")
         private val CONFIG_LINK = Regex(

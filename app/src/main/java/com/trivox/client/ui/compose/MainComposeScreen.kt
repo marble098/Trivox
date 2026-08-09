@@ -450,19 +450,35 @@ private fun SimpleHomeScreen(
                     OutlinedButton(
                         onClick = actions::composeCommunitySync,
                         enabled = settings.communitySourceEnabled && !busy,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(42.dp)
+                            .trivoxSpringPress(!busy)
                     ) {
                         if (busy) {
                             CircularProgressIndicator(Modifier.size(15.dp), strokeWidth = 2.dp)
                             Spacer(Modifier.width(6.dp))
                         }
-                        Text(activity.getString(R.string.v26_community_sync))
+                        TrivoxAutoFitButtonText(
+                            text = activity.getString(R.string.v26_community_sync),
+                            modifier = Modifier.weight(1f),
+                            maxFontSize = 14.sp,
+                            minFontSize = 8.sp
+                        )
                     }
                     OutlinedButton(
                         onClick = actions::composeOpenCommunityChannel,
-                        modifier = Modifier.weight(1f).trivoxSpringPress()
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(42.dp)
+                            .trivoxSpringPress()
                     ) {
-                        Text(activity.getString(R.string.v26_community_open))
+                        TrivoxAutoFitButtonText(
+                            text = activity.getString(R.string.v26_community_open),
+                            modifier = Modifier.fillMaxWidth(),
+                            maxFontSize = 14.sp,
+                            minFontSize = 8.sp
+                        )
                     }
                 }
                 if (status.isNotBlank()) {
@@ -482,9 +498,14 @@ private fun SimpleHomeScreen(
         item {
             OutlinedButton(
                 onClick = onSettings,
-                modifier = Modifier.fillMaxWidth().height(50.dp)
+                modifier = Modifier.fillMaxWidth().height(46.dp).trivoxSpringPress()
             ) {
-                Text(activity.getString(R.string.v26_simple_settings))
+                TrivoxAutoFitButtonText(
+                    text = activity.getString(R.string.v26_simple_settings),
+                    modifier = Modifier.fillMaxWidth(),
+                    maxFontSize = 15.sp,
+                    minFontSize = 9.sp
+                )
             }
         }
     }
@@ -801,14 +822,15 @@ private fun HomeTab(
                             targetState = connected,
                             label = "connection-action"
                         ) { isConnected ->
-                            Text(
-                                if (isConnected) {
+                            TrivoxAutoFitButtonText(
+                                text = if (isConnected) {
                                     activity.getString(R.string.disconnect)
                                 } else {
                                     activity.getString(R.string.connect)
                                 },
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold
+                                modifier = Modifier.fillMaxWidth(),
+                                maxFontSize = 15.sp,
+                                minFontSize = 9.sp
                             )
                         }
                     }
@@ -818,9 +840,15 @@ private fun HomeTab(
                             onClick = actions::composePause,
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .height(46.dp)
                                 .trivoxSpringPress()
                         ) {
-                            Text(activity.getString(R.string.pause_connection))
+                            TrivoxAutoFitButtonText(
+                                text = activity.getString(R.string.pause_connection),
+                                modifier = Modifier.fillMaxWidth(),
+                                maxFontSize = 15.sp,
+                                minFontSize = 9.sp
+                            )
                         }
                     }
                 }
@@ -1049,14 +1077,19 @@ private fun ConfigsTab(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilledTonalButton(
                 onClick = actions::composeAdd,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).height(44.dp).trivoxSpringPress(!batch.running && !magicBusy),
                 enabled = !batch.running && !magicBusy
             ) {
-                Text("＋ ${activity.getString(R.string.add)}")
+                TrivoxAutoFitButtonText(
+                    text = "＋ ${activity.getString(R.string.add)}",
+                    modifier = Modifier.fillMaxWidth(),
+                    maxFontSize = 15.sp,
+                    minFontSize = 9.sp
+                )
             }
             Button(
                 onClick = actions::composeMagicClipboard,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).height(44.dp).trivoxSpringPress(!batch.running && !magicBusy),
                 enabled = !batch.running && !magicBusy
             ) {
                 if (magicBusy) {
@@ -1066,14 +1099,15 @@ private fun ConfigsTab(
                     )
                     Spacer(Modifier.width(7.dp))
                 }
-                Text(
-                    if (magicBusy) {
+                TrivoxAutoFitButtonText(
+                    text = if (magicBusy) {
                         activity.getString(R.string.v15_magic_clipboard_working)
                     } else {
                         activity.getString(R.string.v15_magic_clipboard)
                     },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    modifier = Modifier.weight(1f),
+                    maxFontSize = 14.sp,
+                    minFontSize = 8.sp
                 )
             }
         }
@@ -1081,31 +1115,35 @@ private fun ConfigsTab(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
                 onClick = { actions.composeTestAll(PingMethod.TCP_CONNECT) },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).height(42.dp).trivoxSpringPress(!batch.running && !magicBusy),
                 enabled = !batch.running && !magicBusy
             ) {
-                Text(
-                    if (batch.running && batch.method == PingMethod.TCP_CONNECT) {
+                TrivoxAutoFitButtonText(
+                    text = if (batch.running && batch.method == PingMethod.TCP_CONNECT) {
                         "TCP ${batch.completed}/${batch.total.coerceAtLeast(1)}"
                     } else {
                         activity.getString(R.string.compose_tcp_all)
                     },
-                    maxLines = 1
+                    modifier = Modifier.fillMaxWidth(),
+                    maxFontSize = 14.sp,
+                    minFontSize = 8.sp
                 )
             }
             OutlinedButton(
                 onClick = { actions.composeTestAll(PingMethod.XRAY_HTTP) },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).height(42.dp).trivoxSpringPress(!batch.running && !magicBusy),
                 enabled = !batch.running && !magicBusy
             ) {
-                Text(
-                    if (batch.running && batch.method == PingMethod.XRAY_HTTP) {
+                TrivoxAutoFitButtonText(
+                    text = if (batch.running && batch.method == PingMethod.XRAY_HTTP) {
                         "${activity.getString(R.string.compose_real_label)} " +
                             "${batch.completed}/${batch.total.coerceAtLeast(1)}"
                     } else {
                         activity.getString(R.string.compose_real_all)
                     },
-                    maxLines = 1
+                    modifier = Modifier.fillMaxWidth(),
+                    maxFontSize = 14.sp,
+                    minFontSize = 8.sp
                 )
             }
         }
@@ -1323,24 +1361,30 @@ private fun CompactProfileCard(
             TextButton(
                 onClick = { actions.composePingProfile(profile.id, PingMethod.TCP_CONNECT) },
                 enabled = profile.tcpTestStatus != TestStatus.TESTING,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).height(36.dp)
             ) {
-                Text(
-                    if (profile.tcpTestStatus == TestStatus.TESTING) "TCP…"
+                TrivoxAutoFitButtonText(
+                    text = if (profile.tcpTestStatus == TestStatus.TESTING) "TCP…"
                     else activity.getString(R.string.compose_test_tcp),
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium
+                    modifier = Modifier.fillMaxWidth(),
+                    maxFontSize = 13.sp,
+                    minFontSize = 8.sp,
+                    style = MaterialTheme.typography.labelMedium
                 )
             }
             TextButton(
                 onClick = { actions.composePingProfile(profile.id, PingMethod.XRAY_HTTP) },
                 enabled = profile.realTestStatus != TestStatus.TESTING,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).height(36.dp)
             ) {
-                Text(
-                    if (profile.realTestStatus == TestStatus.TESTING)
+                TrivoxAutoFitButtonText(
+                    text = if (profile.realTestStatus == TestStatus.TESTING)
                         "${activity.getString(R.string.compose_real_label)}…"
                     else activity.getString(R.string.compose_test_real),
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium
+                    modifier = Modifier.fillMaxWidth(),
+                    maxFontSize = 13.sp,
+                    minFontSize = 8.sp,
+                    style = MaterialTheme.typography.labelMedium
                 )
             }
         }
@@ -1397,24 +1441,28 @@ private fun ListProfileCard(
             OutlinedButton(
                 onClick = { actions.composePingProfile(profile.id, PingMethod.TCP_CONNECT) },
                 enabled = profile.tcpTestStatus != TestStatus.TESTING,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).height(40.dp).trivoxSpringPress(profile.tcpTestStatus != TestStatus.TESTING)
             ) {
-                Text(
-                    if (profile.tcpTestStatus == TestStatus.TESTING) "TCP…"
+                TrivoxAutoFitButtonText(
+                    text = if (profile.tcpTestStatus == TestStatus.TESTING) "TCP…"
                     else activity.getString(R.string.compose_test_tcp),
-                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                    modifier = Modifier.fillMaxWidth(),
+                    maxFontSize = 14.sp,
+                    minFontSize = 8.sp
                 )
             }
             OutlinedButton(
                 onClick = { actions.composePingProfile(profile.id, PingMethod.XRAY_HTTP) },
                 enabled = profile.realTestStatus != TestStatus.TESTING,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).height(40.dp).trivoxSpringPress(profile.realTestStatus != TestStatus.TESTING)
             ) {
-                Text(
-                    if (profile.realTestStatus == TestStatus.TESTING)
+                TrivoxAutoFitButtonText(
+                    text = if (profile.realTestStatus == TestStatus.TESTING)
                         "${activity.getString(R.string.compose_real_label)}…"
                     else activity.getString(R.string.compose_test_real),
-                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                    modifier = Modifier.fillMaxWidth(),
+                    maxFontSize = 14.sp,
+                    minFontSize = 8.sp
                 )
             }
         }
@@ -1457,23 +1505,29 @@ private fun SubscriptionsTab(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = { actions.composeOpenSubscriptions(null) },
-                    modifier = Modifier.weight(1f).trivoxSpringPress()
+                    modifier = Modifier.weight(1f).height(44.dp).trivoxSpringPress()
                 ) {
-                    Text(activity.getString(R.string.add_subscription))
+                    TrivoxAutoFitButtonText(
+                        text = activity.getString(R.string.add_subscription),
+                        modifier = Modifier.fillMaxWidth(),
+                        maxFontSize = 15.sp,
+                        minFontSize = 9.sp
+                    )
                 }
                 OutlinedButton(
                     onClick = actions::composeRefreshSubscriptions,
-                    modifier = Modifier.weight(1f).trivoxSpringPress(!refreshing),
+                    modifier = Modifier.weight(1f).height(44.dp).trivoxSpringPress(!refreshing),
                     enabled = !refreshing
                 ) {
-                    Text(
-                        if (refreshing) {
+                    TrivoxAutoFitButtonText(
+                        text = if (refreshing) {
                             activity.getString(R.string.subscription_updating)
                         } else {
                             activity.getString(R.string.update_all_subscriptions)
                         },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        modifier = Modifier.fillMaxWidth(),
+                        maxFontSize = 14.sp,
+                        minFontSize = 8.sp
                     )
                 }
             }
@@ -1795,10 +1849,16 @@ private fun SmallAction(
 ) {
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier.trivoxSpringPress(enabled),
+        modifier = modifier.height(40.dp).trivoxSpringPress(enabled),
         enabled = enabled
     ) {
-        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
+        TrivoxAutoFitButtonText(
+            text = label,
+            modifier = Modifier.fillMaxWidth(),
+            maxFontSize = 13.sp,
+            minFontSize = 8.sp,
+            style = MaterialTheme.typography.labelMedium
+        )
     }
 }
 

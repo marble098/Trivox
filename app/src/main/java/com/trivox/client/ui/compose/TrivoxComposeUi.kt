@@ -679,9 +679,16 @@ private fun LegacyButton(view: Button, revision: Int, modifier: Modifier) {
     M3Button(
         onClick = { if (view.isEnabled) view.performClick() },
         enabled = view.isEnabled,
-        modifier = modifier.trivoxSpringPress(view.isEnabled)
+        modifier = modifier
+            .height(46.dp)
+            .trivoxSpringPress(view.isEnabled)
     ) {
-        Text(label, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        TrivoxAutoFitButtonText(
+            text = label,
+            modifier = Modifier.fillMaxWidth(),
+            maxFontSize = 15.sp,
+            minFontSize = 9.sp
+        )
     }
 }
 

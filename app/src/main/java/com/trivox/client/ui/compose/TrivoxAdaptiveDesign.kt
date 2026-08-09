@@ -15,15 +15,13 @@ import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -60,9 +58,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.min
@@ -366,6 +367,40 @@ internal fun Modifier.trivoxSpringPress(
         }
 }
 
+@Composable
+internal fun TrivoxAutoFitButtonText(
+    text: String,
+    modifier: Modifier = Modifier,
+    maxFontSize: TextUnit = 15.sp,
+    minFontSize: TextUnit = 9.sp,
+    fontWeight: FontWeight = FontWeight.SemiBold,
+    color: Color = Color.Unspecified,
+    style: TextStyle = MaterialTheme.typography.labelLarge
+) {
+    BoxWithConstraints(modifier = modifier) {
+        var resolvedSize by remember(text, maxWidth, maxFontSize, minFontSize) {
+            mutableStateOf(maxFontSize)
+        }
+        Text(
+            text = text,
+            modifier = Modifier.fillMaxWidth(),
+            style = style,
+            fontSize = resolvedSize,
+            fontWeight = fontWeight,
+            color = color,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { result ->
+                if ((result.didOverflowWidth || result.didOverflowHeight) && resolvedSize.value > minFontSize.value) {
+                    resolvedSize = (resolvedSize.value - 0.75f).coerceAtLeast(minFontSize.value).sp
+                }
+            }
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun rememberTrivoxTopBarScrollBehavior(): TopAppBarScrollBehavior =
@@ -389,7 +424,8 @@ internal fun TrivoxLargeTopBar(
     /*
      * Material3 LargeTopAppBar keeps internal large-title spacing even when
      * very small height values are supplied. Own the geometry directly so
-     * the only top inset is the real system status bar.
+     * AppCompat already positions this Compose host below the real system status bar.
+     * Never add the same inset a second time.
      */
     val expandedHeight = 34.dp
     val collapsedHeight = 28.dp
@@ -426,7 +462,6 @@ internal fun TrivoxLargeTopBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(barSurface.copy(alpha = 0.94f))
-            .windowInsetsPadding(WindowInsets.statusBars)
     ) {
         Box(
             modifier = Modifier

@@ -4460,7 +4460,8 @@ class MainActivity : ThemedActivity(), MainComposeActions {
 
     private fun syncCommunityConfigs(
         silent: Boolean,
-        connectAfter: Boolean
+        connectAfter: Boolean,
+        requireFresh: Boolean = false
     ) {
         if (!communitySyncBusy.compareAndSet(false, true)) return
         val settings = settingsRepository.load()
@@ -4475,7 +4476,8 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         notifyComposeChanged()
         worker.execute {
             val result = CommunityConfigManager(this).sync(
-                settings.communityChannelUsername
+                username = settings.communityChannelUsername,
+                allowLocalFallback = !requireFresh
             )
             runOnUiThreadIfAlive {
                 communitySyncBusy.set(false)
@@ -4539,7 +4541,11 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     }
 
     override fun composeCommunitySync() {
-        syncCommunityConfigs(silent = false, connectAfter = false)
+        syncCommunityConfigs(
+            silent = false,
+            connectAfter = false,
+            requireFresh = true
+        )
     }
 
     override fun composeCommunitySyncBusy(): Boolean = communitySyncBusy.get()
