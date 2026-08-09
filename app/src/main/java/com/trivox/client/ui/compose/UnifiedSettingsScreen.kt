@@ -402,34 +402,25 @@ internal fun UnifiedSettingsScreen(
                 ) {
                     actions.composeSaveSettings(settings.copy(communityAutoSync = it))
                 }
-                StringSetting(
-                    label = activity.getString(R.string.v26_community_channel),
-                    value = settings.communityChannelUsername,
-                    validator = ::validTelegramChannel
-                ) { value ->
-                    actions.composeSaveSettings(
-                        settings.copy(communityChannelUsername = value)
-                    )
-                }
                 Text(
                     activity.getString(R.string.v26_community_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = actions::composeCommunitySync,
-                        enabled = settings.communitySourceEnabled && !actions.composeCommunitySyncBusy(),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(activity.getString(R.string.v26_community_sync))
-                    }
-                    OutlinedButton(
-                        onClick = actions::composeOpenCommunityChannel,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(activity.getString(R.string.v26_community_open))
-                    }
+                // trivox-v33-community-buttons: one full-width button per row
+                OutlinedButton(
+                    onClick = actions::composeCommunitySync,
+                    enabled = settings.communitySourceEnabled &&
+                        !actions.composeCommunitySyncBusy(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(activity.getString(R.string.v26_community_sync))
+                }
+                OutlinedButton(
+                    onClick = actions::composeOpenCommunityChannel,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(activity.getString(R.string.v26_community_open))
                 }
                 actions.composeCommunityStatus().takeIf(String::isNotBlank)?.let {
                     Text(
@@ -601,6 +592,7 @@ private fun notificationActionChoices(
     NotificationActionChoice.NONE to activity.getString(R.string.v26_notify_none)
 )
 
+@Suppress("unused")
 private fun validTelegramChannel(value: String): Boolean {
     val normalized = value.trim()
         .removePrefix("https://t.me/")

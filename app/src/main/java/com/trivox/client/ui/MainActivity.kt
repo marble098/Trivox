@@ -4145,7 +4145,174 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     }
 
     override fun composeSubscriptionActions(id: String) {
-        showSubscriptionActions(id)
+        when (id) {
+            "trivox-scope-all" -> showScopeActions(favoritesOnly = false)
+            "trivox-scope-favorites" -> showScopeActions(favoritesOnly = true)
+            else -> showSubscriptionActions(id)
+        }
+    }
+
+    private fun showScopeActions(favoritesOnly: Boolean) {
+        val scopeName = getString(
+            if (favoritesOnly) {
+                R.string.v33_scope_favorites_actions
+            } else {
+                R.string.v33_scope_all_actions
+            }
+        )
+        val profiles = repository.all()
+            .filter { !favoritesOnly || it.favorite }
+        if (profiles.isEmpty()) {
+            toast(getString(R.string.v33_scope_empty))
+            return
+        }
+
+        val labels = arrayOf(
+            getString(R.string.v33_scope_update_all),
+            getString(R.string.v33_scope_export),
+            getString(R.string.v33_scope_delete_no_tcp),
+            getString(R.string.v33_scope_delete_no_real),
+            getString(R.string.v33_scope_delete_no_both),
+            getString(R.string.v33_scope_delete_all)
+        )
+
+        AlertDialog.Builder(this)
+            .setTitle(scopeName)
+            .setItems(labels) { _, which ->
+                when (which) {
+                    0 -> refreshSubscriptionsFromMain()
+                    1 -> exportScopeLinks(scopeName, profiles)
+                    2 -> confirmScopeCleanup(
+                        scopeName = scopeName,
+                        profiles = profiles,
+                        title = labels[which]
+                    ) {
+                        it.tcpTestStatus != TestStatus.ALIVE ||
+                            it.tcpLatencyMs == null
+                    }
+                    3 -> confirmScopeCleanup(
+                        scopeName = scopeName,
+                        profiles = profiles,
+                        title = labels[which]
+                    ) {
+                        it.realTestStatus != TestStatus.ALIVE ||
+                            it.realLatencyMs == null
+                    }
+                    4 -> confirmScopeCleanup(
+                        scopeName = scopeName,
+                        profiles = profiles,
+                        title = labels[which]
+                    ) {
+                        (
+                            it.tcpTestStatus != TestStatus.ALIVE ||
+                                it.tcpLatencyMs == null
+                            ) &&
+                            (
+                                it.realTestStatus != TestStatus.ALIVE ||
+                                    it.realLatencyMs == null
+                                )
+                    }
+                    5 -> confirmScopeCleanup(
+                        scopeName = scopeName,
+                        profiles = profiles,
+                        title = labels[which]
+                    ) { true }
+                }
+            }
+            .show()
+    }
+
+    private fun exportScopeLinks(
+        scopeName: String,
+        profiles: List<ConfigProfile>
+    ) {
+        val links = profiles
+            .asSequence()
+            .map { it.raw.trim() }
+            .filter(String::isNotBlank)
+            .filter { value ->
+                runCatching { URI(value).scheme }
+                    .getOrNull()
+                    ?.lowercase(Locale.ROOT) in SHARE_SCHEMES
+            }
+            .distinct()
+            .toList()
+
+        if (links.isEmpty()) {
+            toast(getString(R.string.subscription_export_none))
+            return
+        }
+
+        val payload = links.joinToString("\n")
+        val title = getString(
+            R.string.subscription_export_title,
+            scopeName
+        )
+        startActivity(
+            Intent.createChooser(
+                Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TITLE, title)
+                    putExtra(Intent.EXTRA_SUBJECT, title)
+                    putExtra(Intent.EXTRA_TEXT, payload)
+                },
+                title
+            )
+        )
+    }
+
+    private fun confirmScopeCleanup(
+        scopeName: String,
+        profiles: List<ConfigProfile>,
+        title: String,
+        predicate: (ConfigProfile) -> Boolean
+    ) {
+        val targets = profiles.filter(predicate)
+        val runtime = ConnectionRuntime.current()
+        if (
+            runtime.state !in setOf(
+                ConnectionState.DISCONNECTED,
+                ConnectionState.ERROR
+            ) &&
+            targets.any { it.id == runtime.profileId }
+        ) {
+            toast(getString(R.string.disconnect_subscription_first))
+            return
+        }
+        if (targets.isEmpty()) {
+            toast(getString(R.string.subscription_cleanup_none))
+            return
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(
+                getString(
+                    R.string.v33_scope_cleanup_confirm,
+                    targets.size,
+                    scopeName
+                )
+            )
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.delete) { _, _ ->
+                storageWorker.execute {
+                    val removed = repository.deleteMany(
+                        targets.map(ConfigProfile::id)
+                    )
+                    runOnUiThread {
+                        subscriptionTabsSignature = ""
+                        renderSubscriptionTabs(force = true)
+                        refresh()
+                        toast(
+                            getString(
+                                R.string.v33_scope_cleanup_done,
+                                removed
+                            )
+                        )
+                    }
+                }
+            }
+            .show()
     }
 
     override fun composeMagicClipboard() {

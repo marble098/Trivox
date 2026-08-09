@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v33_info_server">سرور</string>
+    <string name="v33_info_port">پورت</string>
+    <string name="v33_info_protocol">پروتکل</string>
+    <string name="v33_info_exit_ip">آی‌پی خروجی</string>
+    <string name="v33_info_location">موقعیت</string>
+    <string name="v33_info_isp">شبکه / اپراتور</string>
+    <string name="v33_info_hidden">مخفی</string>
+    <string name="v33_info_unknown">نامشخص</string>
+    <string name="v33_scope_all_actions">همه کانفیگ‌ها</string>
+    <string name="v33_scope_favorites_actions">کانفیگ‌های مورد علاقه</string>
+    <string name="v33_scope_update_all">بروزرسانی همه ساب‌ها</string>
+    <string name="v33_scope_export">اشتراک‌گذاری لینک‌ها</string>
+    <string name="v33_scope_delete_no_tcp">حذف کانفیگ‌های بدون نتیجه TCP</string>
+    <string name="v33_scope_delete_no_real">حذف کانفیگ‌های بدون نتیجه واقعی</string>
+    <string name="v33_scope_delete_no_both">حذف کانفیگ‌های بدون هیچ نتیجه</string>
+    <string name="v33_scope_delete_all">حذف همه کانفیگ‌های این بخش</string>
+    <string name="v33_scope_empty">این بخش هیچ کانفیگی ندارد.</string>
+    <string name="v33_scope_cleanup_confirm">%1$d کانفیگ از %2$s حذف شود؟</string>
+    <string name="v33_scope_cleanup_done">%1$d کانفیگ حذف شد.</string>
+</resources>

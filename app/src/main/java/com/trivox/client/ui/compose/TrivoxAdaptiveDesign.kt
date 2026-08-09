@@ -44,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -291,10 +292,11 @@ internal fun TrivoxToggle(
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
+    // trivox-toggle-v33: crisper 1dp edge, fully rounded track and thumb
     val thumbOffset = animateDpAsState(
-        targetValue = if (checked) 20.dp else 2.dp,
+        targetValue = if (checked) 25.dp else 3.dp,
         animationSpec = spring(
-            dampingRatio = 0.78f,
+            dampingRatio = 0.74f,
             stiffness = Spring.StiffnessMediumLow
         ),
         label = "trivox-toggle-thumb"
@@ -305,14 +307,21 @@ internal fun TrivoxToggle(
         TrivoxUiTokens.systemGreenLight
     }
     val off = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.86f)
+    val edge = if (checked) {
+        on
+    } else {
+        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+    }
 
     Box(
         modifier = modifier
-            .size(width = 51.dp, height = 31.dp)
-            .graphicsLayer { alpha = if (enabled) 1f else 0.48f }
+            .size(width = 54.dp, height = 32.dp)
+            .graphicsLayer { alpha = if (enabled) 1f else 0.45f }
+            .background(color = edge, shape = ContinuousCornerShape(16.dp))
+            .padding(1.dp)
             .background(
                 color = if (checked) on else off,
-                shape = ContinuousCornerShape(16.dp)
+                shape = ContinuousCornerShape(15.dp)
             )
             .toggleable(
                 value = checked,
@@ -323,9 +332,14 @@ internal fun TrivoxToggle(
     ) {
         Box(
             modifier = Modifier
-                .offset(x = thumbOffset.value, y = 2.dp)
-                .size(27.dp)
-                .background(Color.White, ContinuousCornerShape(14.dp))
+                .offset(x = thumbOffset.value, y = 3.dp)
+                .size(24.dp)
+                .shadow(
+                    elevation = 2.dp,
+                    shape = ContinuousCornerShape(12.dp),
+                    clip = false
+                )
+                .background(Color.White, ContinuousCornerShape(12.dp))
         )
     }
 }
@@ -520,8 +534,9 @@ internal fun TrivoxLargeTopBar(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .padding(
-                        start = if (onBack == null) 12.dp else 92.dp,
-                        end = 12.dp
+                        start = if (onBack == null) 18.dp else 96.dp,
+                        end = 16.dp,
+                        bottom = 4.dp
                     )
                     .graphicsLayer {
                         alpha =

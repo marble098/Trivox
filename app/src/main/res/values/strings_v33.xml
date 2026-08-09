@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v33_info_server">Server</string>
+    <string name="v33_info_port">Port</string>
+    <string name="v33_info_protocol">Protocol</string>
+    <string name="v33_info_exit_ip">Exit IP</string>
+    <string name="v33_info_location">Location</string>
+    <string name="v33_info_isp">Network / ISP</string>
+    <string name="v33_info_hidden">Hidden</string>
+    <string name="v33_info_unknown">Unknown</string>
+    <string name="v33_scope_all_actions">All configs</string>
+    <string name="v33_scope_favorites_actions">Favorite configs</string>
+    <string name="v33_scope_update_all">Update all subscriptions</string>
+    <string name="v33_scope_export">Share links</string>
+    <string name="v33_scope_delete_no_tcp">Delete configs without a TCP result</string>
+    <string name="v33_scope_delete_no_real">Delete configs without a real result</string>
+    <string name="v33_scope_delete_no_both">Delete configs without any result</string>
+    <string name="v33_scope_delete_all">Delete every config in this scope</string>
+    <string name="v33_scope_empty">This scope has no configs.</string>
+    <string name="v33_scope_cleanup_confirm">Delete %1$d configs from %2$s?</string>
+    <string name="v33_scope_cleanup_done">%1$d configs deleted.</string>
+</resources>

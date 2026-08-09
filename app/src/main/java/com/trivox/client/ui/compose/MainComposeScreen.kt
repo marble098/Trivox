@@ -902,20 +902,11 @@ private fun HomeTab(
         item {
             SectionCard(activity.getString(R.string.compose_latency_section)) {
                 if (selected != null) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        LatencyMetric(
-                            label = "TCP",
-                            latency = selected.tcpLatencyMs,
-                            status = selected.tcpTestStatus,
-                            modifier = Modifier.weight(1f)
-                        )
-                        LatencyMetric(
-                            label = activity.getString(R.string.compose_real_label),
-                            latency = selected.realLatencyMs,
-                            status = selected.realTestStatus,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    ConnectionIpDetails(
+                        activity = activity,
+                        profile = selected,
+                        hideIp = settings.hideIpOnMain
+                    )
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1178,6 +1169,9 @@ private fun ConfigsTab(
                     onClick = {
                         selectedSource = null
                         actions.composeSelectSubscription(null)
+                    },
+                    onLongClick = {
+                        actions.composeSubscriptionActions("trivox-scope-all")
                     }
                 )
             }
@@ -1186,7 +1180,10 @@ private fun ConfigsTab(
                     label = activity.getString(R.string.v21_scope_favorites),
                     count = favoriteProfileCount,
                     selected = favoritesOnly,
-                    onClick = { favoritesOnly = !favoritesOnly }
+                    onClick = { favoritesOnly = !favoritesOnly },
+                    onLongClick = {
+                        actions.composeSubscriptionActions("trivox-scope-favorites")
+                    }
                 )
             }
             if ((sourceCounts[CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID] ?: 0) > 0) {
@@ -2027,6 +2024,7 @@ private fun MetricChip(value: String, label: String, modifier: Modifier = Modifi
     }
 }
 
+@Suppress("unused")
 @Composable
 private fun LatencyMetric(
     label: String,
@@ -2327,4 +2325,103 @@ private fun formatDuration(ms: Long): String {
     val seconds = total % 60
     return if (hours > 0) "%02d:%02d:%02d".format(hours, minutes, seconds)
     else "%02d:%02d".format(minutes, seconds)
+}
+
+
+@Composable
+private fun ConnectionInfoTile(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = label,
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = value,
+                fontSize = 13.sp,
+                lineHeight = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConnectionIpDetails(
+    activity: Activity,
+    profile: ConfigProfile,
+    hideIp: Boolean
+) {
+    val hidden = activity.getString(R.string.v33_info_hidden)
+    val unknown = activity.getString(R.string.v33_info_unknown)
+    val server = if (hideIp) hidden else profile.server.ifBlank { unknown }
+    val port = if (profile.port > 0) profile.port.toString() else unknown
+    val protocol = profile.protocol.uppercase(Locale.ROOT).ifBlank { unknown }
+    val exitIp = when {
+        hideIp -> hidden
+        profile.exitIp.isNotBlank() -> profile.exitIp
+        else -> unknown
+    }
+    val location = listOfNotNull(
+        profile.exitFlag.takeIf(String::isNotBlank),
+        profile.exitCountry.takeIf(String::isNotBlank),
+        profile.exitCountryCode.takeIf(String::isNotBlank)?.uppercase(Locale.ROOT)
+    ).joinToString(" ").ifBlank { unknown }
+    val isp = profile.exitIsp.ifBlank { unknown }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ConnectionInfoTile(
+                label = activity.getString(R.string.v33_info_server),
+                value = server,
+                modifier = Modifier.weight(1f)
+            )
+            ConnectionInfoTile(
+                label = activity.getString(R.string.v33_info_port),
+                value = port,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ConnectionInfoTile(
+                label = activity.getString(R.string.v33_info_protocol),
+                value = protocol,
+                modifier = Modifier.weight(1f)
+            )
+            ConnectionInfoTile(
+                label = activity.getString(R.string.v33_info_exit_ip),
+                value = exitIp,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        ConnectionInfoTile(
+            label = activity.getString(R.string.v33_info_location),
+            value = location,
+            modifier = Modifier.fillMaxWidth()
+        )
+        ConnectionInfoTile(
+            label = activity.getString(R.string.v33_info_isp),
+            value = isp,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
 }
