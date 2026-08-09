@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v37_simple_essentials">Essentials</string>
+    <string name="v37_simple_connection">Connection &amp; privacy</string>
+    <string name="v37_experience_title">App experience</string>
+    <string name="v37_mode_simple_short">Only the controls needed for everyday VPN use.</string>
+    <string name="v37_mode_advanced_short">Full control of profiles, network behavior and diagnostics.</string>
+    <string name="v37_home_personalization">Home customization</string>
+    <string name="v37_home_usage">Show data usage</string>
+    <string name="v37_home_map">Show connection map</string>
+    <string name="v37_home_details">Show connection details</string>
+    <string name="v37_home_leak_guard">Show leak protection</string>
+    <string name="v37_config_list">Configuration list</string>
+</resources>

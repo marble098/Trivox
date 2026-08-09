@@ -1,60 +1,53 @@
 package com.trivox.client.ui.compose
 
-// TRIVOX_V21_STABILITY_AUTO_LEAK_UI
-
-// TRIVOX_V20_SAFE_NATIVE_LIFECYCLE
-
-// TRIVOX_V19_NATIVE_WIREGUARD_LEAK_GUARD
+// TRIVOX_V37_EXPRESSIVE_2026_SETTINGS
 
 import android.app.Activity
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.trivox.client.R
 import com.trivox.client.config.Validators
 import com.trivox.client.data.AppSettings
 import com.trivox.client.data.ConnectionMode
+import com.trivox.client.data.DnsMode
 import com.trivox.client.data.ExperienceMode
 import com.trivox.client.data.LauncherIconStyle
 import com.trivox.client.data.NotificationActionChoice
-import com.trivox.client.data.DnsMode
-import com.trivox.client.data.PingMethod
 import com.trivox.client.data.ProfileSortMode
 import com.trivox.client.data.RealDelayProfile
 import com.trivox.client.data.ThemeMode
@@ -74,9 +67,102 @@ internal fun UnifiedSettingsScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = TrivoxUiTokens.pagePadding, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(
+            horizontal = TrivoxUiTokens.pagePadding,
+            vertical = 10.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(TrivoxUiTokens.groupSpacing)
     ) {
+        if (settings.experienceMode == ExperienceMode.SIMPLE) {
+            item {
+                SettingsSection(activity.getString(R.string.v37_simple_essentials)) {
+                    ChoiceSetting(
+                        label = activity.getString(R.string.v15_language),
+                        value = language,
+                        choices = languageChoices(activity),
+                        onSelected = actions::composeSetLanguage
+                    )
+                    ChoiceSetting(
+                        label = activity.getString(R.string.v26_experience_mode),
+                        value = settings.experienceMode,
+                        choices = experienceChoices(activity)
+                    ) { selected ->
+                        actions.composeSaveSettings(settings.copy(experienceMode = selected))
+                    }
+                    ChoiceSetting(
+                        label = activity.getString(R.string.v15_theme),
+                        value = settings.themeMode,
+                        choices = themeChoices(activity)
+                    ) { selected ->
+                        actions.composeSaveSettings(
+                            settings.copy(
+                                themeMode = selected,
+                                darkMode = selected == ThemeMode.DARK
+                            )
+                        )
+                    }
+                    ChoiceSetting(
+                        label = activity.getString(R.string.v26_visual_theme),
+                        value = settings.visualTheme,
+                        choices = visualThemeChoices(activity)
+                    ) { selected ->
+                        actions.composeSaveSettings(settings.copy(visualTheme = selected))
+                    }
+                }
+            }
+
+            item {
+                SettingsSection(activity.getString(R.string.v37_simple_connection)) {
+                    ChoiceSetting(
+                        label = activity.getString(R.string.connection_mode),
+                        value = settings.mode,
+                        choices = connectionChoices(activity)
+                    ) { selected ->
+                        actions.composeSaveSettings(settings.copy(mode = selected))
+                    }
+                    BooleanSetting(
+                        activity.getString(R.string.live_ping_enabled),
+                        settings.livePingEnabled
+                    ) { enabled ->
+                        actions.composeSaveSettings(settings.copy(livePingEnabled = enabled))
+                    }
+                    BooleanSetting(
+                        activity.getString(R.string.v19_leak_guard_toggle),
+                        settings.autoLeakProtection
+                    ) { enabled ->
+                        actions.composeSaveSettings(settings.copy(autoLeakProtection = enabled))
+                    }
+                    BooleanSetting(
+                        activity.getString(R.string.hide_ip_on_main),
+                        settings.hideIpOnMain
+                    ) { enabled ->
+                        actions.composeSaveSettings(settings.copy(hideIpOnMain = enabled))
+                    }
+                }
+            }
+
+            item {
+                SettingsSection(activity.getString(R.string.v15_settings_updates)) {
+                    BooleanSetting(
+                        activity.getString(R.string.v15_auto_update),
+                        settings.autoUpdateCheck
+                    ) { enabled ->
+                        actions.composeSaveSettings(settings.copy(autoUpdateCheck = enabled))
+                    }
+                    OutlinedButton(
+                        onClick = actions::composeCheckForUpdates,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(activity.getString(R.string.v15_check_update))
+                    }
+                    if (updateStatus.isNotBlank()) {
+                        StatusText(updateStatus)
+                    }
+                }
+            }
+            return@LazyColumn
+        }
+
         item {
             ExperienceModeShowcaseSection(
                 activity = activity,
@@ -92,42 +178,13 @@ internal fun UnifiedSettingsScreen(
                 ChoiceSetting(
                     label = activity.getString(R.string.v15_language),
                     value = language,
-                    choices = listOf(
-                        "" to activity.getString(R.string.language_system),
-                        "fa" to activity.getString(R.string.language_persian),
-                        "en" to activity.getString(R.string.language_english)
-                    ),
+                    choices = languageChoices(activity),
                     onSelected = actions::composeSetLanguage
-                )
-                ChoiceSetting(
-                    label = activity.getString(R.string.v26_experience_mode),
-                    value = settings.experienceMode,
-                    choices = listOf(
-                        ExperienceMode.SIMPLE to activity.getString(R.string.v26_mode_simple),
-                        ExperienceMode.ADVANCED to activity.getString(R.string.v26_mode_advanced)
-                    )
-                ) { selected ->
-                    actions.composeSaveSettings(settings.copy(experienceMode = selected))
-                }
-                Text(
-                    activity.getString(
-                        if (settings.experienceMode == ExperienceMode.SIMPLE) {
-                            R.string.v26_simple_hint
-                        } else {
-                            R.string.v26_advanced_hint
-                        }
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 ChoiceSetting(
                     label = activity.getString(R.string.v15_theme),
                     value = settings.themeMode,
-                    choices = listOf(
-                        ThemeMode.SYSTEM to activity.getString(R.string.v20_theme_system),
-                        ThemeMode.LIGHT to activity.getString(R.string.v15_theme_light),
-                        ThemeMode.DARK to activity.getString(R.string.v15_theme_dark)
-                    )
+                    choices = themeChoices(activity)
                 ) { selected ->
                     actions.composeSaveSettings(
                         settings.copy(
@@ -139,14 +196,7 @@ internal fun UnifiedSettingsScreen(
                 ChoiceSetting(
                     label = activity.getString(R.string.v26_visual_theme),
                     value = settings.visualTheme,
-                    choices = listOf(
-                        VisualTheme.CLASSIC to activity.getString(R.string.v26_theme_classic),
-                        VisualTheme.OCEAN to activity.getString(R.string.v26_theme_ocean),
-                        VisualTheme.AURORA to activity.getString(R.string.v26_theme_aurora),
-                        VisualTheme.SUNSET to activity.getString(R.string.v26_theme_sunset),
-                        VisualTheme.FOREST to activity.getString(R.string.v26_theme_forest),
-                        VisualTheme.GRAPHITE to activity.getString(R.string.v26_theme_graphite)
-                    )
+                    choices = visualThemeChoices(activity)
                 ) { selected ->
                     actions.composeSaveSettings(settings.copy(visualTheme = selected))
                 }
@@ -162,17 +212,51 @@ internal fun UnifiedSettingsScreen(
                 ) { selected ->
                     actions.composeSaveSettings(settings.copy(launcherIconStyle = selected))
                 }
+            }
+        }
+
+        item {
+            SettingsSection(activity.getString(R.string.v37_home_personalization)) {
+                BooleanSetting(
+                    activity.getString(R.string.v37_home_usage),
+                    settings.homeShowUsage
+                ) { enabled ->
+                    actions.composeSaveSettings(settings.copy(homeShowUsage = enabled))
+                }
+                BooleanSetting(
+                    activity.getString(R.string.v37_home_map),
+                    settings.homeShowMap
+                ) { enabled ->
+                    actions.composeSaveSettings(settings.copy(homeShowMap = enabled))
+                }
+                BooleanSetting(
+                    activity.getString(R.string.v37_home_details),
+                    settings.homeShowConnectionDetails
+                ) { enabled ->
+                    actions.composeSaveSettings(settings.copy(homeShowConnectionDetails = enabled))
+                }
+                BooleanSetting(
+                    activity.getString(R.string.v37_home_leak_guard),
+                    settings.homeShowLeakGuard
+                ) { enabled ->
+                    actions.composeSaveSettings(settings.copy(homeShowLeakGuard = enabled))
+                }
                 BooleanSetting(
                     activity.getString(R.string.hide_ip_on_main),
                     settings.hideIpOnMain
-                ) {
-                    actions.composeSaveSettings(settings.copy(hideIpOnMain = it))
+                ) { enabled ->
+                    actions.composeSaveSettings(settings.copy(hideIpOnMain = enabled))
                 }
+            }
+        }
+
+        item {
+            SettingsSection(activity.getString(R.string.v37_config_list)) {
                 BooleanSetting(
                     activity.getString(R.string.compose_grid_layout),
                     settings.gridMode
-                ) {
-                    actions.composeSaveSettings(settings.copy(gridMode = it))
+                ) { enabled ->
+                    actions.composeSaveSettings(settings.copy(gridMode = enabled))
                 }
                 ChoiceSetting(
                     label = activity.getString(R.string.v15_sort_mode),
@@ -184,8 +268,8 @@ internal fun UnifiedSettingsScreen(
                         ProfileSortMode.LAST_TESTED to activity.getString(R.string.sort_recent),
                         ProfileSortMode.GROUP to activity.getString(R.string.sort_group)
                     )
-                ) {
-                    actions.composeSaveSettings(settings.copy(sortMode = it))
+                ) { selected ->
+                    actions.composeSaveSettings(settings.copy(sortMode = selected))
                 }
             }
         }
@@ -195,58 +279,47 @@ internal fun UnifiedSettingsScreen(
                 ChoiceSetting(
                     label = activity.getString(R.string.connection_mode),
                     value = settings.mode,
-                    choices = listOf(
-                        ConnectionMode.VPN to activity.getString(R.string.vpn_mode),
-                        ConnectionMode.PROXY to activity.getString(R.string.proxy_mode)
-                    )
-                ) {
-                    actions.composeSaveSettings(settings.copy(mode = it))
+                    choices = connectionChoices(activity)
+                ) { selected ->
+                    actions.composeSaveSettings(settings.copy(mode = selected))
                 }
                 NumberSetting(
                     label = activity.getString(R.string.v15_mixed_port),
                     value = settings.socksPort,
                     range = 1..65535
-                ) {
-                    actions.composeSaveSettings(
-                        settings.copy(socksPort = it, httpPort = it)
-                    )
+                ) { value ->
+                    actions.composeSaveSettings(settings.copy(socksPort = value, httpPort = value))
                 }
-                Text(
-                    actions.composeLocalProxyStatus(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                StatusText(actions.composeLocalProxyStatus())
                 BooleanSetting(
                     activity.getString(R.string.v15_local_proxy_in_vpn),
                     settings.localProxyInVpn
-                ) {
-                    actions.composeSaveSettings(settings.copy(localProxyInVpn = it))
+                ) { enabled ->
+                    actions.composeSaveSettings(settings.copy(localProxyInVpn = enabled))
                 }
                 BooleanSetting(
                     activity.getString(R.string.v15_ipv6),
                     settings.ipv6
-                ) {
-                    actions.composeSaveSettings(settings.copy(ipv6 = it))
+                ) { enabled ->
+                    actions.composeSaveSettings(settings.copy(ipv6 = enabled))
                 }
                 BooleanSetting(
                     activity.getString(R.string.v15_blocking),
                     settings.blocking
-                ) {
-                    actions.composeSaveSettings(settings.copy(blocking = it))
+                ) { enabled ->
+                    actions.composeSaveSettings(settings.copy(blocking = enabled))
                 }
                 BooleanSetting(
                     activity.getString(R.string.v15_reconnect_network),
                     settings.reconnectOnNetworkChange
-                ) {
-                    actions.composeSaveSettings(
-                        settings.copy(reconnectOnNetworkChange = it)
-                    )
+                ) { enabled ->
+                    actions.composeSaveSettings(settings.copy(reconnectOnNetworkChange = enabled))
                 }
                 BooleanSetting(
                     activity.getString(R.string.v15_reconnect_boot),
                     settings.reconnectOnBoot
-                ) {
-                    actions.composeSaveSettings(settings.copy(reconnectOnBoot = it))
+                ) { enabled ->
+                    actions.composeSaveSettings(settings.copy(reconnectOnBoot = enabled))
                 }
             }
         }
@@ -256,34 +329,19 @@ internal fun UnifiedSettingsScreen(
                 BooleanSetting(
                     activity.getString(R.string.live_ping_enabled),
                     settings.livePingEnabled
-                ) {
-                    actions.composeSaveSettings(
-                        settings.copy(livePingEnabled = it)
-                    )
+                ) { enabled ->
+                    actions.composeSaveSettings(settings.copy(livePingEnabled = enabled))
                 }
-                Text(
-                    activity.getString(R.string.v20_live_ping_auto_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
                 ChoiceSetting(
                     label = activity.getString(R.string.v15_real_profile),
                     value = settings.realDelayProfile,
                     choices = listOf(
-                        RealDelayProfile.TURBO to activity.getString(
-                            R.string.real_delay_profile_turbo
-                        ),
-                        RealDelayProfile.BALANCED to activity.getString(
-                            R.string.real_delay_profile_balanced
-                        ),
-                        RealDelayProfile.ACCURATE to activity.getString(
-                            R.string.real_delay_profile_accurate
-                        )
+                        RealDelayProfile.TURBO to activity.getString(R.string.real_delay_profile_turbo),
+                        RealDelayProfile.BALANCED to activity.getString(R.string.real_delay_profile_balanced),
+                        RealDelayProfile.ACCURATE to activity.getString(R.string.real_delay_profile_accurate)
                     )
-                ) {
-                    actions.composeSaveSettings(
-                        settings.copy(realDelayProfile = it)
-                    )
+                ) { selected ->
+                    actions.composeSaveSettings(settings.copy(realDelayProfile = selected))
                 }
             }
         }
@@ -293,16 +351,9 @@ internal fun UnifiedSettingsScreen(
                 BooleanSetting(
                     activity.getString(R.string.v19_leak_guard_toggle),
                     settings.autoLeakProtection
-                ) {
-                    actions.composeSaveSettings(
-                        settings.copy(autoLeakProtection = it)
-                    )
+                ) { enabled ->
+                    actions.composeSaveSettings(settings.copy(autoLeakProtection = enabled))
                 }
-                Text(
-                    activity.getString(R.string.v21_leak_auto_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
                 ChoiceSetting(
                     label = activity.getString(R.string.v15_dns_mode),
                     value = settings.dnsMode,
@@ -314,8 +365,8 @@ internal fun UnifiedSettingsScreen(
                         DnsMode.DIRECT to activity.getString(R.string.dns_direct),
                         DnsMode.THROUGH_PROXY to activity.getString(R.string.dns_proxy)
                     )
-                ) {
-                    actions.composeSaveSettings(settings.copy(dnsMode = it))
+                ) { selected ->
+                    actions.composeSaveSettings(settings.copy(dnsMode = selected))
                 }
                 if (settings.dnsMode == DnsMode.CUSTOM) {
                     StringSetting(
@@ -341,28 +392,18 @@ internal fun UnifiedSettingsScreen(
                     activity.getString(R.string.v15_wireguard_mtu),
                     settings.wireGuardMtu,
                     1280..1420
-                ) {
-                    actions.composeSaveSettings(
-                        settings.copy(wireGuardMtu = it)
-                    )
+                ) { value ->
+                    actions.composeSaveSettings(settings.copy(wireGuardMtu = value))
                 }
                 NumberSetting(
                     activity.getString(R.string.v15_wireguard_keepalive),
                     settings.wireGuardKeepAliveSeconds,
                     0..120
-                ) {
-                    actions.composeSaveSettings(
-                        settings.copy(wireGuardKeepAliveSeconds = it)
-                    )
+                ) { value ->
+                    actions.composeSaveSettings(settings.copy(wireGuardKeepAliveSeconds = value))
                 }
-                Text(
-                    activity.getString(R.string.v20_wireguard_auto_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
-
 
         item {
             SettingsSection(activity.getString(R.string.v26_notification_section)) {
@@ -371,35 +412,30 @@ internal fun UnifiedSettingsScreen(
                     label = activity.getString(R.string.v26_notification_action_1),
                     value = settings.notificationAction1,
                     choices = actionChoices
-                ) {
-                    actions.composeSaveSettings(settings.copy(notificationAction1 = it))
+                ) { selected ->
+                    actions.composeSaveSettings(settings.copy(notificationAction1 = selected))
                 }
                 ChoiceSetting(
                     label = activity.getString(R.string.v26_notification_action_2),
                     value = settings.notificationAction2,
                     choices = actionChoices
-                ) {
-                    actions.composeSaveSettings(settings.copy(notificationAction2 = it))
+                ) { selected ->
+                    actions.composeSaveSettings(settings.copy(notificationAction2 = selected))
                 }
                 ChoiceSetting(
                     label = activity.getString(R.string.v26_notification_action_3),
                     value = settings.notificationAction3,
                     choices = actionChoices
-                ) {
-                    actions.composeSaveSettings(settings.copy(notificationAction3 = it))
+                ) { selected ->
+                    actions.composeSaveSettings(settings.copy(notificationAction3 = selected))
                 }
                 NumberSetting(
                     label = activity.getString(R.string.v26_pause_minutes),
                     value = settings.notificationPauseMinutes,
                     range = 1..180
-                ) {
-                    actions.composeSaveSettings(settings.copy(notificationPauseMinutes = it))
+                ) { value ->
+                    actions.composeSaveSettings(settings.copy(notificationPauseMinutes = value))
                 }
-                Text(
-                    activity.getString(R.string.v26_notification_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
 
@@ -408,25 +444,18 @@ internal fun UnifiedSettingsScreen(
                 BooleanSetting(
                     activity.getString(R.string.v26_community_enabled),
                     settings.communitySourceEnabled
-                ) {
-                    actions.composeSaveSettings(settings.copy(communitySourceEnabled = it))
+                ) { enabled ->
+                    actions.composeSaveSettings(settings.copy(communitySourceEnabled = enabled))
                 }
                 BooleanSetting(
                     activity.getString(R.string.v26_community_auto_sync),
                     settings.communityAutoSync
-                ) {
-                    actions.composeSaveSettings(settings.copy(communityAutoSync = it))
+                ) { enabled ->
+                    actions.composeSaveSettings(settings.copy(communityAutoSync = enabled))
                 }
-                Text(
-                    activity.getString(R.string.v26_community_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                // trivox-v33-community-buttons: one full-width button per row
                 OutlinedButton(
                     onClick = actions::composeCommunitySync,
-                    enabled = settings.communitySourceEnabled &&
-                        !actions.composeCommunitySyncBusy(),
+                    enabled = settings.communitySourceEnabled && !actions.composeCommunitySyncBusy(),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(activity.getString(R.string.v26_community_sync))
@@ -438,11 +467,7 @@ internal fun UnifiedSettingsScreen(
                     Text(activity.getString(R.string.v26_community_open))
                 }
                 actions.composeCommunityStatus().takeIf(String::isNotBlank)?.let {
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    StatusText(it)
                 }
             }
         }
@@ -452,8 +477,8 @@ internal fun UnifiedSettingsScreen(
                 BooleanSetting(
                     activity.getString(R.string.v15_auto_update),
                     settings.autoUpdateCheck
-                ) {
-                    actions.composeSaveSettings(settings.copy(autoUpdateCheck = it))
+                ) { enabled ->
+                    actions.composeSaveSettings(settings.copy(autoUpdateCheck = enabled))
                 }
                 OutlinedButton(
                     onClick = actions::composeCheckForUpdates,
@@ -462,15 +487,21 @@ internal fun UnifiedSettingsScreen(
                     Text(activity.getString(R.string.v15_check_update))
                 }
                 if (updateStatus.isNotBlank()) {
-                    Text(
-                        updateStatus,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    StatusText(updateStatus)
                 }
             }
         }
     }
+}
+
+@Composable
+private fun StatusText(value: String) {
+    if (value.isBlank()) return
+    Text(
+        text = value,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
 }
 
 @Composable
@@ -487,17 +518,12 @@ private fun ExperienceModeShowcaseSection(
     settings: AppSettings,
     onSelect: (ExperienceMode) -> Unit
 ) {
-    SettingsSection(activity.getString(R.string.v34_home_tools_title)) {
-        Text(
-            text = activity.getString(R.string.v34_home_tools_desc),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+    SettingsSection(activity.getString(R.string.v37_experience_title)) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             ExperienceModeShowcaseCard(
                 selected = settings.experienceMode == ExperienceMode.SIMPLE,
                 title = activity.getString(R.string.v34_mode_simple_title),
-                description = activity.getString(R.string.v34_mode_simple_desc),
+                description = activity.getString(R.string.v37_mode_simple_short),
                 primaryGlyph = "◯",
                 secondaryGlyph = "▭",
                 onClick = { onSelect(ExperienceMode.SIMPLE) }
@@ -505,17 +531,12 @@ private fun ExperienceModeShowcaseSection(
             ExperienceModeShowcaseCard(
                 selected = settings.experienceMode == ExperienceMode.ADVANCED,
                 title = activity.getString(R.string.v34_mode_advanced_title),
-                description = activity.getString(R.string.v34_mode_advanced_desc),
+                description = activity.getString(R.string.v37_mode_advanced_short),
                 primaryGlyph = "▦",
                 secondaryGlyph = "◫",
                 onClick = { onSelect(ExperienceMode.ADVANCED) }
             )
         }
-        Text(
-            text = activity.getString(R.string.v34_theme_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 
@@ -531,16 +552,16 @@ private fun ExperienceModeShowcaseCard(
     val border = if (selected) {
         MaterialTheme.colorScheme.primary.copy(alpha = 0.88f)
     } else {
-        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.88f)
+        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
     }
     val container = if (selected) {
         MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.52f)
     } else {
-        MaterialTheme.colorScheme.surface
+        MaterialTheme.colorScheme.surfaceContainerLow
     }
     Card(
         onClick = onClick,
-        shape = TrivoxOuterShape,
+        shape = TrivoxInnerShape,
         border = BorderStroke(1.dp, border),
         colors = CardDefaults.cardColors(containerColor = container)
     ) {
@@ -553,16 +574,19 @@ private fun ExperienceModeShowcaseCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(56.dp)
-                    .border(1.dp, border, RoundedCornerShape(16.dp)),
+                    .size(52.dp)
+                    .border(1.dp, border, RoundedCornerShape(18.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(primaryGlyph, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    Text(secondaryGlyph, fontSize = 14.sp)
+                    Text(secondaryGlyph, fontSize = 13.sp)
                 }
             }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
                 Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Text(
                     description,
@@ -592,17 +616,19 @@ private fun BooleanSetting(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onCheckedChange(!checked) }
-            .padding(vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
             label,
             modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyMedium
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium
         )
         TrivoxToggle(
             checked = checked,
-            onCheckedChange = { onCheckedChange(it) }
+            onCheckedChange = onCheckedChange
         )
     }
 }
@@ -614,11 +640,11 @@ private fun <T> ChoiceSetting(
     choices: List<Pair<T, String>>,
     onSelected: (T) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
         Text(
             label,
             style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium
+            fontWeight = FontWeight.SemiBold
         )
         Row(
             modifier = Modifier
@@ -630,7 +656,7 @@ private fun <T> ChoiceSetting(
                 FilterChip(
                     selected = value == candidate,
                     onClick = { if (value != candidate) onSelected(candidate) },
-                    label = { Text(display) }
+                    label = { Text(display, maxLines = 1) }
                 )
             }
         }
@@ -659,9 +685,7 @@ private fun NumberSetting(
         },
         label = { Text(label) },
         supportingText = {
-            if (!valid) {
-                Text("${range.first} … ${range.last}")
-            }
+            if (!valid) Text("${range.first} … ${range.last}")
         },
         isError = !valid,
         singleLine = true,
@@ -697,6 +721,36 @@ private fun StringSetting(
     )
 }
 
+private fun languageChoices(activity: Activity) = listOf(
+    "" to activity.getString(R.string.language_system),
+    "fa" to activity.getString(R.string.language_persian),
+    "en" to activity.getString(R.string.language_english)
+)
+
+private fun experienceChoices(activity: Activity) = listOf(
+    ExperienceMode.SIMPLE to activity.getString(R.string.v26_mode_simple),
+    ExperienceMode.ADVANCED to activity.getString(R.string.v26_mode_advanced)
+)
+
+private fun themeChoices(activity: Activity) = listOf(
+    ThemeMode.SYSTEM to activity.getString(R.string.v20_theme_system),
+    ThemeMode.LIGHT to activity.getString(R.string.v15_theme_light),
+    ThemeMode.DARK to activity.getString(R.string.v15_theme_dark)
+)
+
+private fun visualThemeChoices(activity: Activity) = listOf(
+    VisualTheme.CLASSIC to activity.getString(R.string.v26_theme_classic),
+    VisualTheme.OCEAN to activity.getString(R.string.v26_theme_ocean),
+    VisualTheme.AURORA to activity.getString(R.string.v26_theme_aurora),
+    VisualTheme.SUNSET to activity.getString(R.string.v26_theme_sunset),
+    VisualTheme.FOREST to activity.getString(R.string.v26_theme_forest),
+    VisualTheme.GRAPHITE to activity.getString(R.string.v26_theme_graphite)
+)
+
+private fun connectionChoices(activity: Activity) = listOf(
+    ConnectionMode.VPN to activity.getString(R.string.vpn_mode),
+    ConnectionMode.PROXY to activity.getString(R.string.proxy_mode)
+)
 
 private fun notificationActionChoices(
     activity: Activity
@@ -709,16 +763,6 @@ private fun notificationActionChoices(
 )
 
 @Suppress("unused")
-private fun validTelegramChannel(value: String): Boolean {
-    val normalized = value.trim()
-        .removePrefix("https://t.me/")
-        .removePrefix("http://t.me/")
-        .removePrefix("t.me/")
-        .removePrefix("@")
-        .substringBefore('/')
-    return normalized.matches(Regex("[A-Za-z0-9_]{5,32}"))
-}
-
 private fun validHttpUrl(value: String): Boolean =
     runCatching { URI(value.trim()) }
         .getOrNull()

@@ -194,13 +194,13 @@ internal class ContinuousCornerShape private constructor(
     }
 }
 
-internal val TrivoxOuterShape: Shape = ContinuousCornerShape(24.dp)
-internal val TrivoxInnerShape: Shape = ContinuousCornerShape(14.dp)
-internal val TrivoxCompactShape: Shape = ContinuousCornerShape(8.dp)
+internal val TrivoxOuterShape: Shape = ContinuousCornerShape(28.dp)
+internal val TrivoxInnerShape: Shape = ContinuousCornerShape(18.dp)
+internal val TrivoxCompactShape: Shape = ContinuousCornerShape(12.dp)
 
 internal object TrivoxUiTokens {
-    val pagePadding = 14.dp
-    val groupSpacing = 14.dp
+    val pagePadding = 16.dp
+    val groupSpacing = 16.dp
     val rowSpacing = 10.dp
     val systemBlueLight = Color(0xFF007AFF)
     val systemBlueDark = Color(0xFF0A84FF)
@@ -268,17 +268,17 @@ internal fun TrivoxInsetGroup(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = TrivoxOuterShape,
-            color = MaterialTheme.colorScheme.surface,
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
             border = BorderStroke(
                 1.dp,
-                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.90f)
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.68f)
             ),
-            shadowElevation = 1.dp,
+            shadowElevation = 0.dp,
             tonalElevation = 0.dp
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(13.dp),
                 content = content
             )
         }
