@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v36_live_icmp_value">• ICMP %1$d ms</string>
+    <string name="v36_live_icmp_blocked">• ICMP ✗</string>
+    <string name="v36_simple_testing">Measuring connection quality…</string>
+    <string name="v36_simple_testing_progress">Testing %1$d/%2$d configs…</string>
+</resources>

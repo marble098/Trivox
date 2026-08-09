@@ -194,8 +194,8 @@ internal class ContinuousCornerShape private constructor(
     }
 }
 
-internal val TrivoxOuterShape: Shape = ContinuousCornerShape(18.dp)
-internal val TrivoxInnerShape: Shape = ContinuousCornerShape(10.dp)
+internal val TrivoxOuterShape: Shape = ContinuousCornerShape(24.dp)
+internal val TrivoxInnerShape: Shape = ContinuousCornerShape(14.dp)
 internal val TrivoxCompactShape: Shape = ContinuousCornerShape(8.dp)
 
 internal object TrivoxUiTokens {

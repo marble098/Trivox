@@ -393,6 +393,18 @@ private fun SimpleHomeScreen(
                             .trivoxSpringPress(
                                 runtime.state != ConnectionState.STOPPING
                             ),
+                        colors = ButtonDefaults.buttonColors( // trivox-v35-simple-colors
+                            containerColor = if (active) {
+                                Color(0xFFE5484D)    // red when connected
+                            } else {
+                                Color(0xFF12A594)    // teal/green when idle
+                            },
+                            contentColor = Color.White,
+                            disabledContainerColor =
+                                MaterialTheme.colorScheme.surfaceContainerHigh,
+                            disabledContentColor =
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
                         shape = TrivoxInnerShape,
                         enabled = runtime.state != ConnectionState.STOPPING
                     ) {
@@ -1352,42 +1364,16 @@ private fun CompactProfileCard(
                 Text("⋮", fontSize = 20.sp, color = MaterialTheme.colorScheme.primary)
             }
         }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(7.dp)
-        ) {
-            LatencyCell(
-                label = "TCP",
-                latency = profile.tcpLatencyMs,
-                status = profile.tcpTestStatus,
-                modifier = Modifier.weight(1f)
-            )
-            LatencyCell(
-                label = activity.getString(R.string.compose_real_label),
-                latency = profile.realLatencyMs,
-                status = profile.realTestStatus,
-                modifier = Modifier.weight(1f)
-            )
-        }
+        LatencyCell(
+            label = activity.getString(R.string.compose_real_label),
+            latency = profile.realLatencyMs,
+            status = profile.realTestStatus,
+            modifier = Modifier.fillMaxWidth()
+        )
         if (
-            profile.tcpTestStatus == TestStatus.TESTING ||
             profile.realTestStatus == TestStatus.TESTING
         ) LinearProgressIndicator(Modifier.fillMaxWidth())
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            TextButton(
-                onClick = { actions.composePingProfile(profile.id, PingMethod.TCP_CONNECT) },
-                enabled = profile.tcpTestStatus != TestStatus.TESTING,
-                modifier = Modifier.weight(1f).height(36.dp)
-            ) {
-                TrivoxAutoFitButtonText(
-                    text = if (profile.tcpTestStatus == TestStatus.TESTING) "TCP…"
-                    else activity.getString(R.string.compose_test_tcp),
-                    modifier = Modifier.fillMaxWidth(),
-                    maxFontSize = 13.sp,
-                    minFontSize = 8.sp,
-                    style = MaterialTheme.typography.labelMedium
-                )
-            }
             TextButton(
                 onClick = { actions.composePingProfile(profile.id, PingMethod.XRAY_HTTP) },
                 enabled = profile.realTestStatus != TestStatus.TESTING,
@@ -1442,41 +1428,16 @@ private fun ListProfileCard(
                 Text("⋮", fontSize = 22.sp, color = MaterialTheme.colorScheme.primary)
             }
         }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            LatencyCell(
-                label = "TCP",
-                latency = profile.tcpLatencyMs,
-                status = profile.tcpTestStatus,
-                modifier = Modifier.weight(1f)
-            )
-            LatencyCell(
-                label = activity.getString(R.string.compose_real_label),
-                latency = profile.realLatencyMs,
-                status = profile.realTestStatus,
-                modifier = Modifier.weight(1f)
-            )
-        }
+        LatencyCell(
+            label = activity.getString(R.string.compose_real_label),
+            latency = profile.realLatencyMs,
+            status = profile.realTestStatus,
+            modifier = Modifier.fillMaxWidth()
+        )
         if (
-            profile.tcpTestStatus == TestStatus.TESTING ||
             profile.realTestStatus == TestStatus.TESTING
         ) LinearProgressIndicator(Modifier.fillMaxWidth())
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(
-                onClick = { actions.composePingProfile(profile.id, PingMethod.TCP_CONNECT) },
-                enabled = profile.tcpTestStatus != TestStatus.TESTING,
-                modifier = Modifier.weight(1f).height(40.dp).trivoxSpringPress(profile.tcpTestStatus != TestStatus.TESTING)
-            ) {
-                TrivoxAutoFitButtonText(
-                    text = if (profile.tcpTestStatus == TestStatus.TESTING) "TCP…"
-                    else activity.getString(R.string.compose_test_tcp),
-                    modifier = Modifier.fillMaxWidth(),
-                    maxFontSize = 14.sp,
-                    minFontSize = 8.sp
-                )
-            }
             OutlinedButton(
                 onClick = { actions.composePingProfile(profile.id, PingMethod.XRAY_HTTP) },
                 enabled = profile.realTestStatus != TestStatus.TESTING,
@@ -1797,46 +1758,24 @@ private fun ToolsTab(
 ) {
     val settings = remember(uiRevision) { actions.composeSettings() }
     val tools = listOf(
+        ToolEntry("⚡", activity.getString(R.string.select_fastest),
+            activity.getString(R.string.compose_tool_fastest_summary), actions::composeSelectFastest),
+        ToolEntry("📋", activity.getString(R.string.copy_local_proxy),
+            activity.getString(R.string.compose_tool_proxy_summary), actions::composeCopyProxy),
+        ToolEntry("📦", activity.getString(R.string.export_backup),
+            activity.getString(R.string.compose_tool_backup_summary), actions::composeExportBackup),
+        ToolEntry("🗑️", activity.getString(R.string.clear_dead_profiles),
+            activity.getString(R.string.compose_tool_failed_summary), actions::composeClearDead),
+        ToolEntry("🔀", activity.getString(R.string.app_routing),
+            activity.getString(R.string.compose_tool_routing_summary), actions::composeOpenRouting),
+        ToolEntry("🔍", activity.getString(R.string.diagnostics),
+            activity.getString(R.string.sanitized_report), actions::composeOpenDiagnostics),
+        ToolEntry("⬚", activity.getString(R.string.quick_tile_add),
+            activity.getString(R.string.quick_tile_add_summary), actions::composeRequestQuickTile),
         ToolEntry(
-            activity.getString(R.string.select_fastest),
-            activity.getString(R.string.compose_tool_fastest_summary),
-            actions::composeSelectFastest
-        ),
-        ToolEntry(
-            activity.getString(R.string.copy_local_proxy),
-            activity.getString(R.string.compose_tool_proxy_summary),
-            actions::composeCopyProxy
-        ),
-        ToolEntry(
-            activity.getString(R.string.export_backup),
-            activity.getString(R.string.compose_tool_backup_summary),
-            actions::composeExportBackup
-        ),
-        ToolEntry(
-            activity.getString(R.string.clear_dead_profiles),
-            activity.getString(R.string.compose_tool_failed_summary),
-            actions::composeClearDead
-        ),
-        ToolEntry(
-            activity.getString(R.string.app_routing),
-            activity.getString(R.string.compose_tool_routing_summary),
-            actions::composeOpenRouting
-        ),
-        ToolEntry(
-            activity.getString(R.string.diagnostics),
-            activity.getString(R.string.sanitized_report),
-            actions::composeOpenDiagnostics
-        ),
-        ToolEntry(
-            activity.getString(R.string.quick_tile_add),
-            activity.getString(R.string.quick_tile_add_summary),
-            actions::composeRequestQuickTile
-        ),
-        ToolEntry(
-            if (settings.gridMode) activity.getString(R.string.list)
-            else activity.getString(R.string.grid),
-            activity.getString(R.string.compose_tool_view_summary),
-            actions::composeToggleGrid
+            if (settings.gridMode) "☰" else "⊞",
+            if (settings.gridMode) activity.getString(R.string.list) else activity.getString(R.string.grid),
+            activity.getString(R.string.compose_tool_view_summary), actions::composeToggleGrid
         )
     )
 
@@ -1848,7 +1787,7 @@ private fun ToolsTab(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         gridItems(tools) { entry ->
-            ToolButton(entry.title, entry.subtitle, entry.onClick)
+            ToolButton(entry.icon, entry.title, entry.subtitle, entry.onClick)
         }
     }
 }
@@ -1970,7 +1909,8 @@ private fun BatchStateBanner(activity: Activity, state: ComposeBatchState) {
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             val method = when (state.method) {
-                PingMethod.TCP_CONNECT -> "TCP"
+                PingMethod.TCP_CONNECT ->
+                    activity.getString(R.string.compose_real_label)
                 PingMethod.XRAY_HTTP -> activity.getString(R.string.compose_real_label)
                 null -> ""
             }
@@ -2143,42 +2083,54 @@ private fun LatencyCell(
 }
 
 @Composable
-private fun ToolButton(title: String, subtitle: String, onClick: () -> Unit) {
+private fun ToolButton(icon: String, title: String, subtitle: String, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(104.dp)
+            .height(112.dp)
             .trivoxSpringPress()
             .clickable(onClick = onClick),
         shape = TrivoxOuterShape,
         border = BorderStroke(
             1.dp,
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.92f)
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.80f)
         ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(horizontal = 13.dp, vertical = 12.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+            Surface(
+                shape = ContinuousCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(icon, fontSize = 18.sp)
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -2275,7 +2227,7 @@ private fun ConnectionDuration(snapshot: ConnectionRuntime.Snapshot) {
     }
 }
 
-private data class ToolEntry(val title: String, val subtitle: String, val onClick: () -> Unit)
+private data class ToolEntry(val icon: String, val title: String, val subtitle: String, val onClick: () -> Unit)
 
 private fun tabLabel(activity: Activity, tab: MainTab): String = when (tab) {
     MainTab.HOME -> activity.getString(R.string.tab_home)

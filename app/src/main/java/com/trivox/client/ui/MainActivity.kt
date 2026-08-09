@@ -180,6 +180,13 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     @Volatile
     private var livePingResult:
         PingResult? = null
+    /**
+     * ICMP echo companion for automatic live ping. Session telemetry only:
+     * it is never written back into a profile's stored latency or sorting.
+     */
+    @Volatile
+    private var liveIcmpResult:
+        PingResult? = null
     @Volatile
     private var realDelayResult:
         PingResult? = null
@@ -945,6 +952,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
 
         manualLivePingRequested.set(true)
         livePingResult = null
+        liveIcmpResult = null
         livePingText.setText(
             R.string
                 .live_ping_measuring
@@ -3532,6 +3540,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                 snapshot.profileId
             ) {
                 livePingResult = null
+                liveIcmpResult = null
                 realDelayResult = null
                 lastInfoProfileId =
                     snapshot.profileId
@@ -3557,6 +3566,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         } else {
             lastInfoProfileId = null
             livePingResult = null
+            liveIcmpResult = null
             realDelayResult = null
             livePingBusy.set(false)
             realDelayBusy.set(false)
@@ -3668,6 +3678,17 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                         failedPingResult(settings.livePingMethod, it)
                     }
 
+                    // ICMP echo runs next to the tunnel measurement so the label
+                    // can show raw network reachability beside real tunnel latency.
+                    val icmp = runCatching {
+                        val host = profile.probeServer.trim()
+                            .ifBlank { profile.server.trim() }
+                        if (host.isBlank()) null else pingManager.icmp(host)
+                    }.getOrElse {
+                        Diagnostics.debug("Live ICMP failed: ${it.javaClass.simpleName}")
+                        null
+                    }
+
                     val latest = ConnectionRuntime.current()
                     if (
                         latest.state == ConnectionState.CONNECTED &&
@@ -3677,6 +3698,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                         // Live ping is session telemetry only. It intentionally does
                         // not overwrite the stored batch result, so sorting remains stable.
                         livePingResult = result
+                        liveIcmpResult = icmp
                     }
 
                     livePingBusy.set(false)
@@ -4862,15 +4884,136 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                     toast(composeCommunityStatusText)
                 }
                 if (connectAfter && result.success) {
-                    val profile = chooseSimpleProfile()
-                    if (profile != null) {
-                        repository.select(profile.id)
-                        refresh()
-                        toggleConnection()
+                    if (repository.all().any { it.enabled }) {
+                        simpleAutoConnect()
                     } else {
                         toast(getString(R.string.v26_simple_no_config))
                     }
                 }
+            }
+        }
+    }
+
+    private val simpleAutoBusy = AtomicBoolean(false)
+
+    /**
+     * Simple mode auto-connect.
+     *
+     * Runs a real (Xray) delay test across the community pool that was fetched
+     * from the worker, then connects to the profile with the lowest verified
+     * latency. TCP reachability is deliberately not used here: it says nothing
+     * about whether the tunnel actually carries traffic.
+     */
+    private fun simpleAutoConnect() {
+        if (!simpleAutoBusy.compareAndSet(false, true)) return
+
+        val runtime = ConnectionRuntime.current()
+        if (runtime.state !in setOf(ConnectionState.DISCONNECTED, ConnectionState.ERROR)) {
+            simpleAutoBusy.set(false)
+            toggleConnection()
+            return
+        }
+
+        composeCommunityStatusText = getString(R.string.v36_simple_testing)
+        notifyComposeChanged()
+
+        storageWorker.execute {
+            val all = repository.all().filter { it.enabled }
+            val community = all.filter {
+                it.subscriptionId == CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID
+            }
+            val pool = (community.ifEmpty { all }).take(SIMPLE_AUTO_TEST_LIMIT)
+
+            if (pool.isEmpty()) {
+                runOnUiThreadIfAlive {
+                    simpleAutoBusy.set(false)
+                    composeCommunityStatusText = ""
+                    notifyComposeChanged()
+                    toast(getString(R.string.v26_simple_no_config))
+                }
+                return@execute
+            }
+
+            val settings = settingsRepository.load()
+            settings.pingMethod = PingMethod.XRAY_HTTP
+            val results = ConcurrentHashMap<String, PingResult>()
+            val total = pool.size
+            val completed = AtomicInteger(0)
+            val remaining = AtomicInteger(total)
+            val finished = AtomicBoolean(false)
+
+            runCatching {
+                pingManager.batch(
+                    profiles = pool,
+                    settings = settings,
+                    workDir = cacheDir
+                ) { profile, result ->
+                    results[profile.id] = result
+                    val done = completed.incrementAndGet()
+                    runOnUiThreadIfAlive {
+                        composeCommunityStatusText = getString(
+                            R.string.v36_simple_testing_progress,
+                            done,
+                            total
+                        )
+                        notifyComposeChanged()
+                    }
+                    if (remaining.decrementAndGet() == 0 &&
+                        finished.compareAndSet(false, true)
+                    ) {
+                        completeSimpleAutoConnect(results)
+                    }
+                }
+            }.onFailure {
+                Diagnostics.recordThrowable("Simple auto connect", it)
+                runOnUiThreadIfAlive {
+                    simpleAutoBusy.set(false)
+                    composeCommunityStatusText = ""
+                    notifyComposeChanged()
+                    toast(getString(R.string.v26_simple_no_config))
+                }
+            }
+        }
+    }
+
+    /** Persists the auto-test results, then connects to the fastest verified profile. */
+    private fun completeSimpleAutoConnect(results: Map<String, PingResult>) {
+        storageWorker.execute {
+            if (results.isNotEmpty()) {
+                repository.updateMany(results.keys.toList()) { current ->
+                    results[current.id]?.let { applyPingResultToProfile(current, it) }
+                }
+            }
+
+            val best = results.entries
+                .filter { it.value.success && it.value.latencyMs != null }
+                .minByOrNull { it.value.latencyMs ?: Long.MAX_VALUE }
+                ?.key
+                ?.let(repository::find)
+
+            runOnUiThreadIfAlive {
+                simpleAutoBusy.set(false)
+                composeCommunityStatusText = ""
+                subscriptionTabsSignature = ""
+                renderSubscriptionTabs(force = true)
+                refresh()
+
+                val target = best ?: chooseSimpleProfile()
+                if (target == null) {
+                    notifyComposeChanged()
+                    toast(getString(R.string.v26_simple_no_config))
+                    return@runOnUiThreadIfAlive
+                }
+
+                repository.select(target.id)
+                refresh()
+                if (best != null) {
+                    Diagnostics.info(
+                        "Simple auto connect selected ${target.id} at " +
+                            "${results[target.id]?.latencyMs}ms"
+                    )
+                }
+                toggleConnection()
             }
         }
     }
@@ -4885,20 +5028,19 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             return
         }
 
-        val profile = chooseSimpleProfile()
-        if (profile != null) {
-            repository.select(profile.id)
-            refresh()
-            toggleConnection()
+        val settings = settingsRepository.load()
+        val hasConfigs = repository.all().any { it.enabled }
+        if (!hasConfigs) {
+            if (settings.communitySourceEnabled) {
+                syncCommunityConfigs(silent = false, connectAfter = true)
+            } else {
+                toast(getString(R.string.v26_simple_no_config))
+            }
             return
         }
 
-        val settings = settingsRepository.load()
-        if (settings.communitySourceEnabled) {
-            syncCommunityConfigs(silent = false, connectAfter = true)
-        } else {
-            toast(getString(R.string.v26_simple_no_config))
-        }
+        // Measure the pool first, then connect to the fastest verified route.
+        simpleAutoConnect()
     }
 
     override fun composeCommunitySync() {
@@ -4977,6 +5119,19 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         refresh()
     }
 
+    /**
+     * ICMP echo companion for the live ping label. Empty when ICMP produced no
+     * usable sample, which is normal on networks or devices that drop echo.
+     */
+    private fun liveIcmpSuffix(): String {
+        val icmp = liveIcmpResult ?: return ""
+        return if (icmp.success && icmp.latencyMs != null) {
+            " " + getString(R.string.v36_live_icmp_value, icmp.latencyMs)
+        } else {
+            " " + getString(R.string.v36_live_icmp_blocked)
+        }
+    }
+
     override fun composeLivePingLabel(): String {
         val snapshot = ConnectionRuntime.current()
         if (snapshot.state != ConnectionState.CONNECTED) {
@@ -4992,10 +5147,10 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                     R.string.live_ping_value_method,
                     result.latencyMs,
                     pingMethodLabel(PingMethod.fromStored(result.method))
-                )
+                ) + liveIcmpSuffix()
 
             result != null ->
-                getString(R.string.live_ping_failed)
+                getString(R.string.live_ping_failed) + liveIcmpSuffix()
 
             !settingsRepository.load().livePingEnabled ->
                 getString(R.string.live_ping_auto_disabled)
@@ -5052,6 +5207,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         private const val
             PROFILE_SWITCH_DELAY_MS = 180L
         private const val PING_RESULT_FLUSH_MS = 300L
+        private const val SIMPLE_AUTO_TEST_LIMIT = 25
         private const val SINGLE_METHOD_PENALTY_MS = 5_000L
         private const val MAIN_UI_PREFS = "main_ui"
         private const val KEY_ACTIVE_SUBSCRIPTION =
