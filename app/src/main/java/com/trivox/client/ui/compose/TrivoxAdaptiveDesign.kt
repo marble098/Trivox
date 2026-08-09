@@ -354,10 +354,11 @@ internal fun TrivoxLargeTopBar(
                 strokeWidth = 1f
             )
         },
-        // v28.1: keep the large-title pattern, but remove the oversized
-        // top dead-space visible at the initial scroll position.
-        collapsedHeight = 56.dp,
-        expandedHeight = 76.dp,
+        // v28.2: device-tested compact geometry. Keep status-bar safety
+        // and the large-title transition, but remove the remaining tall
+        // header in both expanded and collapsed states.
+        collapsedHeight = 44.dp,
+        expandedHeight = 56.dp,
         title = {
             Box(Modifier.fillMaxWidth()) {
                 Text(
