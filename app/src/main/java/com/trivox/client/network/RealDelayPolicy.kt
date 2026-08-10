@@ -119,7 +119,7 @@ internal data class RealDelayPolicy(
                         startGraceMs =
                             settings
                                 .realDelayStartGraceMs
-                                .coerceIn(0, 1_500),
+                                .coerceIn(0, 1_000),
                         probeTimeoutMs =
                             settings
                                 .realDelayProbeTimeoutMs
