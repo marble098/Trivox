@@ -88,7 +88,7 @@ class PingManager(
         attempts = 1,
         timeoutSeconds = SINGLE_XRAY_TIMEOUT_SECONDS,
         allowSingleSample = true,
-        maxTargetsPerSample = 2
+        maxTargetsPerSample = 3
     )
 
     @Synchronized
@@ -164,8 +164,18 @@ class PingManager(
             }
             started = true
 
-            if (!waitCancellable(PROBE_START_GRACE_MS)) {
-                return cancelled(PingMethod.XRAY_HTTP.name, timestamp)
+            if (
+                !waitForLocalProxyListener(
+                    port = probeSettings.socksPort,
+                    timeoutMs = PROBE_LISTENER_READY_TIMEOUT_MS
+                )
+            ) {
+                val logCategory = XrayProbeLogInspector.classifySince(mark)
+                return basicFailure(
+                    PingMethod.XRAY_HTTP.name,
+                    timestamp,
+                    logCategory ?: "local_proxy_listener_unavailable"
+                )
             }
 
             val verified = verifiedLocalProxy(
@@ -247,7 +257,18 @@ class PingManager(
                 )
             }
             started = true
-            waitCancellable(PROBE_START_GRACE_MS)
+            if (
+                !waitForLocalProxyListener(
+                    port = port,
+                    timeoutMs = PROBE_LISTENER_READY_TIMEOUT_MS
+                )
+            ) {
+                return basicFailure(
+                    PingMethod.XRAY_HTTP.name,
+                    timestamp,
+                    "local_proxy_listener_unavailable"
+                )
+            }
             verifiedLocalProxy(
                 settings,
                 attempts = 2,
@@ -351,9 +372,10 @@ class PingManager(
             preferredLocalProxyTarget.get()
                 ?.let(VerifiedHttpProbe::targetForUserUrl)
                 ?.let(::add)
+            add(VerifiedHttpProbe.strongTraceTarget)
             VerifiedHttpProbe.targetForUserUrl(requestedUrl)?.let(::add)
             addAll(VerifiedHttpProbe.fallback204Targets)
-            addAll(VerifiedHttpProbe.dnsFreeTraceTargets)
+            addAll(VerifiedHttpProbe.dnsFreeTraceTargets.drop(1))
         }.distinctBy { it.url }
 
     fun tlsHandshake(
@@ -410,7 +432,7 @@ class PingManager(
                                 workDir = workDir,
                                 attempts = BATCH_XRAY_ATTEMPTS,
                                 timeoutSeconds = BATCH_XRAY_TIMEOUT_SECONDS,
-                                allowSingleSample = false,
+                                allowSingleSample = true,
                                 maxTargetsPerSample = BATCH_XRAY_MAX_TARGETS
                             )
                         }
@@ -625,6 +647,39 @@ class PingManager(
         return data
     }
 
+    private fun waitForLocalProxyListener(
+        port: Int,
+        timeoutMs: Int
+    ): Boolean {
+        val deadline = System.nanoTime() +
+            timeoutMs.coerceAtLeast(1).toLong() * NANOS_PER_MILLISECOND
+
+        while (System.nanoTime() < deadline) {
+            if (Thread.currentThread().isInterrupted) return false
+
+            val connected = runCatching {
+                Socket().use { socket ->
+                    socket.tcpNoDelay = true
+                    socket.connect(
+                        InetSocketAddress("127.0.0.1", port),
+                        PROBE_LISTENER_CONNECT_TIMEOUT_MS
+                    )
+                }
+                true
+            }.getOrDefault(false)
+
+            if (connected) return true
+
+            try {
+                Thread.sleep(PROBE_LISTENER_RETRY_MS.toLong())
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            }
+        }
+        return false
+    }
+
     private fun waitCancellable(delayMs: Int): Boolean {
         var remaining = delayMs
         while (remaining > 0) {
@@ -743,11 +798,13 @@ class PingManager(
         private const val DNS_CACHE_TTL_MS = 60_000L
         private const val NEGATIVE_DNS_CACHE_TTL_MS = 15_000L
         private const val RESOLVER_ROTATION_COOLDOWN_MS = 5_000L
-        private const val BATCH_XRAY_ATTEMPTS = 2
+        private const val BATCH_XRAY_ATTEMPTS = 1
         private const val BATCH_XRAY_TIMEOUT_SECONDS = 5
-        private const val BATCH_XRAY_MAX_TARGETS = 2
+        private const val BATCH_XRAY_MAX_TARGETS = 4
         private const val MAX_HTTP_TARGETS_PER_SAMPLE = 4
-        private const val PROBE_START_GRACE_MS = 90
+        private const val PROBE_LISTENER_READY_TIMEOUT_MS = 1_700
+        private const val PROBE_LISTENER_CONNECT_TIMEOUT_MS = 120
+        private const val PROBE_LISTENER_RETRY_MS = 40
         private const val MIN_COMPAT_PROBE_TIMEOUT_MS = 1_200
         private const val WIREGUARD_PROBE_START_GRACE_MS = 220
         private const val NANOS_PER_MILLISECOND = 1_000_000L
