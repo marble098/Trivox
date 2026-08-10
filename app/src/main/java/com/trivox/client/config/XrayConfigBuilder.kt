@@ -35,6 +35,7 @@ object Validators {
 object XrayConfigBuilder {
     private const val MAX_CUSTOM_DNS_SERVERS = 8
     private const val DNS_ROUTING_TAG = "dns-in"
+    private const val FRAGMENT_OUTBOUND_TAG = "fragment-out"
     private const val HAPPY_EYEBALLS_DELAY_MS = 180
     private val TCP_DEFAULT_STREAM_PROTOCOLS = setOf(
         "vless", "vmess", "trojan", "http", "socks", "shadowsocks"
@@ -54,7 +55,8 @@ object XrayConfigBuilder {
         settings: AppSettings,
         mode: ConnectionMode,
         tunFd: Int? = null,
-        errorLogPath: String? = null
+        errorLogPath: String? = null,
+        bootstrapIps: List<String> = emptyList()
     ): String {
         settings.normalize()
         require(Validators.validPort(settings.socksPort)) {
@@ -103,7 +105,9 @@ object XrayConfigBuilder {
         }
         root.put("inbounds", buildInbounds(profile, effectiveSettings, mode))
         root.put("outbounds", buildOutbounds(profile, effectiveSettings))
-        root.put("dns", dns(profile, effectiveSettings))
+        val dnsConfig = dns(profile, effectiveSettings)
+        installBootstrapHosts(dnsConfig, profile, bootstrapIps)
+        root.put("dns", dnsConfig)
         root.put("routing", routing(profile, effectiveSettings, mode))
         return root.toString(2)
     }
@@ -140,13 +144,35 @@ object XrayConfigBuilder {
         val chain = ProxyChainCodec.decode(profile.outboundJson)
         val result = JSONArray()
         if (chain == null) {
-            result.put(
-                normalizeOutbound(
-                    JSONObject(profile.outboundJson),
-                    settings,
-                    allowAutomaticDnsStrategy = true
-                ).put("tag", "proxy")
-            )
+            val proxy = normalizeOutbound(
+                JSONObject(profile.outboundJson),
+                settings,
+                allowAutomaticDnsStrategy = true
+            ).put("tag", "proxy")
+
+            XrayFragmentPolicy.resolve(profile, settings)?.let { plan ->
+                val stream = proxy.optJSONObject("streamSettings")
+                    ?: JSONObject().put("network", "tcp").also {
+                        proxy.put("streamSettings", it)
+                    }
+                val sockopt = stream.optJSONObject("sockopt")
+                    ?: JSONObject().also { stream.put("sockopt", it) }
+                // Xray docs explicitly forbid Happy Eyeballs with dialerProxy.
+                sockopt.remove("happyEyeballs")
+                sockopt.put("dialerProxy", FRAGMENT_OUTBOUND_TAG)
+                result.put(
+                    JSONObject()
+                        .put("protocol", "freedom")
+                        .put("tag", FRAGMENT_OUTBOUND_TAG)
+                        .put(
+                            "settings",
+                            JSONObject()
+                                .put("domainStrategy", "UseIP")
+                                .put("fragment", plan.toJson())
+                        )
+                )
+            }
+            result.put(proxy)
         } else {
             val bridge = normalizeOutbound(
                 JSONObject(chain.bridge.toString()),
@@ -202,7 +228,7 @@ object XrayConfigBuilder {
         settings: AppSettings,
         allowAutomaticDnsStrategy: Boolean
     ) {
-        if (!settings.networkTuningEnabled) return
+        if (!settings.networkTuningEnabled && !settings.smartConnectionOptimizer) return
 
         val protocol = outbound.optString("protocol").lowercase()
         val stream = outbound.optJSONObject("streamSettings")
@@ -241,7 +267,8 @@ object XrayConfigBuilder {
         if (settings.tcpUserTimeoutMs > 0 && !sockopt.has("tcpUserTimeout")) {
             sockopt.put("tcpUserTimeout", settings.tcpUserTimeoutMs)
         }
-        if (settings.adaptiveHandshake && !sockopt.has("happyEyeballs")) {
+        if ((settings.adaptiveHandshake || settings.smartConnectionOptimizer) &&
+            !sockopt.has("happyEyeballs")) {
             val hasDialerProxy = sockopt.optString("dialerProxy").isNotBlank()
             val hasTargetStrategy = outbound.optString("targetStrategy").isNotBlank()
             var domainStrategy = sockopt.optString("domainStrategy").trim()
@@ -638,6 +665,8 @@ object XrayConfigBuilder {
         if (!imported.has("enableParallelQuery")) {
             imported.put("enableParallelQuery", true)
         }
+        if (!imported.has("serveStale")) imported.put("serveStale", true)
+        if (!imported.has("serveExpiredTTL")) imported.put("serveExpiredTTL", 3600)
         if (!imported.has("useSystemHosts")) {
             imported.put("useSystemHosts", false)
         }
@@ -655,6 +684,8 @@ object XrayConfigBuilder {
         .put("disableFallback", false)
         .put("disableFallbackIfMatch", false)
         .put("enableParallelQuery", true)
+        .put("serveStale", true)
+        .put("serveExpiredTTL", 3600)
         .put("useSystemHosts", false)
         .put("tag", DNS_ROUTING_TAG)
 
@@ -705,7 +736,7 @@ object XrayConfigBuilder {
             if (seen.add(signature)) result.put(value)
         }
 
-        bootstrapDns(profile)?.let(::append)
+        bootstrapDns(profile).forEach(::append)
         for (index in 0 until servers.length()) {
             append(servers.opt(index))
         }
@@ -718,21 +749,54 @@ object XrayConfigBuilder {
      * a DNS-via-proxy recursion while every normal DNS query still follows the
      * selected route.
      */
-    private fun bootstrapDns(profile: ConfigProfile): JSONObject? =
+    private fun bootstrapDns(profile: ConfigProfile): List<JSONObject> =
         profile.server
             .trim()
-            .takeIf {
-                it.isNotBlank() && !isIpLiteral(it)
-            }
+            .takeIf { it.isNotBlank() && !isIpLiteral(it) }
             ?.let { host ->
-                JSONObject()
-                    .put("address", "https+local://1.1.1.1/dns-query")
-                    .put("domains", JSONArray().put("full:$host"))
-                    .put("skipFallback", true)
-                    .put("queryStrategy", "UseIP")
+                val domains = JSONArray().put("full:$host")
+                listOf(
+                    "tcp+local://1.1.1.1:53",
+                    "tcp+local://8.8.8.8:53",
+                    "https+local://1.1.1.1/dns-query",
+                    "https+local://8.8.8.8/dns-query"
+                ).map { address ->
+                    JSONObject()
+                        .put("address", address)
+                        .put("domains", JSONArray(domains.toString()))
+                        .put("skipFallback", true)
+                        .put("queryStrategy", "UseIP")
+                }
             }
+            ?: emptyList()
+
+    private fun installBootstrapHosts(
+        dns: JSONObject,
+        profile: ConfigProfile,
+        bootstrapIps: List<String>
+    ) {
+        val host = profile.server.trim()
+        if (host.isBlank() || isIpLiteral(host)) return
+        val ips = bootstrapIps
+            .asSequence()
+            .map { it.trim().substringBefore('%') }
+            .filter(String::isNotBlank)
+            .distinct()
+            .take(4)
+            .toList()
+        if (ips.isEmpty()) return
+
+        val hosts = dns.optJSONObject("hosts")
+            ?: JSONObject().also { dns.put("hosts", it) }
+        hosts.put(
+            "full:$host",
+            if (ips.size == 1) ips.first() else JSONArray(ips)
+        )
+    }
 
     private fun localSecureDns() = JSONArray()
+        .put("tcp+local://1.1.1.1:53")
+        .put("tcp+local://8.8.8.8:53")
         .put("https+local://1.1.1.1/dns-query")
         .put("https+local://8.8.8.8/dns-query")
 

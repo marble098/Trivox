@@ -92,6 +92,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          trap 'rc=$?; echo "::error::Project validation failed at shell line ${LINENO}: ${BASH_COMMAND} (exit ${rc})" >&2' ERR
 
           chmod +x gradlew build.sh
           find tools -maxdepth 1 -type f -name "*.sh" -exec chmod +x {} +
@@ -186,8 +187,17 @@ jobs:
             app/src/main/java/com/trivox/client/service/TrivoxVpnService.kt
           grep -Fq 'setUsesChronometer(true)' \
             app/src/main/java/com/trivox/client/service/NotificationSupport.kt
-          grep -Fq 'requestLivePingNow' \
-            app/src/main/java/com/trivox/client/ui/MainActivity.kt
+          if grep -R -n -E 'requestLivePingNow|livePingTick|IcmpProbe|fun icmp\(' \
+            app/src/main/java app/src/test; then
+            echo "Removed ICMP/Automatic Live Ping code returned." >&2
+            exit 1
+          fi
+          grep -Fq 'SmartConnectionOptimizer' \
+            app/src/main/java/com/trivox/client/core/CoreManager.kt
+          grep -Fq 'FRAGMENT_OUTBOUND_TAG' \
+            app/src/main/java/com/trivox/client/config/XrayConfigBuilder.kt
+          grep -Fq 'riskScore' \
+            app/src/main/java/com/trivox/client/network/LeakProtectionManager.kt
           grep -Fq 'QuickConnectTileService' \
             app/src/main/AndroidManifest.xml
           grep -Fq 'BIND_QUICK_SETTINGS_TILE' \
@@ -242,7 +252,12 @@ jobs:
             echo "Alive/dead row labels unexpectedly returned." >&2
             exit 1
           fi
-          grep -Fq 'https://cp.cloudflare.com/generate_204' \
+          if grep -Fq 'https://cp.cloudflare.com/generate_204' \
+            app/src/main/java/com/trivox/client/ui/MainActivity.kt; then
+            echo "Removed fixed Live Ping probe URL unexpectedly returned to MainActivity." >&2
+            exit 1
+          fi
+          grep -Fq 'TunnelHealthVerifier.measure' \
             app/src/main/java/com/trivox/client/ui/MainActivity.kt
           grep -Fq 'localProxyInVpn' \
             app/src/main/java/com/trivox/client/config/XrayConfigBuilder.kt

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="p3_smart_optimizer">Smart connection optimizer</string>
+    <string name="p3_smart_optimizer_hint">Locally adapts DNS bootstrap, handshake grace and route verification to each protocol/transport. No cloud AI and no config secrets leave the device.</string>
+    <string name="p3_fragment_auto">Automatic Fragment profile</string>
+    <string name="p3_fragment_auto_hint">Chooses bounded TLS Hello fragmentation for compatible TCP transports and avoids WireGuard, Hysteria, mKCP and proxy chains.</string>
+    <string name="p3_fragment_manual_hint">Manual mode is validated and bounded before it reaches Xray.</string>
+    <string name="p3_leak_guard_v2">Leak Guard V2 • auto repair</string>
+    <string name="p3_leak_guard_v2_hint">Cross-checks VPN routes, VPN/physical DNS, IPv4/IPv6 coverage and independent exit paths, then hardens DNS/routing and reconnects when a repair is needed.</string>
+</resources>

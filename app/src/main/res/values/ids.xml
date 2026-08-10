@@ -64,10 +64,7 @@
     <item type="id" name="jsonContainer" />
     <item type="id" name="jsonModeButton" />
     <item type="id" name="languageSpinner" />
-    <item type="id" name="livePingEnabledSwitch" />
-    <item type="id" name="livePingIntervalInput" />
-    <item type="id" name="livePingText" />
-    <item type="id" name="loadingText" />
+<item type="id" name="loadingText" />
     <item type="id" name="localAddressInput" />
     <item type="id" name="localAddressLabel" />
     <item type="id" name="localProxyInVpnCheck" />
@@ -92,9 +89,7 @@
     <item type="id" name="pauseButton" />
     <item type="id" name="pingActionText" />
     <item type="id" name="pingAttemptsSpinner" />
-    <item type="id" name="pingMethodSpinner" />
-    <item type="id" name="pingMethodSummary" />
-    <item type="id" name="portInput" />
+<item type="id" name="portInput" />
     <item type="id" name="preSharedKeyInput" />
     <item type="id" name="preSharedKeyLabel" />
     <item type="id" name="privateKeyInput" />

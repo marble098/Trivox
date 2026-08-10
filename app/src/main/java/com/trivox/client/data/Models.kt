@@ -340,9 +340,6 @@ data class AppSettings(
     var blocking: Boolean = true,
     var gridMode: Boolean = false,
     var pingMethod: PingMethod = PingMethod.XRAY_HTTP,
-    var livePingMethod: PingMethod = PingMethod.XRAY_HTTP,
-    var livePingEnabled: Boolean = true,
-    var livePingIntervalSeconds: Int = 15,
     var hideIpOnMain: Boolean = false,
     var homeShowModeSelector: Boolean = true,
     var homeShowUsage: Boolean = true,
@@ -377,6 +374,7 @@ data class AppSettings(
     var realDelayRequiredProofs: Int = 2,
     var adaptiveHandshake: Boolean = true,
     var networkTuningEnabled: Boolean = true,
+    var smartConnectionOptimizer: Boolean = true,
     var tcpFastOpen: Boolean = false,
     var tcpKeepAliveIdleSeconds: Int = 60,
     var tcpKeepAliveIntervalSeconds: Int = 15,
@@ -389,6 +387,7 @@ data class AppSettings(
     var wireGuardDomainStrategy: String = DEFAULT_WIREGUARD_DOMAIN_STRATEGY,
     var nativeWireGuardVpn: Boolean = false,
     var fragmentEnabled: Boolean = false,
+    var fragmentAuto: Boolean = true,
     var fragmentPackets: String = "tlshello",
     var fragmentLength: String = "100-200",
     var fragmentInterval: String = "10-20"
@@ -409,7 +408,6 @@ data class AppSettings(
         fragmentPackets = fragmentPackets.trim().ifBlank { "tlshello" }
         fragmentLength = fragmentLength.trim().ifBlank { "100-200" }
         fragmentInterval = fragmentInterval.trim().ifBlank { "10-20" }
-        livePingIntervalSeconds = livePingIntervalSeconds.coerceIn(12, 300)
         tcpKeepAliveIdleSeconds = tcpKeepAliveIdleSeconds.coerceIn(0, 3600)
         tcpKeepAliveIntervalSeconds = tcpKeepAliveIntervalSeconds.coerceIn(0, 600)
         tcpUserTimeoutMs = tcpUserTimeoutMs.coerceIn(0, 120_000)
@@ -466,9 +464,6 @@ data class AppSettings(
         .put("blocking", blocking)
         .put("gridMode", gridMode)
         .put("pingMethod", pingMethod.name)
-        .put("livePingMethod", livePingMethod.name)
-        .put("livePingEnabled", livePingEnabled)
-        .put("livePingIntervalSeconds", livePingIntervalSeconds)
         .put("hideIpOnMain", hideIpOnMain)
         .put("homeShowModeSelector", homeShowModeSelector)
         .put("homeShowUsage", homeShowUsage)
@@ -503,6 +498,7 @@ data class AppSettings(
         .put("realDelayRequiredProofs", realDelayRequiredProofs)
         .put("adaptiveHandshake", adaptiveHandshake)
         .put("networkTuningEnabled", networkTuningEnabled)
+        .put("smartConnectionOptimizer", smartConnectionOptimizer)
         .put("tcpFastOpen", tcpFastOpen)
         .put("tcpKeepAliveIdleSeconds", tcpKeepAliveIdleSeconds)
         .put("tcpKeepAliveIntervalSeconds", tcpKeepAliveIntervalSeconds)
@@ -515,6 +511,7 @@ data class AppSettings(
         .put("wireGuardDomainStrategy", wireGuardDomainStrategy)
         .put("nativeWireGuardVpn", nativeWireGuardVpn)
         .put("fragmentEnabled", fragmentEnabled)
+        .put("fragmentAuto", fragmentAuto)
         .put("fragmentPackets", fragmentPackets)
         .put("fragmentLength", fragmentLength)
         .put("fragmentInterval", fragmentInterval)
@@ -567,12 +564,6 @@ data class AppSettings(
                 blocking = json.optBoolean("blocking", true),
                 gridMode = json.optBoolean("gridMode"),
                 pingMethod = legacyPingMethod,
-                livePingMethod = PingMethod.fromStored(
-                    json.optString("livePingMethod"),
-                    legacyPingMethod
-                ),
-                livePingEnabled = json.optBoolean("livePingEnabled", true),
-                livePingIntervalSeconds = json.optInt("livePingIntervalSeconds", 15),
                 hideIpOnMain = json.optBoolean("hideIpOnMain", false),
                 homeShowModeSelector = json.optBoolean("homeShowModeSelector", true),
                 homeShowUsage = json.optBoolean("homeShowUsage", true),
@@ -616,6 +607,7 @@ data class AppSettings(
                 realDelayRequiredProofs = json.optInt("realDelayRequiredProofs", 2),
                 adaptiveHandshake = json.optBoolean("adaptiveHandshake", true),
                 networkTuningEnabled = json.optBoolean("networkTuningEnabled", true),
+                smartConnectionOptimizer = json.optBoolean("smartConnectionOptimizer", true),
                 tcpFastOpen = json.optBoolean("tcpFastOpen", false),
                 tcpKeepAliveIdleSeconds = json.optInt("tcpKeepAliveIdleSeconds", 60),
                 tcpKeepAliveIntervalSeconds = json.optInt("tcpKeepAliveIntervalSeconds", 15),
@@ -634,6 +626,7 @@ data class AppSettings(
                 ),
                 nativeWireGuardVpn = false,
                 fragmentEnabled = json.optBoolean("fragmentEnabled", false),
+                fragmentAuto = json.optBoolean("fragmentAuto", true),
                 fragmentPackets = json.optString("fragmentPackets", "tlshello"),
                 fragmentLength = json.optString("fragmentLength", "100-200"),
                 fragmentInterval = json.optString("fragmentInterval", "10-20")

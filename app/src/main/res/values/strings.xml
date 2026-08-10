@@ -50,7 +50,6 @@
     <string name="local_endpoints">Mixed proxy 127.0.0.1:%1$d</string>
     <string name="tcp_test">TCP connect</string>
     <string name="proxy_test">Real Xray delay</string>
-    <string name="icmp_unavailable">ICMP ping is not available on this device.</string>
     <string name="routing_all">Tunnel all applications</string>
     <string name="routing_allow">Tunnel selected applications only</string>
     <string name="routing_bypass">Bypass selected applications</string>
@@ -123,9 +122,6 @@
     <string name="select_fastest">Select fastest tested profile</string>
     <string name="no_ping_results">No successful ping result is available. Test profiles first.</string>
     <string name="fastest_selected">Selected %1$s at %2$d ms.</string>
-    <string name="live_ping_off">Live ping —</string>
-    <string name="live_ping_waiting">Live ping…</string>
-    <string name="live_ping_value">Live %1$d ms</string>
     <string name="exit_info_off">Exit IP —</string>
     <string name="exit_info_waiting">Waiting for exit IP…</string>
     <string name="exit_info_loading">Reading exit IP and country…</string>
@@ -206,13 +202,8 @@
     <string name="ping_method_tcp_short">TCP</string>
     <string name="ping_method_xray_short">Alive</string>
     <string name="latency_method_format">%2$d ms • %1$s</string>
-    <string name="live_ping_value_method">Live: %1$d ms • %2$s</string>
-    <string name="live_ping_failed">Live ping failed</string>
     <string name="ping_jitter_value">Jitter: %1$d ms</string>
     <string name="ping_success_value">Successful samples: %1$d%%</string>
-    <string name="live_ping_click_hint">Tap to measure the connected config now</string>
-    <string name="live_ping_measuring">Live: measuring...</string>
-    <string name="live_ping_in_progress">A live latency measurement is already running.</string>
     <string name="subscription_all_count">All (%1$d)</string>
     <string name="subscription_tab_count">%1$s (%2$d)</string>
     <string name="subscription_management_section">Subscription management</string>
@@ -296,7 +287,6 @@
     <string name="chain_added">Proxy chain added.</string>
 
     <string name="tcp_ping">TCP Ping</string>
-    <string name="live_ping_method">Live Ping method</string>
     <string name="real_delay_off">Real Delay —</string>
     <string name="real_delay_waiting">Real Delay</string>
     <string name="real_delay_measuring">Real Delay…</string>

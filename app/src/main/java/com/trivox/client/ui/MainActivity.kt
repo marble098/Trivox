@@ -116,7 +116,6 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     private lateinit var stateText: TextView
     private lateinit var durationText: TextView
     private lateinit var selectedText: TextView
-    private lateinit var livePingText: Button
     private lateinit var realDelayText: Button
     private lateinit var exitInfoText: TextView
     private lateinit var emptyText: TextView
@@ -139,10 +138,6 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     private val storageWorker =
         Executors.newSingleThreadExecutor()
     private val handler = Handler(Looper.getMainLooper())
-    private val livePingBusy =
-        AtomicBoolean(false)
-    private val manualLivePingRequested =
-        AtomicBoolean(false)
     private val realDelayBusy =
         AtomicBoolean(false)
     private val leakCheckBusy =
@@ -163,8 +158,6 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         AtomicBoolean(false)
     private val activityDestroyed =
         AtomicBoolean(false)
-    private val uiResumed =
-        AtomicBoolean(false)
     private val pingResultBuffer =
         ConcurrentHashMap<String, PingResult>()
     private val pingFlushScheduled =
@@ -175,17 +168,6 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     private val composeBatchTotal = AtomicInteger(0)
     @Volatile
     private var composeBatchMethod: PingMethod? = null
-
-    @Volatile
-    private var livePingResult:
-        PingResult? = null
-    /**
-     * ICMP echo companion for automatic live ping. Session telemetry only:
-     * it is never written back into a profile's stored latency or sorting.
-     */
-    @Volatile
-    private var liveIcmpResult:
-        PingResult? = null
     @Volatile
     private var realDelayResult:
         PingResult? = null
@@ -323,7 +305,6 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         stateText = findViewById(R.id.stateText)
         durationText = findViewById(R.id.durationText)
         selectedText = findViewById(R.id.selectedText)
-        livePingText = findViewById(R.id.livePingText)
         realDelayText = findViewById(R.id.realDelayText)
         exitInfoText = findViewById(R.id.exitInfoText)
         emptyText = findViewById(R.id.emptyText)
@@ -488,11 +469,6 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                     )
                     .apply()
                 renderQuickTools()
-            }
-
-        livePingText
-            .setOnClickListener {
-                requestLivePingNow()
             }
         realDelayText
             .setOnClickListener {
@@ -904,52 +880,6 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                 getString(R.string.update_subscriptions)
             toast(getString(R.string.subscription_update_busy))
         }
-    }
-
-    private fun requestLivePingNow() {
-        val snapshot =
-            ConnectionRuntime.current()
-
-        if (
-            snapshot.state !=
-            ConnectionState.CONNECTED
-        ) {
-            toast(
-                getString(
-                    R.string.connect_first
-                )
-            )
-            return
-        }
-
-        if (livePingBusy.get()) {
-            toast(
-                getString(
-                    R.string
-                        .live_ping_in_progress
-                )
-            )
-            return
-        }
-
-        manualLivePingRequested.set(true)
-        livePingResult = null
-        liveIcmpResult = null
-        livePingText.setText(
-            R.string
-                .live_ping_measuring
-        )
-        Diagnostics.info(
-            "UI live ping requested; session=${snapshot.sessionId}, " +
-                "mode=${snapshot.mode}, profile=${snapshot.profileId.orEmpty()}"
-        )
-        notifyComposeChanged()
-        handler.removeCallbacks(
-            livePingTick
-        )
-        handler.post(
-            livePingTick
-        )
     }
 
     private fun selectProfile(
@@ -1793,54 +1723,6 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                     ConnectionState.CONNECTED &&
                     it?.id == snapshot.profileId
             }
-
-        val live =
-            livePingResult
-
-        livePingText.text =
-            if (connectedProfile == null) {
-                getString(
-                    R.string.live_ping_off
-                )
-            } else if (
-                livePingBusy.get() &&
-                live == null
-            ) {
-                getString(
-                    R.string
-                        .live_ping_measuring
-                )
-            } else if (
-                live?.success == true &&
-                live.latencyMs != null
-            ) {
-                getString(
-                    R.string
-                        .live_ping_value_method,
-                    live.latencyMs,
-                    pingMethodLabel(
-                        PingMethod.fromStored(
-                            live.method
-                        )
-                    )
-                )
-            } else if (live != null) {
-                getString(
-                    R.string.live_ping_failed
-                )
-            } else if (!settings.livePingEnabled) {
-                getString(
-                    R.string.live_ping_auto_disabled
-                )
-            } else {
-                getString(
-                    R.string.live_ping_waiting
-                )
-            }
-
-        livePingText.isEnabled =
-            connectedProfile != null &&
-                !livePingBusy.get()
 
         val realDelay =
             realDelayResult
@@ -3243,7 +3125,6 @@ class MainActivity : ThemedActivity(), MainComposeActions {
 
         updateDuration(snapshot)
         handler.removeCallbacks(durationTick)
-        handler.removeCallbacks(livePingTick)
 
         if (
             snapshot.state ==
@@ -3253,8 +3134,6 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                 lastInfoProfileId !=
                 snapshot.profileId
             ) {
-                livePingResult = null
-                liveIcmpResult = null
                 realDelayResult = null
                 lastInfoProfileId =
                     snapshot.profileId
@@ -3268,21 +3147,9 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                 durationTick,
                 1_000
             )
-            if (
-                settingsRepository.load().livePingEnabled &&
-                uiResumed.get()
-            ) {
-                handler.postDelayed(
-                    livePingTick,
-                    FIRST_LIVE_PING_DELAY_MS
-                )
-            }
         } else {
             lastInfoProfileId = null
-            livePingResult = null
-            liveIcmpResult = null
             realDelayResult = null
-            livePingBusy.set(false)
             realDelayBusy.set(false)
         }
 
@@ -3335,113 +3202,6 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             }
         }
     }
-
-    private val livePingTick =
-        object : Runnable {
-            override fun run() {
-                val snapshot = ConnectionRuntime.current()
-                if (
-                    snapshot.state != ConnectionState.CONNECTED ||
-                    !uiResumed.get()
-                ) {
-                    return
-                }
-
-                val settings = settingsRepository.load()
-                val manual = manualLivePingRequested.getAndSet(false)
-                if (!settings.livePingEnabled && !manual) return
-
-                val profile = repository.find(snapshot.profileId) ?: return
-                val sessionId = snapshot.sessionId
-                if (!livePingBusy.compareAndSet(false, true)) {
-                    if (settings.livePingEnabled) {
-                        handler.postDelayed(this, livePingIntervalMs(settings))
-                    }
-                    return
-                }
-
-                livePingText.setText(R.string.live_ping_measuring)
-                notifyComposeChanged()
-
-                latencyWorker.execute {
-                    val result = runCatching {
-                        TunnelHealthVerifier.measure(
-                            settings = settings.copy(livePingMethod = PingMethod.XRAY_HTTP),
-                            mode = snapshot.mode,
-                            attempts = settings.testAttempts.coerceIn(2, 3),
-                            budgetMs = LIVE_PING_BUDGET_MS,
-                            isCancelled = {
-                                val latest = ConnectionRuntime.current()
-                                latest.state != ConnectionState.CONNECTED || latest.sessionId != sessionId
-                            }
-                        )
-                    }.getOrElse {
-                        Diagnostics.recordThrowable("Live tunnel ping", it)
-                        failedPingResult(PingMethod.XRAY_HTTP, it)
-                    }
-
-                    // ICMP echo runs next to the tunnel measurement so the label
-                    // can show raw network reachability beside real tunnel latency.
-                    val icmp = runCatching {
-                        val host = profile.probeServer.trim()
-                            .ifBlank { profile.server.trim() }
-                        if (host.isBlank()) null else pingManager.icmp(host)
-                    }.getOrElse {
-                        Diagnostics.debug("Live ICMP failed: ${it.javaClass.simpleName}")
-                        null
-                    }
-
-                    val latest = ConnectionRuntime.current()
-                    if (
-                        latest.state == ConnectionState.CONNECTED &&
-                        latest.sessionId == sessionId &&
-                        latest.profileId == profile.id
-                    ) {
-                        // Live ping is session telemetry only. It intentionally does
-                        // not overwrite the stored batch result, so sorting remains stable.
-                        livePingResult = result
-                        liveIcmpResult = icmp
-                    }
-
-                    livePingBusy.set(false)
-                    val completionMessage =
-                        "UI live ping completed; success=${result.success}, " +
-                            "latency=${result.latencyMs}, error=${result.errorCategory.orEmpty()}"
-                    if (manual || !result.success) {
-                        Diagnostics.info(completionMessage)
-                    } else {
-                        Diagnostics.debug(completionMessage)
-                    }
-                    runOnUiThread {
-                        val current = ConnectionRuntime.current()
-                        val latestSettings = settingsRepository.load()
-                        val currentProfile = repository.find(
-                            current.profileId ?: repository.selectedId()
-                        )
-                        renderConnectedInfo(
-                            current,
-                            currentProfile,
-                            latestSettings
-                        )
-                        notifyComposeChanged()
-                        if (
-                            current.state == ConnectionState.CONNECTED &&
-                            current.sessionId == sessionId &&
-                            latestSettings.livePingEnabled &&
-                            uiResumed.get()
-                        ) {
-                            handler.postDelayed(
-                                this,
-                                livePingIntervalMs(latestSettings)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-    private fun livePingIntervalMs(settings: AppSettings): Long =
-        settings.livePingIntervalSeconds.coerceIn(3, 300) * 1_000L
 
     private fun applyPingResultToProfile(profile: ConfigProfile, result: PingResult) {
         val status = when {
@@ -3666,7 +3426,6 @@ class MainActivity : ThemedActivity(), MainComposeActions {
 
     override fun onResume() {
         super.onResume()
-        uiResumed.set(true)
         renderSubscriptionTabs(
             force = true
         )
@@ -3674,23 +3433,9 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         maybeShowFirstRunModeChooser()
         UpdateChecker.checkIfDue(this)
         scheduleCommunitySyncIfDue()
-
-        val current = ConnectionRuntime.current()
-        if (
-            current.state == ConnectionState.CONNECTED &&
-            settingsRepository.load().livePingEnabled
-        ) {
-            handler.removeCallbacks(livePingTick)
-            handler.postDelayed(
-                livePingTick,
-                FIRST_LIVE_PING_DELAY_MS
-            )
-        }
     }
 
     override fun onPause() {
-        uiResumed.set(false)
-        handler.removeCallbacks(livePingTick)
         super.onPause()
     }
 
@@ -3998,7 +3743,6 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     override fun composeTestAll(@Suppress("UNUSED_PARAMETER") method: PingMethod) = testProfiles(PingMethod.XRAY_HTTP)
     override fun composeToggleConnection() = toggleConnection()
     override fun composePause() = showPauseOptions()
-    override fun composeLivePing() = requestLivePingNow()
     override fun composeRealDelay() = requestRealDelayNow()
     override fun composeLeakStatus(): String = composeLeakStatusText
     override fun composeLeakCheckBusy(): Boolean = leakCheckBusy.get()
@@ -4260,17 +4004,6 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             )
         }
 
-        if (previous.livePingEnabled != next.livePingEnabled) {
-            handler.removeCallbacks(livePingTick)
-            if (
-                next.livePingEnabled &&
-                uiResumed.get() &&
-                ConnectionRuntime.current().state == ConnectionState.CONNECTED
-            ) {
-                handler.post(livePingTick)
-            }
-        }
-
         if (previous.gridMode != next.gridMode) {
             Diagnostics.info("UI grid mode changed: ${next.gridMode}")
             applyLayout()
@@ -4425,26 +4158,6 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         refresh()
     }
 
-    override fun composeSetLivePingEnabled(value: Boolean) {
-        if (!::settingsRepository.isInitialized) return
-        val settings = settingsRepository.load()
-        if (settings.livePingEnabled == value) return
-        settings.livePingEnabled = value
-        settingsRepository.save(settings)
-        handler.removeCallbacks(livePingTick)
-        val runtime = ConnectionRuntime.current()
-        if (
-            value &&
-            uiResumed.get() &&
-            runtime.state == ConnectionState.CONNECTED
-        ) {
-            handler.postDelayed(
-                livePingTick,
-                FIRST_LIVE_PING_DELAY_MS
-            )
-        }
-        refresh()
-    }
 
 
     private fun chooseSimpleProfile(): ConfigProfile? {
@@ -4762,47 +4475,6 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         refresh()
     }
 
-    /**
-     * ICMP echo companion for the live ping label. Empty when ICMP produced no
-     * usable sample, which is normal on networks or devices that drop echo.
-     */
-    private fun liveIcmpSuffix(): String {
-        val icmp = liveIcmpResult ?: return ""
-        return if (icmp.success && icmp.latencyMs != null) {
-            " " + getString(R.string.v36_live_icmp_value, icmp.latencyMs)
-        } else {
-            " " + getString(R.string.v36_live_icmp_blocked)
-        }
-    }
-
-    override fun composeLivePingLabel(): String {
-        val snapshot = ConnectionRuntime.current()
-        if (snapshot.state != ConnectionState.CONNECTED) {
-            return getString(R.string.live_ping_off)
-        }
-        val result = livePingResult
-        return when {
-            livePingBusy.get() && result == null ->
-                getString(R.string.live_ping_measuring)
-
-            result?.success == true && result.latencyMs != null ->
-                getString(
-                    R.string.live_ping_value_method,
-                    result.latencyMs,
-                    pingMethodLabel(PingMethod.fromStored(result.method))
-                ) + liveIcmpSuffix()
-
-            result != null ->
-                getString(R.string.live_ping_failed) + liveIcmpSuffix()
-
-            !settingsRepository.load().livePingEnabled ->
-                getString(R.string.live_ping_auto_disabled)
-
-            else ->
-                getString(R.string.live_ping_waiting)
-        }
-    }
-
     override fun composeRealDelayLabel(): String {
         val snapshot = ConnectionRuntime.current()
         if (snapshot.state != ConnectionState.CONNECTED) {
@@ -4833,14 +4505,8 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         private const val MENU_SETTINGS = 105
         private const val MENU_ROUTING = 106
         private const val MENU_DIAGNOSTICS = 107
-        private const val LIVE_PING_BUDGET_MS =
-            4_500
         private const val REAL_DELAY_BUDGET_MS =
             10_000
-        private const val FIRST_LIVE_PING_DELAY_MS =
-            1_500L
-        private const val LIVE_PING_URL =
-            "https://cp.cloudflare.com/generate_204"
         private const val
             CONNECTION_ACTION_COOLDOWN_MS =
                 250L

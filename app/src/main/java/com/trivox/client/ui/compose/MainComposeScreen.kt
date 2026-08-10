@@ -143,7 +143,6 @@ interface MainComposeActions {
     fun composeTestAll(method: PingMethod)
     fun composeToggleConnection()
     fun composePause()
-    fun composeLivePing()
     fun composeRealDelay()
     fun composeLeakStatus(): String
     fun composeLeakCheckBusy(): Boolean
@@ -161,10 +160,8 @@ interface MainComposeActions {
     fun composeToggleGrid()
     fun composeSetGrid(value: Boolean)
     fun composeSetHideIp(value: Boolean)
-    fun composeSetLivePingEnabled(value: Boolean)
     fun composeRequestQuickTile()
     fun composeSetMode(mode: ConnectionMode)
-    fun composeLivePingLabel(): String
     fun composeRealDelayLabel(): String
     fun composeSimpleToggleConnection()
     fun composeCommunitySync()
@@ -963,20 +960,11 @@ private fun HomeTab(
                     )
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SmallAction(
-                        label = actions.composeLivePingLabel().ifBlank {
-                            activity.getString(R.string.live_ping_off)
-                        },
-                        modifier = Modifier.weight(1f),
-                        enabled = runtime.state == ConnectionState.CONNECTED,
-                        onClick = actions::composeLivePing
-                    )
-                    SmallAction(
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {                    SmallAction(
                         label = actions.composeRealDelayLabel().ifBlank {
                             activity.getString(R.string.real_delay_off)
                         },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.fillMaxWidth(),
                         enabled = runtime.state == ConnectionState.CONNECTED,
                         onClick = actions::composeRealDelay
                     )
@@ -1024,12 +1012,12 @@ private fun HomeTab(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            activity.getString(R.string.v19_leak_guard_toggle),
+                            activity.getString(R.string.p3_leak_guard_v2),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            activity.getString(R.string.v21_leak_auto_hint),
+                            activity.getString(R.string.p3_leak_guard_v2_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1536,9 +1524,10 @@ private fun ListProfileCard(
             OutlinedButton(
                 onClick = { actions.composePingProfile(profile.id, PingMethod.XRAY_HTTP) },
                 enabled = profile.realTestStatus != TestStatus.TESTING,
-                modifier = Modifier.height(32.dp).widthIn(min = 86.dp)
+                modifier = Modifier.height(30.dp).widthIn(min = 58.dp, max = 74.dp)
                     .trivoxSpringPress(profile.realTestStatus != TestStatus.TESTING),
-                contentPadding = PaddingValues(horizontal = 8.dp)
+                contentPadding = PaddingValues(horizontal = 
+                5.dp)
             ) {
                 TrivoxAutoFitButtonText(
                     text = if (profile.realTestStatus == TestStatus.TESTING) {
