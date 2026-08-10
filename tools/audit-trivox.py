@@ -236,8 +236,26 @@ def audit(root: Path) -> tuple[list[Finding], dict[str, object]]:
     real_policy = root / "app/src/main/java/com/trivox/client/network/RealDelayPolicy.kt"
     if real_policy.is_file():
         policy_text = read(real_policy)
-        if "rescueTargets" not in policy_text or "startGraceMs = 85" not in policy_text:
-            add("error", "turbo-rescue-regression", real_policy, "Turbo Real Delay rescue policy is missing.")
+        turbo_rescue_markers = (
+            "TRIVOX_P2_TURBO_RESCUE",
+            "RealDelayProfile.TURBO -> RealDelayPolicy(",
+            "turboRescueTargets",
+            "VerifiedHttpProbe.strongTraceTarget",
+            "rescueTargets",
+            "rescueProbeTimeoutMs",
+        )
+        missing_turbo_markers = [
+            marker for marker in turbo_rescue_markers
+            if marker not in policy_text
+        ]
+        if missing_turbo_markers:
+            add(
+                "error",
+                "turbo-rescue-regression",
+                real_policy,
+                "Turbo Real Delay rescue policy is missing markers: "
+                + ", ".join(missing_turbo_markers),
+            )
 
     profile_adapter = root / "app/src/main/java/com/trivox/client/ui/ProfileAdapter.kt"
     if profile_adapter.is_file():
