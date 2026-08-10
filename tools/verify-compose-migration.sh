@@ -139,8 +139,11 @@ grep -Fq 'composeSubscriptionActions' "$main_compose" || fail "subscription acti
 grep -Fq 'GridCells.Adaptive' "$main_compose" || fail "Compose grid mode is not implemented"
 ! grep -Fq 'R.string.status_alive' "$main_compose" || fail "formatted legacy alive label used without arguments"
 ! grep -Fq 'R.string.status_dead' "$main_compose" || fail "formatted legacy dead label used without arguments"
-grep -Fq 'current.tcpTestStatus = TestStatus.TESTING' "$main_activity" || \
-  fail "TCP tests do not publish method-specific running state"
+if grep -Fq 'PingMethod.TCP_CONNECT' "$main_activity" || \
+   grep -Fq 'pingManager.tcp(' "$main_activity" || \
+   grep -Fq 'onTcpPing' "$main_activity"; then
+  fail "removed TCP Ping runtime path returned"
+fi
 grep -Fq 'current.realTestStatus = TestStatus.TESTING' "$main_activity" || \
   fail "Real Delay tests do not publish method-specific running state"
 grep -Fq 'repairStaleTestingStates' "$main_activity" || fail "stale testing-state recovery missing"

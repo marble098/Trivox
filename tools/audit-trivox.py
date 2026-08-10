@@ -103,6 +103,14 @@ def audit(root: Path) -> tuple[list[Finding], dict[str, object]]:
             "REQUIRED_SUCCESS_NUMERATOR",
         "app/src/main/java/com/trivox/client/network/PingManager.kt":
             "FALLBACK_CONNECTIVITY_URLS",
+        "app/src/main/java/com/trivox/client/network/IcmpProbe.kt":
+            "TRIVOX_P2_VERIFIED_ICMP",
+        "app/src/test/java/com/trivox/client/network/IcmpProbeP2Test.kt":
+            "subMillisecondReplyIsNotForcedToOneMillisecond",
+        "app/src/test/java/com/trivox/client/network/RealDelayPolicyP2Test.kt":
+            "turboKeepsFastProofAndAddsFailureOnlyRescue",
+        "app/src/test/java/com/trivox/client/config/ConfigParserHysteria2P2Test.kt":
+            "importsStandardHysteria2SalamanderShareLink",
         "app/src/main/java/com/trivox/client/network/NordVpnSubscriptionManager.kt":
             "?.optJSONObject(\"city\")",
         "app/src/main/java/com/trivox/client/config/ConfigParser.kt":
@@ -202,10 +210,49 @@ def audit(root: Path) -> tuple[list[Finding], dict[str, object]]:
             add("error", "ui-lifecycle-callback", main, "Background callbacks are not guarded after Activity destruction.")
         if "startConnectionService" not in text:
             add("error", "connect-start-recovery", main, "Foreground-service start failures do not restore the connection UI.")
-        if "tcpLatencyMs" not in text or "realLatencyMs" not in text:
-            add("error", "dual-latency-storage", main, "TCP and Real Delay results are not stored independently.")
+        if "pingManager.tcp(" in text or "PingMethod.TCP_CONNECT" in text:
+            add("error", "active-tcp-ping-ui", main, "TCP Connect ping returned to active MainActivity paths.")
+        if "realLatencyMs" not in text:
+            add("error", "real-delay-storage", main, "Real Delay storage/ranking marker is missing.")
         if "showSubscriptionActions" not in text:
             add("error", "subscription-cleanup-menu", main, "Subscription long-press cleanup actions are missing.")
+
+
+    if ping.is_file():
+        ping_text = read(ping)
+        for marker in ("fun tcp(", "fun batchTcp(", "fun wireGuardTcp(", "trivox-tcp-ping", "PingMethod.TCP_CONNECT"):
+            if marker in ping_text:
+                add("error", "active-tcp-ping-engine", ping, f"Active TCP Ping implementation returned: {marker}")
+        if "IcmpProbe.measure" not in ping_text:
+            add("error", "verified-icmp-wiring", ping, "Live ICMP is not delegated to the verified multi-echo probe.")
+
+    icmp_probe = root / "app/src/main/java/com/trivox/client/network/IcmpProbe.kt"
+    if icmp_probe.is_file():
+        icmp_text = read(icmp_probe)
+        for marker in ('"-c",', "verifiedReplyAddresses", "icmp_reply_identity_mismatch", "coerceAtLeast(0L)"):
+            if marker not in icmp_text:
+                add("error", "icmp-integrity-regression", icmp_probe, f"Verified ICMP marker is missing: {marker}")
+
+    parser = root / "app/src/main/java/com/trivox/client/config/ConfigParser.kt"
+    if parser.is_file():
+        parser_text = read(parser)
+        for marker in ("hysteriaFinalMask", '"salamander"', '"obfs-password"', '"finalmask"'):
+            if marker not in parser_text:
+                add("error", "hysteria2-salamander-regression", parser, f"Hysteria2 marker is missing: {marker}")
+
+    real_policy = root / "app/src/main/java/com/trivox/client/network/RealDelayPolicy.kt"
+    if real_policy.is_file():
+        policy_text = read(real_policy)
+        if "rescueTargets" not in policy_text or "startGraceMs = 85" not in policy_text:
+            add("error", "turbo-rescue-regression", real_policy, "Turbo Real Delay rescue policy is missing.")
+
+    profile_adapter = root / "app/src/main/java/com/trivox/client/ui/ProfileAdapter.kt"
+    if profile_adapter.is_file():
+        adapter_text = read(profile_adapter)
+        if "onTcpPing" in adapter_text:
+            add("error", "tcp-ping-adapter-ui", profile_adapter, "Profile adapter exposes TCP Ping.")
+        if "tcpLatency.visibility = View.GONE" not in adapter_text:
+            add("error", "tcp-metric-visible", profile_adapter, "Legacy TCP metric view is not hidden.")
 
     coordinator = root / "app/src/main/java/com/trivox/client/network/SubscriptionRefreshCoordinator.kt"
     if coordinator.is_file():
