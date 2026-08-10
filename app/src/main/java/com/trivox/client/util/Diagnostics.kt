@@ -618,20 +618,36 @@ object Diagnostics {
             .replace(
                 Regex(
                     "(?i)(vless|vmess|" +
-                        "trojan|ss|socks|" +
+                        "trojan|ss|socks|socks5|" +
+                        "ssh|wireguard|wg|" +
+                        "hysteria|hysteria2|tuic|" +
                         "https?)://[^\\s]+"
                 ),
                 "<redacted-uri>"
             )
             .replace(
                 Regex(
-                    "(?i)\\b(uuid|password|" +
-                        "pass|token|privateKey|" +
-                        "publicKey|shortId)\\b" +
-                        "\\s*[:=]\\s*" +
-                        "[^,}\\s]+"
+                    "(?im)\\b(authorization|" +
+                        "proxy-authorization)\\s*:" +
+                        "\\s*[^\\r\\n]+"
                 ),
-                "\$1=<redacted>"
+                "$1: <redacted>"
+            )
+            .replace(
+                Regex(
+                    "(?i)\\b(uuid|password|pass|" +
+                        "token|access[_-]?token|" +
+                        "refresh[_-]?token|" +
+                        "api[_-]?key|secret|" +
+                        "private[_-]?key|" +
+                        "pre[_-]?shared[_-]?key|" +
+                        "public[_-]?key|" +
+                        "short[_-]?id)\\b" +
+                        "\\s*[\\\"']?\\s*[:=]\\s*" +
+                        "[\\\"']?[^,}\\s\\\"']+" +
+                        "[\\\"']?"
+                ),
+                "$1=<redacted>"
             )
             .replace(
                 Regex(

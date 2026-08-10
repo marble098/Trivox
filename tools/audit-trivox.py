@@ -113,6 +113,12 @@ def audit(root: Path) -> tuple[list[Finding], dict[str, object]]:
             "readsNestedCountryCityAndKeepsEveryLocation",
         "app/src/main/java/com/trivox/client/core/XrayCoreAdapter.kt":
             "logFailure = false",
+        "app/src/main/java/com/trivox/client/service/NetworkHandoverCoordinator.kt":
+            "TRIVOX_P1_HANDOVER_COORDINATOR",
+        "app/src/test/java/com/trivox/client/service/NetworkHandoverCoordinatorTest.kt":
+            "availableBeforeOldLostDoesNotReenterReconnect",
+        "app/src/test/java/com/trivox/client/util/DiagnosticsSanitizerP1Test.kt":
+            "redactsSshUriQuotedSecretsAndAuthorization",
         "app/src/main/java/com/trivox/client/network/SubscriptionManager.kt":
             "fun normalizeUrl",
         "app/src/main/java/com/trivox/client/network/SubscriptionSupport.kt":
@@ -358,6 +364,34 @@ def audit(root: Path) -> tuple[list[Finding], dict[str, object]]:
             add("warning", "backup-policy", manifest, "Private configuration backup is not disabled.")
         if 'android:usesCleartextTraffic="false"' not in text:
             add("warning", "cleartext-policy", manifest, "Cleartext application traffic is not disabled.")
+
+    network_security = root / "app/src/main/res/xml/network_security_config.xml"
+    if network_security.is_file():
+        network_security_text = read(network_security)
+        if 'cleartextTrafficPermitted="true"' in network_security_text:
+            add(
+                "error",
+                "cleartext-domain-exception",
+                network_security,
+                "A cleartext domain exception is enabled in the app network policy.",
+            )
+
+    if vpn_service.is_file():
+        vpn_text = read(vpn_service)
+        if "NetworkHandoverCoordinator" not in vpn_text:
+            add(
+                "error",
+                "vpn-handover-coordinator",
+                vpn_service,
+                "VPN default-network handover is not using the tested coordinator.",
+            )
+        if "var observedInitial = false" in vpn_text:
+            add(
+                "error",
+                "vpn-order-sensitive-handover",
+                vpn_service,
+                "The old order-sensitive default-network callback returned.",
+            )
 
     stats = {
         "tracked_files": len(files),
