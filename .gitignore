@@ -5,6 +5,9 @@ local.properties
 signing.properties
 *.jks
 *.keystore
+# Throwaway self-signed cert used only by loopback HTTPS test fixtures
+# (password "changeit", no real secret) - intentionally tracked.
+!app/src/test/resources/test-keystore.jks
 
 # Downloaded/generated core and APK outputs
 app/libs/*.aar

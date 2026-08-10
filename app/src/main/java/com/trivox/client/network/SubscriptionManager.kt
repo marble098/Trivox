@@ -18,10 +18,25 @@ import kotlin.math.min
 class SubscriptionManager {
     data class Result(
         val profiles: List<ConfigProfile>,
-        val finalUrl: String
+        val finalUrl: String,
+        val notModified: Boolean = false,
+        val etag: String? = null,
+        val lastModified: String? = null
     )
 
-    fun fetch(url: String): Result {
+    /**
+     * [etag]/[lastModified] are the validators persisted from a previous
+     * successful fetch of the same URL, if any. When the server still
+     * recognizes them it replies 304 Not Modified with no body, and this
+     * returns [Result.notModified] = true with an empty profile list -
+     * callers must skip re-parsing/re-merging in that case rather than
+     * treating an empty list as "subscription has no configs."
+     */
+    fun fetch(
+        url: String,
+        etag: String? = null,
+        lastModified: String? = null
+    ): Result {
         var current =
             normalizeUrl(url)
         val visited =
@@ -40,7 +55,11 @@ class SubscriptionManager {
             }
 
             val response =
-                requestWithRetry(current)
+                requestWithRetry(
+                    uri = current,
+                    etag = etag,
+                    lastModified = lastModified
+                )
 
             if (response.redirect != null) {
                 current =
@@ -50,6 +69,16 @@ class SubscriptionManager {
                             response.redirect
                     )
                 return@repeat
+            }
+
+            if (response.notModified) {
+                return Result(
+                    profiles = emptyList(),
+                    finalUrl = canonical,
+                    notModified = true,
+                    etag = response.etag,
+                    lastModified = response.lastModified
+                )
             }
 
             val text =
@@ -96,7 +125,9 @@ class SubscriptionManager {
             return Result(
                 profiles = profiles,
                 finalUrl =
-                    current.toASCIIString()
+                    current.toASCIIString(),
+                etag = response.etag,
+                lastModified = response.lastModified
             )
         }
 
@@ -106,7 +137,9 @@ class SubscriptionManager {
     }
 
     private fun requestWithRetry(
-        uri: URI
+        uri: URI,
+        etag: String?,
+        lastModified: String?
     ): Response {
         var lastFailure: Throwable? = null
 
@@ -116,7 +149,11 @@ class SubscriptionManager {
 
             try {
                 val response =
-                    requestOnce(uri)
+                    requestOnce(
+                        uri = uri,
+                        etag = etag,
+                        lastModified = lastModified
+                    )
 
                 if (
                     response.status in
@@ -178,7 +215,9 @@ class SubscriptionManager {
     }
 
     private fun requestOnce(
-        uri: URI
+        uri: URI,
+        etag: String?,
+        lastModified: String?
     ): Response {
         val connection =
             uri.toURL()
@@ -218,6 +257,18 @@ class SubscriptionManager {
                 "User-Agent",
                 "Trivox-Subscription/4"
             )
+            if (!etag.isNullOrBlank()) {
+                connection.setRequestProperty(
+                    "If-None-Match",
+                    etag
+                )
+            }
+            if (!lastModified.isNullOrBlank()) {
+                connection.setRequestProperty(
+                    "If-Modified-Since",
+                    lastModified
+                )
+            }
 
             ensureActive()
             val status =
@@ -228,6 +279,16 @@ class SubscriptionManager {
                         "Retry-After"
                     )
                 )
+
+            if (status == HttpURLConnection.HTTP_NOT_MODIFIED) {
+                return Response(
+                    status = status,
+                    notModified = true,
+                    etag = connection.getHeaderField("ETag"),
+                    lastModified = connection.getHeaderField("Last-Modified"),
+                    retryAfterMillis = retryAfter
+                )
+            }
 
             if (status in 300..399) {
                 val location =
@@ -330,7 +391,9 @@ class SubscriptionManager {
                     connection.contentType
                         .orEmpty(),
                 retryAfterMillis =
-                    retryAfter
+                    retryAfter,
+                etag = connection.getHeaderField("ETag"),
+                lastModified = connection.getHeaderField("Last-Modified")
             )
         } catch (
             interrupted:
@@ -474,7 +537,10 @@ class SubscriptionManager {
         val body: ByteArray? = null,
         val contentType: String = "",
         val redirect: String? = null,
-        val retryAfterMillis: Long? = null
+        val retryAfterMillis: Long? = null,
+        val notModified: Boolean = false,
+        val etag: String? = null,
+        val lastModified: String? = null
     )
 
     private class

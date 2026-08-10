@@ -12,7 +12,10 @@ object SubscriptionProfileLoader {
         val finalUrl: String,
         val complete: Boolean = true,
         val warnings: List<String> =
-            emptyList()
+            emptyList(),
+        val notModified: Boolean = false,
+        val etag: String? = null,
+        val lastModified: String? = null
     )
 
     fun load(
@@ -24,14 +27,20 @@ object SubscriptionProfileLoader {
                 val result =
                     SubscriptionManager()
                         .fetch(
-                            source.url
+                            url = source.url,
+                            etag = source.etag.takeIf(String::isNotBlank),
+                            lastModified = source.lastModified.takeIf(String::isNotBlank)
                         )
 
                 Result(
                     profiles =
                         result.profiles,
                     finalUrl =
-                        result.finalUrl
+                        result.finalUrl,
+                    notModified =
+                        result.notModified,
+                    etag = result.etag,
+                    lastModified = result.lastModified
                 )
             }
 

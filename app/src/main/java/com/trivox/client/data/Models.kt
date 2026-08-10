@@ -298,7 +298,9 @@ data class SubscriptionSource(
     var lastSuccessAt: Long = 0,
     var lastError: String = "",
     var kind: SubscriptionKind = SubscriptionKind.URL,
-    var secretAlias: String = ""
+    var secretAlias: String = "",
+    var etag: String = "",
+    var lastModified: String = ""
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("id", id)
@@ -309,6 +311,8 @@ data class SubscriptionSource(
         .put("lastError", lastError)
         .put("kind", kind.name)
         .put("secretAlias", secretAlias)
+        .put("etag", etag)
+        .put("lastModified", lastModified)
 
     companion object {
         fun fromJson(json: JSONObject): SubscriptionSource = SubscriptionSource(
@@ -319,7 +323,9 @@ data class SubscriptionSource(
             lastSuccessAt = json.optLong("lastSuccessAt"),
             lastError = json.optString("lastError"),
             kind = SubscriptionKind.fromStored(json.optString("kind")),
-            secretAlias = json.optString("secretAlias")
+            secretAlias = json.optString("secretAlias"),
+            etag = json.optString("etag"),
+            lastModified = json.optString("lastModified")
         )
     }
 }

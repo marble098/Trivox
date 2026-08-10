@@ -188,6 +188,23 @@ class SubscriptionRefreshCoordinator(
 
     private fun refreshOne(source: SubscriptionSource): RefreshResult {
         val result = SubscriptionProfileLoader.load(appContext, source)
+
+        if (result.notModified) {
+            // Server confirmed nothing changed (HTTP 304): skip re-parsing
+            // and re-merging the whole catalog entirely, only refresh the
+            // bookkeeping fields.
+            SubscriptionRepository(appContext).update(source.id) {
+                if (it.kind == SubscriptionKind.URL) {
+                    it.url = result.finalUrl
+                    it.etag = result.etag ?: it.etag
+                    it.lastModified = result.lastModified ?: it.lastModified
+                }
+                it.lastSuccessAt = System.currentTimeMillis()
+                it.lastError = ""
+            }
+            return RefreshResult(profiles = 0, partial = false)
+        }
+
         val profiles = result.profiles.map {
             it.copy(
                 subscriptionId = source.id,
@@ -205,6 +222,8 @@ class SubscriptionRefreshCoordinator(
         SubscriptionRepository(appContext).update(source.id) {
             if (it.kind == SubscriptionKind.URL) {
                 it.url = result.finalUrl
+                it.etag = result.etag ?: ""
+                it.lastModified = result.lastModified ?: ""
             }
             it.lastSuccessAt = System.currentTimeMillis()
             it.lastError = result.warnings.take(3).joinToString(" • ")
