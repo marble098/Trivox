@@ -1206,6 +1206,7 @@ class TrivoxVpnService : VpnService() {
             AppRoutingMode.ALL -> true
             AppRoutingMode.ALLOW_SELECTED -> packageName in settings.routedPackages
             AppRoutingMode.BYPASS_SELECTED -> packageName !in settings.routedPackages
+            else -> false
         }
     }
 
