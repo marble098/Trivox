@@ -21,6 +21,7 @@ import com.trivox.client.core.CoreManager
 import com.trivox.client.core.CoreResult
 import com.trivox.client.core.CoreStartRequest
 import com.trivox.client.data.AppRoutingMode
+import com.trivox.client.data.AppSettings
 import com.trivox.client.data.ConfigProfile
 import com.trivox.client.data.ConfigRepository
 import com.trivox.client.data.ConnectionMode
