@@ -387,7 +387,11 @@ data class AppSettings(
     var wireGuardKeepAliveSeconds: Int = 25,
     var wireGuardHandshakeTimeoutMs: Int = 18_000,
     var wireGuardDomainStrategy: String = DEFAULT_WIREGUARD_DOMAIN_STRATEGY,
-    var nativeWireGuardVpn: Boolean = false
+    var nativeWireGuardVpn: Boolean = false,
+    var fragmentEnabled: Boolean = false,
+    var fragmentPackets: String = "tlshello",
+    var fragmentLength: String = "100-200",
+    var fragmentInterval: String = "10-20"
 ) {
     fun normalize(): AppSettings {
         if (socksPort == LEGACY_SOCKS_PORT || socksPort !in 1..65535) {
@@ -402,6 +406,9 @@ data class AppSettings(
         realDelayStartGraceMs = realDelayStartGraceMs.coerceIn(0, 1_000)
         realDelayTargetCount = realDelayTargetCount.coerceIn(1, 4)
         realDelayRequiredProofs = realDelayRequiredProofs.coerceIn(1, realDelayTargetCount)
+        fragmentPackets = fragmentPackets.trim().ifBlank { "tlshello" }
+        fragmentLength = fragmentLength.trim().ifBlank { "100-200" }
+        fragmentInterval = fragmentInterval.trim().ifBlank { "10-20" }
         livePingIntervalSeconds = livePingIntervalSeconds.coerceIn(12, 300)
         tcpKeepAliveIdleSeconds = tcpKeepAliveIdleSeconds.coerceIn(0, 3600)
         tcpKeepAliveIntervalSeconds = tcpKeepAliveIntervalSeconds.coerceIn(0, 600)
@@ -507,6 +514,10 @@ data class AppSettings(
         .put("wireGuardHandshakeTimeoutMs", wireGuardHandshakeTimeoutMs)
         .put("wireGuardDomainStrategy", wireGuardDomainStrategy)
         .put("nativeWireGuardVpn", nativeWireGuardVpn)
+        .put("fragmentEnabled", fragmentEnabled)
+        .put("fragmentPackets", fragmentPackets)
+        .put("fragmentLength", fragmentLength)
+        .put("fragmentInterval", fragmentInterval)
 
     companion object {
         const val DEFAULT_MIXED_PORT = 10202
@@ -621,7 +632,11 @@ data class AppSettings(
                     "wireGuardDomainStrategy",
                     DEFAULT_WIREGUARD_DOMAIN_STRATEGY
                 ),
-                nativeWireGuardVpn = false
+                nativeWireGuardVpn = false,
+                fragmentEnabled = json.optBoolean("fragmentEnabled", false),
+                fragmentPackets = json.optString("fragmentPackets", "tlshello"),
+                fragmentLength = json.optString("fragmentLength", "100-200"),
+                fragmentInterval = json.optString("fragmentInterval", "10-20")
             ).normalize()
         }
     }
