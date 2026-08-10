@@ -131,10 +131,14 @@ grep -Fq 'ButtonDefaults.buttonColors' "$main_compose" || \
   fail "connection action does not publish its active/destructive color"
 grep -Fq 'connectionStartPending.get()' "$main_activity" || \
   fail "pending VPN starts are not exposed to Compose"
-grep -Fq 'UI live ping completed' "$main_activity" || \
-  fail "live ping runtime diagnostics missing"
-! grep -Fq 'livePingText.text?.toString()' "$main_activity" || \
-  fail "Compose live ping label still depends on the hidden legacy button"
+if grep -Fq 'UI live ping completed' "$main_activity" || \
+   grep -Fq 'requestLivePingNow' "$main_activity" || \
+   grep -Fq 'livePingTick' "$main_activity" || \
+   grep -Fq 'composeLivePing' "$main_activity"; then
+  fail "Automatic Live Ping runtime path returned"
+fi
+[[ ! -e app/src/main/java/com/trivox/client/network/IcmpProbe.kt ]] || \
+  fail "ICMP source file returned"
 grep -Fq 'composeSubscriptionActions' "$main_compose" || fail "subscription actions are not exposed in Compose"
 grep -Fq 'GridCells.Adaptive' "$main_compose" || fail "Compose grid mode is not implemented"
 ! grep -Fq 'R.string.status_alive' "$main_compose" || fail "formatted legacy alive label used without arguments"

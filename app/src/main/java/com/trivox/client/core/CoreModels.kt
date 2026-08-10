@@ -51,7 +51,8 @@ data class CoreStartRequest(
     val profile: ConfigProfile,
     val settings: AppSettings,
     val mode: ConnectionMode,
-    val tunFd: Int? = null
+    val tunFd: Int? = null,
+    val bootstrapIps: List<String> = emptyList()
 )
 
 data class CoreResult(val success: Boolean, val error: String = "", val data: JSONObject? = null)

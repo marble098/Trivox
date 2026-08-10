@@ -38,20 +38,22 @@ internal object XrayProbeLogInspector {
     internal fun classify(text: String): String? = when {
         text.isBlank() -> null
         "received real certificate" in text -> "reality_mismatch"
-        "failed to dial" in text && "websocket" in text -> "websocket_handshake"
         "connection reset by peer" in text -> "connection_reset"
+        "read/write on closed pipe" in text -> "dns_pipe_closed"
+        "failed to retrieve response" in text &&
+            "deadline exceeded" in text -> "dns_timeout"
+        "failed to resolve ip" in text && "record not found" in text -> "dns_failure"
+        "no such host" in text || "failed to lookup" in text -> "dns_failure"
+        "context deadline exceeded" in text || "i/o timeout" in text -> "timeout"
         "invalid authentication" in text || "authentication failed" in text ->
             "authentication_failed"
         "failed to verify certificate" in text || "certificate" in text &&
             "unknown authority" in text -> "tls_certificate"
-        "failed to retrieve response" in text &&
-            "deadline exceeded" in text -> "dns_timeout"
-        "no such host" in text || "failed to lookup" in text -> "dns_failure"
-        "context deadline exceeded" in text || "i/o timeout" in text -> "timeout"
         "connection refused" in text -> "connection_refused"
         "failed to build outbound" in text ||
             "failed to build stream settings" in text ||
             "failed to unmarshal" in text -> "invalid_xray_config"
+        "failed to dial" in text && "websocket" in text -> "websocket_handshake"
         else -> null
     }
 

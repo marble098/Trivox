@@ -8,20 +8,20 @@ package com.trivox.client.ui.compose
 
 import android.app.Activity
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Card
@@ -205,6 +205,17 @@ internal fun UnifiedSettingsScreen(
                 ) {
                     actions.composeSaveSettings(settings.copy(mode = it))
                 }
+                BooleanSetting(
+                    activity.getString(R.string.p3_smart_optimizer),
+                    settings.smartConnectionOptimizer
+                ) {
+                    actions.composeSaveSettings(settings.copy(smartConnectionOptimizer = it))
+                }
+                Text(
+                    activity.getString(R.string.p3_smart_optimizer_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 NumberSetting(
                     label = activity.getString(R.string.v15_mixed_port),
                     value = settings.socksPort,
@@ -255,21 +266,7 @@ internal fun UnifiedSettingsScreen(
         }
 
         item {
-            SettingsSection(activity.getString(R.string.v15_settings_latency)) {
-                BooleanSetting(
-                    activity.getString(R.string.live_ping_enabled),
-                    settings.livePingEnabled
-                ) {
-                    actions.composeSaveSettings(
-                        settings.copy(livePingEnabled = it)
-                    )
-                }
-                Text(
-                    activity.getString(R.string.v20_live_ping_auto_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                ChoiceSetting(
+            SettingsSection(activity.getString(R.string.v15_settings_latency)) {                ChoiceSetting(
                     label = activity.getString(R.string.v15_real_profile),
                     value = settings.realDelayProfile,
                     choices = listOf(
@@ -294,7 +291,7 @@ internal fun UnifiedSettingsScreen(
         item {
             SettingsSection(activity.getString(R.string.v15_settings_dns)) {
                 BooleanSetting(
-                    activity.getString(R.string.v19_leak_guard_toggle),
+                    activity.getString(R.string.p3_leak_guard_v2),
                     settings.autoLeakProtection
                 ) {
                     actions.composeSaveSettings(
@@ -302,7 +299,7 @@ internal fun UnifiedSettingsScreen(
                     )
                 }
                 Text(
-                    activity.getString(R.string.v21_leak_auto_hint),
+                    activity.getString(R.string.p3_leak_guard_v2_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -376,43 +373,54 @@ internal fun UnifiedSettingsScreen(
                     actions.composeSaveSettings(settings.copy(fragmentEnabled = it))
                 }
                 if (settings.fragmentEnabled) {
-                    ChoiceSetting(
-                        label = activity.getString(R.string.v38_fragment_packets),
-                        value = settings.fragmentPackets,
-                        choices = listOf(
-                            "tlshello" to "TLS Hello",
-                            "1-3" to "Packets 1-3",
-                            "1-5" to "Packets 1-5"
-                        )
+                    BooleanSetting(
+                        activity.getString(R.string.p3_fragment_auto),
+                        settings.fragmentAuto
                     ) {
-                        actions.composeSaveSettings(settings.copy(fragmentPackets = it))
-                    }
-                    StringSetting(
-                        label = activity.getString(R.string.v38_fragment_length),
-                        value = settings.fragmentLength,
-                        singleLine = true,
-                        validator = { it.isNotBlank() }
-                    ) {
-                        actions.composeSaveSettings(settings.copy(fragmentLength = it))
-                    }
-                    StringSetting(
-                        label = activity.getString(R.string.v38_fragment_interval),
-                        value = settings.fragmentInterval,
-                        singleLine = true,
-                        validator = { it.isNotBlank() }
-                    ) {
-                        actions.composeSaveSettings(settings.copy(fragmentInterval = it))
+                        actions.composeSaveSettings(settings.copy(fragmentAuto = it))
                     }
                     Text(
-                        activity.getString(R.string.v38_fragment_hint),
+                        activity.getString(
+                            if (settings.fragmentAuto) R.string.p3_fragment_auto_hint
+                            else R.string.p3_fragment_manual_hint
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    if (!settings.fragmentAuto) {
+                        ChoiceSetting(
+                            label = activity.getString(R.string.v38_fragment_packets),
+                            value = settings.fragmentPackets,
+                            choices = listOf(
+                                "tlshello" to "TLS Hello",
+                                "1-3" to "1–3",
+                                "1-5" to "1–5"
+                            )
+                        ) {
+                            actions.composeSaveSettings(settings.copy(fragmentPackets = it))
+                        }
+                        StringSetting(
+                            label = activity.getString(R.string.v38_fragment_length),
+                            value = settings.fragmentLength,
+                            singleLine = true,
+                            validator = ::validFragmentLength
+                        ) {
+                            actions.composeSaveSettings(settings.copy(fragmentLength = it))
+                        }
+                        StringSetting(
+                            label = activity.getString(R.string.v38_fragment_interval),
+                            value = settings.fragmentInterval,
+                            singleLine = true,
+                            validator = ::validFragmentInterval
+                        ) {
+                            actions.composeSaveSettings(settings.copy(fragmentInterval = it))
+                        }
+                    }
                 }
             }
         }
 
-                item {
+        item {
             SettingsSection(activity.getString(R.string.v26_notification_section)) {
                 val actionChoices = notificationActionChoices(activity)
                 ChoiceSetting(
@@ -803,6 +811,7 @@ private fun BooleanSetting(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun <T> ChoiceSetting(
     label: String,
@@ -816,21 +825,51 @@ private fun <T> ChoiceSetting(
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium
         )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
             choices.forEach { (candidate, display) ->
                 FilterChip(
                     selected = value == candidate,
                     onClick = { if (value != candidate) onSelected(candidate) },
-                    label = { Text(display) }
+                    label = {
+                        Text(
+                            text = "${choiceGlyph(candidate)} $display",
+                            maxLines = 1
+                        )
+                    },
+                    shape = RoundedCornerShape(14.dp)
                 )
             }
         }
     }
+}
+
+private fun choiceGlyph(value: Any?): String = when (value?.toString()?.uppercase()) {
+    "SYSTEM" -> "◐"
+    "LIGHT" -> "☀"
+    "DARK" -> "☾"
+    "CLASSIC" -> "◈"
+    "OCEAN" -> "≋"
+    "AURORA" -> "✦"
+    "SUNSET" -> "◒"
+    "FOREST" -> "♧"
+    "GRAPHITE" -> "◆"
+    "DEFAULT" -> "T"
+    "MONO" -> "●"
+    "VPN" -> "▣"
+    "PROXY" -> "⇄"
+    "SMART" -> "✦"
+    "LOWEST_LATENCY" -> "⚡"
+    "NAME" -> "A"
+    "LAST_TESTED" -> "◷"
+    "GROUP" -> "▦"
+    "FA" -> "فا"
+    "EN" -> "EN"
+    "" -> "◎"
+    else -> "•"
 }
 
 @Composable
@@ -933,4 +972,17 @@ private fun validDnsList(value: String): Boolean {
     return items.isNotEmpty() &&
         items.size <= 8 &&
         items.all(Validators::validateDns)
+}
+
+private fun validFragmentLength(value: String): Boolean =
+    validFragmentRange(value, minimum = 1, maximum = 1440)
+
+private fun validFragmentInterval(value: String): Boolean =
+    validFragmentRange(value, minimum = 0, maximum = 1000)
+
+private fun validFragmentRange(value: String, minimum: Int, maximum: Int): Boolean {
+    val match = Regex("^(\\d{1,4})(?:-(\\d{1,4}))?$").matchEntire(value.trim()) ?: return false
+    val first = match.groupValues[1].toIntOrNull() ?: return false
+    val second = match.groupValues[2].takeIf(String::isNotBlank)?.toIntOrNull() ?: first
+    return first in minimum..maximum && second in minimum..maximum && first <= second
 }

@@ -382,10 +382,6 @@ object LegacyLayoutBridge {
         v7.visibility = View.GONE
         val v8 = LinearLayout(context)
         v8.orientation = LinearLayout.HORIZONTAL
-        val v9 = Button(context)
-        v9.id = R.id.livePingText
-        (v9 as? TextView)?.setText(R.string.live_ping_off)
-        v8.addView(v9)
         val v10 = Button(context)
         v10.id = R.id.realDelayText
         (v10 as? TextView)?.setText(R.string.real_delay_off)
@@ -624,25 +620,6 @@ object LegacyLayoutBridge {
         v2.addView(v14)
         val v15 = LinearLayout(context)
         v15.orientation = LinearLayout.VERTICAL
-        val v16 = TextView(context)
-        (v16 as? TextView)?.setText(R.string.live_ping_method)
-        v15.addView(v16)
-        val v17 = Spinner(context)
-        v17.id = R.id.pingMethodSpinner
-        v15.addView(v17)
-        val v18 = TextView(context)
-        v18.id = R.id.pingMethodSummary
-        v15.addView(v18)
-        val v19 = SwitchCompat(context)
-        v19.id = R.id.livePingEnabledSwitch
-        (v19 as? TextView)?.setText(R.string.live_ping_enabled)
-        v15.addView(v19)
-        val v20 = TextView(context)
-        (v20 as? TextView)?.setText(R.string.live_ping_interval)
-        v15.addView(v20)
-        val v21 = EditText(context)
-        v21.id = R.id.livePingIntervalInput
-        v15.addView(v21)
         val v22 = TextView(context)
         (v22 as? TextView)?.setText(R.string.ping_attempts)
         v15.addView(v22)

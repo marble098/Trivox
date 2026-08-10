@@ -11,6 +11,7 @@ import android.os.SystemClock
 import com.trivox.client.core.ConnectionRuntime
 import com.trivox.client.core.CoreManager
 import com.trivox.client.core.CoreStartRequest
+import com.trivox.client.network.EndpointBootstrapResolver
 import com.trivox.client.data.AppSettings
 import com.trivox.client.data.ConfigRepository
 import com.trivox.client.data.ConnectionMode
@@ -321,11 +322,20 @@ class ConnectionService : Service() {
                 profile
             }
 
+        val bootstrapIps = if (settings.smartConnectionOptimizer) {
+            EndpointBootstrapResolver.resolve(effectiveProfile.server)
+        } else {
+            emptyList()
+        }
+        Diagnostics.debug(
+            "Smart endpoint bootstrap (proxy): resolved=${bootstrapIps.size}"
+        )
         val request =
             CoreStartRequest(
                 effectiveProfile,
                 settings,
-                ConnectionMode.PROXY
+                ConnectionMode.PROXY,
+                bootstrapIps = bootstrapIps
             )
 
         ConnectionRuntime.updateSession(
