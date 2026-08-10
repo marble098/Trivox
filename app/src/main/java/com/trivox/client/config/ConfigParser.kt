@@ -350,25 +350,29 @@ object ConfigParser {
         val auth = decode(parsed.userInfo).substringBefore(':').ifBlank {
             throw ConfigParseException("Hysteria2 authentication password is missing")
         }
-        val obfs = parsed.query["obfs"].orEmpty()
-        if (obfs.isNotBlank() && !obfs.equals("none", true)) {
-            throw ConfigParseException(
-                "Hysteria2 obfs '$obfs' cannot be represented by Xray 26.7.28 URI conversion; import complete Xray JSON instead"
-            )
-        }
+
         val hysteria = JSONObject()
             .put("version", 2)
             .put("auth", auth)
             .put(
                 "udpIdleTimeout",
-                parsed.query["udpIdleTimeout"]?.toIntOrNull()?.coerceIn(2, 600) ?: 60
+                parsed.query["udpIdleTimeout"]
+                    ?.toIntOrNull()
+                    ?.coerceIn(2, 600)
+                    ?: 60
             )
+
         val stream = JSONObject()
             .put("network", "hysteria")
             .put("method", "hysteria")
             .put("security", "tls")
             .put("hysteriaSettings", hysteria)
             .put("tlsSettings", tlsSettings(parsed.query, parsed.host))
+
+        hysteriaFinalMask(parsed.query)?.let {
+            stream.put("finalmask", it)
+        }
+
         val outbound = JSONObject()
             .put("tag", "proxy")
             .put("protocol", "hysteria")
@@ -380,7 +384,64 @@ object ConfigParser {
                     .put("port", parsed.port)
             )
             .put("streamSettings", stream)
-        return parsed.profile("hysteria", outbound, raw)
+
+        return parsed.profile("hysteria", outbound, raw).copy(
+            probeServer = parsed.host,
+            probePort = parsed.port
+        )
+    }
+
+    /** Xray 26.7.28 Hysteria2 obfuscation and QUIC tuning. */
+    private fun hysteriaFinalMask(query: Map<String, String>): JSONObject? {
+        val result = JSONObject()
+        val obfs = query["obfs"].orEmpty().trim().lowercase(Locale.ROOT)
+        when (obfs) {
+            "", "none" -> Unit
+            "salamander" -> {
+                val password = (query["obfs-password"] ?: query["obfsPassword"]).orEmpty()
+                if (password.isBlank()) {
+                    throw ConfigParseException("Hysteria2 Salamander obfs requires obfs-password")
+                }
+                val settings = JSONObject().put("password", password)
+                (query["packetSize"] ?: query["obfs-packet-size"])
+                    ?.trim()?.takeIf(String::isNotBlank)
+                    ?.let { settings.put("packetSize", it) }
+                result.put(
+                    "udp",
+                    JSONArray().put(
+                        JSONObject().put("type", "salamander").put("settings", settings)
+                    )
+                )
+            }
+            else -> throw ConfigParseException(
+                "Unsupported Hysteria2 obfs '$obfs' for Xray 26.7.28"
+            )
+        }
+
+        val quic = JSONObject()
+        query["congestion"]?.trim()?.lowercase(Locale.ROOT)
+            ?.takeIf { it in setOf("reno", "bbr", "brutal", "force-brutal") }
+            ?.let { quic.put("congestion", it) }
+        (query["up"] ?: query["brutalUp"])?.trim()?.takeIf(String::isNotBlank)
+            ?.let { quic.put("brutalUp", it) }
+        (query["down"] ?: query["brutalDown"])?.trim()?.takeIf(String::isNotBlank)
+            ?.let { quic.put("brutalDown", it) }
+
+        val hopPorts = (query["udpHopPort"] ?: query["udp-hop"] ?: query["mport"])
+            ?.trim()?.takeIf(String::isNotBlank)
+        if (hopPorts != null) {
+            val interval = (query["udpHopInterval"] ?: query["udp-hop-interval"])
+                ?.toIntOrNull()?.coerceAtLeast(5) ?: 30
+            quic.put("udpHop", JSONObject().put("ports", hopPorts).put("interval", interval))
+        }
+        query["maxIdleTimeout"]?.toIntOrNull()?.takeIf { it in 4..120 }
+            ?.let { quic.put("maxIdleTimeout", it) }
+        query["keepAlivePeriod"]?.toIntOrNull()?.takeIf { it in 2..60 }
+            ?.let { quic.put("keepAlivePeriod", it) }
+        parseBoolean(query["disablePathMTUDiscovery"])
+            ?.let { quic.put("disablePathMTUDiscovery", it) }
+        if (quic.length() > 0) result.put("quicParams", quic)
+        return result.takeIf { it.length() > 0 }
     }
 
     private fun parseWireGuardUri(raw: String): ConfigProfile {

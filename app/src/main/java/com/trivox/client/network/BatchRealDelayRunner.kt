@@ -290,29 +290,40 @@ internal class BatchRealDelayRunner(
         val samples = mutableListOf<Long>()
         var lastError = "verified_https_failed"
 
-        policy.targets.forEachIndexed { index, target ->
-            if (Thread.currentThread().isInterrupted) {
-                return failure(timestamp, "cancelled")
-            }
-            val probe = VerifiedHttpProbe.probe(
-                settings = localSettings,
-                route = VerifiedHttpProbe.Route.SOCKS_PROXY,
-                target = target,
-                timeoutMs = policy.probeTimeoutMs,
-                nonce = timestamp + index
-            )
-            if (probe.success && probe.latencyMs != null) {
-                samples += probe.latencyMs
-                if (samples.size >= policy.requiredProofs) {
-                    return success(timestamp, samples)
+        fun tryTargets(targets: List<VerifiedHttpProbe.Target>, timeoutMs: Int): Boolean {
+            targets.forEachIndexed { index, target ->
+                if (Thread.currentThread().isInterrupted) {
+                    lastError = "cancelled"
+                    return false
                 }
-            } else {
-                lastError = probe.errorCategory ?: lastError
+                val probe = VerifiedHttpProbe.probe(
+                    settings = localSettings,
+                    route = VerifiedHttpProbe.Route.SOCKS_PROXY,
+                    target = target,
+                    timeoutMs = timeoutMs,
+                    nonce = timestamp + samples.size + index
+                )
+                if (probe.success && probe.latencyMs != null) {
+                    samples += probe.latencyMs
+                    if (samples.size >= policy.requiredProofs) return true
+                } else {
+                    lastError = probe.errorCategory ?: lastError
+                }
             }
-            val remaining = policy.targets.size - index - 1
-            if (samples.size + remaining < policy.requiredProofs) {
-                return failure(timestamp, lastError)
-            }
+            return samples.size >= policy.requiredProofs
+        }
+
+        if (tryTargets(policy.targets, policy.probeTimeoutMs)) {
+            return success(timestamp, samples)
+        }
+        if (Thread.currentThread().isInterrupted) return failure(timestamp, "cancelled")
+
+        // P2 Turbo rescue: only would-be failures pay alternate endpoint probes.
+        if (
+            policy.rescueTargets.isNotEmpty() &&
+            tryTargets(policy.rescueTargets, policy.rescueProbeTimeoutMs)
+        ) {
+            return success(timestamp, samples)
         }
         return if (samples.size >= policy.requiredProofs) {
             success(timestamp, samples)

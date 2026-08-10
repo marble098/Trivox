@@ -41,22 +41,15 @@ import javax.net.ssl.SNIHostName
 import javax.net.ssl.SSLParameters
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
-import kotlin.math.ceil
 
 /**
- * Latency engine with two deliberately different meanings:
- * TCP_CONNECT ranks endpoint reachability; XRAY_HTTP starts the real profile and
- * accepts a latency only after verified HTTPS application data crosses the local
- * Xray mixed proxy. Native MeasureDelay is not used as a truth signal because an
- * arbitrary HTTP response can otherwise become a false positive.
+ * Verified profile-latency engine.
+ * Stored ranking uses XRAY_HTTP application-data proof only. ICMP remains
+ * separate endpoint telemetry and is never substituted for tunnel delay.
  */
 class PingManager(
     private val core: CoreAdapter? = null
 ) : AutoCloseable {
-    private val tcpExecutor = Executors.newFixedThreadPool(
-        MAX_TCP_WORKERS,
-        namedFactory("trivox-tcp-ping")
-    )
     private val xrayExecutor = Executors.newSingleThreadExecutor(
         namedFactory("trivox-verified-delay")
     )
@@ -69,268 +62,34 @@ class PingManager(
     private val preferredXrayTarget = AtomicReference<String?>(null)
     private val preferredLocalProxyTarget = AtomicReference<String?>(null)
 
+    /**
+     * Ranking is real application-data proof only. An open TCP port is not a
+     * usable-proxy proof and is never exposed as a latency method.
+     */
     fun measure(
         profile: ConfigProfile,
         settings: AppSettings,
         workDir: File
-    ): PingResult = when {
-        profile.protocol.equals("wireguard", ignoreCase = true) &&
-            settings.pingMethod == PingMethod.TCP_CONNECT -> wireGuardTcp(
-                profile, settings, workDir, settings.testAttempts
-            )
-        settings.pingMethod == PingMethod.TCP_CONNECT -> tcp(
-            profile,
-            settings.testAttempts,
-            DEFAULT_TCP_TIMEOUT_MS
-        )
-        else -> realXray(
-            profile,
-            settings,
-            workDir,
-            settings.testAttempts
-        )
-    }
+    ): PingResult = realXray(
+        profile = profile,
+        settings = settings.copy(pingMethod = PingMethod.XRAY_HTTP),
+        workDir = workDir,
+        attempts = settings.testAttempts
+    )
 
     fun measureSingle(
         profile: ConfigProfile,
         settings: AppSettings,
         workDir: File
-    ): PingResult = when {
-        profile.protocol.equals("wireguard", ignoreCase = true) &&
-            settings.pingMethod == PingMethod.TCP_CONNECT -> wireGuardTcp(
-                profile = profile,
-                settings = settings,
-                workDir = workDir,
-                attempts = 2,
-                timeoutMs = SINGLE_WIREGUARD_TIMEOUT_MS
-            )
-        settings.pingMethod == PingMethod.TCP_CONNECT -> tcp(
-            profile = profile,
-            attempts = 2,
-            timeoutMs = SINGLE_TCP_TIMEOUT_MS,
-            lowLatencyRecheck = false
-        )
-        else -> realXray(
-            profile = profile,
-            settings = settings,
-            workDir = workDir,
-            attempts = 1,
-            timeoutSeconds = SINGLE_XRAY_TIMEOUT_SECONDS,
-            allowSingleSample = true,
-            maxTargetsPerSample = 1
-        )
-    }
-
-    /**
-     * WireGuard endpoints are UDP, so TCP-connect to :51820 is meaningless.
-     * Start Xray on an isolated local mixed proxy and require verified HTTPS
-     * application data to cross the real WireGuard route. The probe target is
-     * an IP literal, so a broken DNS path cannot fabricate or hide the result.
-     */
-    @Synchronized
-    fun wireGuardTcp(
-        profile: ConfigProfile,
-        settings: AppSettings,
-        workDir: File,
-        attempts: Int = settings.testAttempts,
-        timeoutMs: Int = DEFAULT_TCP_TIMEOUT_MS
-    ): PingResult {
-        val timestamp = System.currentTimeMillis()
-        val adapter = core ?: return basicFailure(
-            PingMethod.TCP_CONNECT.name, timestamp, "core_unavailable"
-        )
-        if (Thread.currentThread().isInterrupted) {
-            return cancelled(PingMethod.TCP_CONNECT.name, timestamp)
-        }
-        if (isLiveConnectionActive(adapter)) {
-            return basicFailure(
-                PingMethod.TCP_CONNECT.name, timestamp, "live_core_busy"
-            )
-        }
-
-        val count = attempts.coerceIn(2, 5)
-        val timeout = timeoutMs.coerceIn(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS)
-        val probeSettings = isolatedProbeSettings(settings)
-        workDir.mkdirs()
-        val safeId = profile.id.replace(Regex("[^A-Za-z0-9._-]"), "_").take(48)
-        val configFile = File(
-            workDir, "trivox-wg-tcp-$safeId-${System.nanoTime()}.json"
-        )
-        val logFile = File(
-            workDir, "trivox-wg-tcp-$safeId-${System.nanoTime()}.log"
-        )
-        val mark = XrayProbeLogInspector.mark(logFile)
-        var started = false
-
-        return try {
-            val config = XrayConfigBuilder.build(
-                profile, probeSettings, ConnectionMode.PROXY,
-                errorLogPath = logFile.absolutePath
-            )
-            configFile.writeText(config, Charsets.UTF_8)
-            val validation = adapter.validate(config)
-            if (!validation.success) {
-                return basicFailure(
-                    PingMethod.TCP_CONNECT.name, timestamp,
-                    classifyXrayFailure(validation.error).ifBlank {
-                        "invalid_wireguard_config"
-                    }
-                )
-            }
-            val start = adapter.start(config, null)
-            if (!start.success) {
-                return basicFailure(
-                    PingMethod.TCP_CONNECT.name, timestamp,
-                    XrayProbeLogInspector.classifySince(mark)
-                        ?: classifyXrayFailure(start.error)
-                )
-            }
-            started = true
-            if (!waitCancellable(WIREGUARD_PROBE_START_GRACE_MS)) {
-                return cancelled(PingMethod.TCP_CONNECT.name, timestamp)
-            }
-
-            val samples = mutableListOf<Long>()
-            var lastFailure = "wireguard_route_unverified"
-            repeat(count) { index ->
-                if (Thread.currentThread().isInterrupted) {
-                    return cancelled(PingMethod.TCP_CONNECT.name, timestamp)
-                }
-
-                val probe = VerifiedHttpProbe.probe(
-                    settings = probeSettings,
-                    route = VerifiedHttpProbe.Route.SOCKS_PROXY,
-                    target = VerifiedHttpProbe.strongTraceTarget,
-                    timeoutMs = timeout,
-                    nonce = timestamp + index
-                )
-
-                if (probe.success && probe.latencyMs != null) {
-                    samples +=
-                        probe.latencyMs *
-                            NANOS_PER_MILLISECOND
-                } else {
-                    lastFailure =
-                        probe.errorCategory
-                            ?: lastFailure
-                }
-            }
-
-            val summary =
-                PingStatistics.summarize(
-                    samples,
-                    count
-                )
-            PingResult(
-                method = PingMethod.TCP_CONNECT.name,
-                success = summary.success,
-                latencyMs = summary.latencyMs,
-                jitterMs = summary.jitterMs,
-                successRatio = summary.successRatio,
-                resolvedIp = "1.1.1.1",
-                timestamp = timestamp,
-                errorCategory = if (summary.success) {
-                    null
-                } else {
-                    XrayProbeLogInspector.classifySince(mark)
-                        ?: lastFailure
-                }
-            )
-        } catch (t: Throwable) {
-            failure(PingMethod.TCP_CONNECT.name, timestamp, t)
-        } finally {
-            if (started) runCatching { adapter.stop() }.onFailure {
-                Diagnostics.warning("WireGuard TCP cleanup failed: ${it.message}")
-            }
-            runCatching { configFile.delete() }
-            runCatching { logFile.delete() }
-        }
-    }
-
-    fun tcp(
-        profile: ConfigProfile,
-        attempts: Int = 3,
-        timeoutMs: Int = DEFAULT_TCP_TIMEOUT_MS,
-        lowLatencyRecheck: Boolean = true
-    ): PingResult {
-        val timestamp = System.currentTimeMillis()
-        val count = attempts.coerceIn(2, 5)
-        val timeout = timeoutMs.coerceIn(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS)
-        val host = profile.probeServer.trim().ifBlank { profile.server.trim() }
-        val port = profile.probePort.takeIf { it in 1..65535 } ?: profile.port
-        if (host.isBlank() || port !in 1..65535) {
-            return failure(
-                PingMethod.TCP_CONNECT.name,
-                timestamp,
-                IllegalArgumentException("TCP probe endpoint is unavailable")
-            )
-        }
-
-        val addresses = try {
-            resolveAll(host, timeout)
-        } catch (throwable: Throwable) {
-            return failure(PingMethod.TCP_CONNECT.name, timestamp, throwable)
-        }
-
-        var address: InetAddress? = null
-        var lastFailure: Throwable? = null
-        for (candidate in addresses) {
-            if (Thread.currentThread().isInterrupted) {
-                return cancelled(PingMethod.TCP_CONNECT.name, timestamp)
-            }
-            try {
-                connectOnce(
-                    candidate,
-                    port,
-                    timeout.coerceAtMost(ADDRESS_PROBE_TIMEOUT_MS)
-                )
-                address = candidate
-                break
-            } catch (throwable: Throwable) {
-                lastFailure = throwable
-            }
-        }
-        val selected = address ?: return failure(
-            PingMethod.TCP_CONNECT.name,
-            timestamp,
-            lastFailure ?: ConnectException("No resolved address accepted TCP")
-        )
-
-        val samples = mutableListOf<Long>()
-        fun collect(amount: Int) {
-            repeat(amount) {
-                if (Thread.currentThread().isInterrupted) return
-                runCatching { connectOnce(selected, port, timeout) }
-                    .onSuccess(samples::add)
-                    .onFailure { lastFailure = it }
-            }
-        }
-        collect(count)
-        var totalAttempts = count
-        var summary = PingStatistics.summarize(samples, totalAttempts)
-        if (
-            lowLatencyRecheck &&
-            summary.success &&
-            (summary.latencyMs ?: Long.MAX_VALUE) < LOW_LATENCY_RECHECK_THRESHOLD_MS
-        ) {
-            collect(LOW_LATENCY_RECHECK_ATTEMPTS)
-            totalAttempts += LOW_LATENCY_RECHECK_ATTEMPTS
-            summary = PingStatistics.summarize(samples, totalAttempts)
-        }
-
-        return PingResult(
-            method = PingMethod.TCP_CONNECT.name,
-            success = summary.success,
-            latencyMs = summary.latencyMs,
-            jitterMs = summary.jitterMs,
-            successRatio = summary.successRatio,
-            resolvedIp = selected.hostAddress,
-            timestamp = timestamp,
-            errorCategory = if (summary.success) null else classify(
-                lastFailure ?: SocketTimeoutException("Insufficient TCP samples")
-            )
-        )
-    }
+    ): PingResult = realXray(
+        profile = profile,
+        settings = settings.copy(pingMethod = PingMethod.XRAY_HTTP),
+        workDir = workDir,
+        attempts = 1,
+        timeoutSeconds = SINGLE_XRAY_TIMEOUT_SECONDS,
+        allowSingleSample = true,
+        maxTargetsPerSample = 2
+    )
 
     @Synchronized
     fun realXray(
@@ -613,55 +372,8 @@ class PingManager(
         }.getOrElse { failure("TLS_HANDSHAKE", timestamp, it) }
     }
 
-    fun icmp(host: String, timeoutSeconds: Int = 4): PingResult {
-        val timestamp = System.currentTimeMillis()
-        val timeout = timeoutSeconds.coerceIn(1, 10)
-        val process = try {
-            ProcessBuilder("ping", "-c", "1", "-W", timeout.toString(), host)
-                .redirectErrorStream(true)
-                .start()
-        } catch (throwable: Throwable) {
-            return failure("ICMP", timestamp, throwable)
-        }
-        return try {
-            val completed = process.waitFor(timeout.toLong() + 2L, TimeUnit.SECONDS)
-            if (!completed) process.destroyForcibly()
-            val output = process.inputStream.bufferedReader().use {
-                it.readText().take(8_192)
-            }
-            val latency = Regex(
-                "time[=<]\\s*([0-9.]+)\\s*ms",
-                RegexOption.IGNORE_CASE
-            ).find(output)?.groupValues?.getOrNull(1)?.toDoubleOrNull()?.let {
-                ceil(it).toLong().coerceAtLeast(1L)
-            }
-            val success = completed && process.exitValue() == 0 && latency != null
-            PingResult(
-                method = "ICMP",
-                success = success,
-                latencyMs = latency.takeIf { success },
-                jitterMs = null,
-                successRatio = if (success) 1.0 else 0.0,
-                resolvedIp = null,
-                timestamp = timestamp,
-                errorCategory = if (success) null else "icmp_unavailable_or_blocked"
-            )
-        } catch (throwable: Throwable) {
-            failure("ICMP", timestamp, throwable)
-        } finally {
-            if (process.isAlive) process.destroyForcibly()
-        }
-    }
-
-    fun batchTcp(
-        profiles: List<ConfigProfile>,
-        attempts: Int,
-        callback: (ConfigProfile, PingResult) -> Unit
-    ): List<Future<*>> = submitBounded(
-        profiles,
-        tcpExecutor,
-        MAX_TCP_WORKERS
-    ) { callback(it, tcp(it, attempts)) }
+    fun icmp(host: String, timeoutSeconds: Int = 2): PingResult =
+        IcmpProbe.measure(host = host, attempts = 3, timeoutSeconds = timeoutSeconds)
 
     fun batch(
         profiles: List<ConfigProfile>,
@@ -669,92 +381,31 @@ class PingManager(
         workDir: File,
         callback: (ConfigProfile, PingResult) -> Unit
     ): List<Future<*>> {
-        val real = settings.pingMethod == PingMethod.XRAY_HTTP
-        if (real && core != null && profiles.isNotEmpty()) {
-            return listOf(
-                xrayExecutor.submit(Callable {
-                    synchronized(this@PingManager) {
-                        BatchRealDelayRunner(core).run(
-                            profiles = profiles,
-                            settings = settings,
-                            workDir = workDir,
-                            callback = callback,
-                            fallback = { profile ->
-                                realXray(
-                                    profile = profile,
-                                    settings = settings,
-                                    workDir = workDir,
-                                    attempts = BATCH_XRAY_ATTEMPTS,
-                                    timeoutSeconds = BATCH_XRAY_TIMEOUT_SECONDS,
-                                    allowSingleSample = false,
-                                    maxTargetsPerSample = BATCH_XRAY_MAX_TARGETS
-                                )
-                            }
-                        )
-                    }
-                })
-            )
-        }
-
-        if (!real && core != null) {
-            val wireGuardProfiles = profiles.filter {
-                it.protocol.equals("wireguard", ignoreCase = true)
-            }
-            if (wireGuardProfiles.isNotEmpty()) {
-                val normalProfiles = profiles.filterNot {
-                    it.protocol.equals("wireguard", ignoreCase = true)
-                }
-                val tasks = ArrayList<Future<*>>()
-                tasks += submitBounded(
-                    normalProfiles, tcpExecutor, MAX_TCP_WORKERS
-                ) { profile ->
-                    callback(
-                        profile,
-                        tcp(profile, settings.testAttempts, DEFAULT_TCP_TIMEOUT_MS)
+        val adapter = core
+        if (adapter == null || profiles.isEmpty()) return emptyList()
+        return listOf(
+            xrayExecutor.submit(Callable {
+                synchronized(this@PingManager) {
+                    BatchRealDelayRunner(adapter).run(
+                        profiles = profiles,
+                        settings = settings.copy(pingMethod = PingMethod.XRAY_HTTP),
+                        workDir = workDir,
+                        callback = callback,
+                        fallback = { profile ->
+                            realXray(
+                                profile = profile,
+                                settings = settings.copy(pingMethod = PingMethod.XRAY_HTTP),
+                                workDir = workDir,
+                                attempts = BATCH_XRAY_ATTEMPTS,
+                                timeoutSeconds = BATCH_XRAY_TIMEOUT_SECONDS,
+                                allowSingleSample = false,
+                                maxTargetsPerSample = BATCH_XRAY_MAX_TARGETS
+                            )
+                        }
                     )
                 }
-                tasks += xrayExecutor.submit(Callable {
-                    for (profile in wireGuardProfiles) {
-                        if (Thread.currentThread().isInterrupted) break
-                        callback(
-                            profile,
-                            wireGuardTcp(
-                                profile, settings, workDir, settings.testAttempts
-                            )
-                        )
-                    }
-                })
-                return tasks
-            }
-        }
-
-        return submitBounded(
-            profiles = profiles,
-            executor = tcpExecutor,
-            workers = MAX_TCP_WORKERS
-        ) { profile ->
-            callback(profile, measure(profile, settings, workDir))
-        }
-    }
-
-    private fun submitBounded(
-        profiles: List<ConfigProfile>,
-        executor: ExecutorService,
-        workers: Int,
-        action: (ConfigProfile) -> Unit
-    ): List<Future<*>> {
-        if (profiles.isEmpty()) return emptyList()
-        val cursor = AtomicInteger(0)
-        val count = workers.coerceAtLeast(1).coerceAtMost(profiles.size)
-        return List(count) {
-            executor.submit(Callable {
-                while (!Thread.currentThread().isInterrupted) {
-                    val index = cursor.getAndIncrement()
-                    if (index >= profiles.size) break
-                    action(profiles[index])
-                }
             })
-        }
+        )
     }
 
     fun cancel(tasks: Collection<Future<*>>) {
@@ -762,7 +413,6 @@ class PingManager(
     }
 
     override fun close() {
-        tcpExecutor.shutdownNow()
         xrayExecutor.shutdownNow()
         resolverExecutor.getAndSet(newResolverExecutor()).shutdownNow()
         resolverExecutor.get().shutdownNow()
@@ -887,20 +537,6 @@ class PingManager(
             }
             else -> true
         }
-    }
-
-    private fun connectOnce(
-        address: InetAddress,
-        port: Int,
-        timeoutMs: Int
-    ): Long {
-        val started = System.nanoTime()
-        Socket().use {
-            it.tcpNoDelay = true
-            it.keepAlive = false
-            it.connect(InetSocketAddress(address, port), timeoutMs)
-        }
-        return (System.nanoTime() - started).coerceAtLeast(1L)
     }
 
     private fun isolatedProbeSettings(settings: AppSettings): AppSettings {

@@ -122,7 +122,6 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     private lateinit var emptyText: TextView
     private lateinit var connectButton: Button
     private lateinit var pauseButton: Button
-    private lateinit var tcpPingButton: Button
     private lateinit var realDelayAllButton: Button
     private lateinit var quickToolsPanel: View
     private lateinit var quickToolsToggle: AppCompatImageButton
@@ -330,7 +329,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         emptyText = findViewById(R.id.emptyText)
         connectButton = findViewById(R.id.connectButton)
         pauseButton = findViewById(R.id.pauseButton)
-        tcpPingButton = findViewById(R.id.testButton)
+        findViewById<Button>(R.id.testButton).visibility = View.GONE
         realDelayAllButton =
             findViewById(R.id.realDelayAllButton)
         quickToolsPanel =
@@ -429,18 +428,7 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             onClick = ::selectProfile,
             onLongClick = ::showActions,
             onAction = ::showActions,
-            onTcpPing = {
-                testSingleProfile(
-                    it,
-                    PingMethod.TCP_CONNECT
-                )
-            },
-            onRealPing = {
-                testSingleProfile(
-                    it,
-                    PingMethod.XRAY_HTTP
-                )
-            }
+            onRealPing = ::testSingleProfile
         )
 
         list.adapter = adapter
@@ -556,12 +544,6 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             .setOnClickListener { showAddOptions() }
         refreshSubscriptionsButton
             .setOnClickListener { refreshSubscriptionsFromMain() }
-        tcpPingButton
-            .setOnClickListener {
-                testProfiles(
-                    PingMethod.TCP_CONNECT
-                )
-            }
         realDelayAllButton
             .setOnClickListener {
                 testProfiles(
@@ -1385,29 +1367,17 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     private fun showSubscriptionActions(
         subscriptionId: String
     ) {
-        val source = SubscriptionRepository(this)
-            .find(subscriptionId)
-            ?: return
-        val profiles = repository.all()
-            .filter { it.subscriptionId == subscriptionId }
+        val source = SubscriptionRepository(this).find(subscriptionId) ?: return
+        val profiles = repository.all().filter { it.subscriptionId == subscriptionId }
         val labels = arrayOf(
             getString(R.string.subscription_open_settings),
             getString(R.string.v15_subscription_update),
-            getString(
-                if (source.enabled) {
-                    R.string.v15_subscription_toggle_disable
-                } else {
-                    R.string.v15_subscription_toggle_enable
-                }
-            ),
+            getString(if (source.enabled) R.string.v15_subscription_toggle_disable else R.string.v15_subscription_toggle_enable),
             getString(R.string.subscription_export_links),
-            getString(R.string.subscription_delete_all_profiles),
-            getString(R.string.subscription_delete_without_tcp),
             getString(R.string.subscription_delete_without_real),
-            getString(R.string.subscription_delete_without_both),
+            getString(R.string.subscription_delete_all_profiles),
             getString(R.string.v15_subscription_delete)
         )
-
         AlertDialog.Builder(this)
             .setTitle(source.name)
             .setItems(labels) { _, which ->
@@ -1415,50 +1385,17 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                     0 -> openSubscriptionManager(sourceId = subscriptionId)
                     1 -> refreshSubscriptionsFromMain(setOf(subscriptionId))
                     2 -> {
-                        SubscriptionRepository(this).update(subscriptionId) {
-                            it.enabled = !it.enabled
-                        }
+                        SubscriptionRepository(this).update(subscriptionId) { it.enabled = !it.enabled }
                         subscriptionTabsSignature = ""
                         renderSubscriptionTabs(force = true)
                         refresh()
                     }
                     3 -> exportSubscriptionLinks(source, profiles)
-                    4 -> confirmSubscriptionProfileCleanup(
-                        source = source,
-                        profiles = profiles,
-                        title = labels[which]
-                    ) { true }
-                    5 -> confirmSubscriptionProfileCleanup(
-                        source = source,
-                        profiles = profiles,
-                        title = labels[which]
-                    ) {
-                        it.tcpTestStatus != TestStatus.ALIVE ||
-                            it.tcpLatencyMs == null
+                    4 -> confirmSubscriptionProfileCleanup(source, profiles, labels[which]) {
+                        it.realTestStatus != TestStatus.ALIVE || it.realLatencyMs == null
                     }
-                    6 -> confirmSubscriptionProfileCleanup(
-                        source = source,
-                        profiles = profiles,
-                        title = labels[which]
-                    ) {
-                        it.realTestStatus != TestStatus.ALIVE ||
-                            it.realLatencyMs == null
-                    }
-                    7 -> confirmSubscriptionProfileCleanup(
-                        source = source,
-                        profiles = profiles,
-                        title = labels[which]
-                    ) {
-                        (
-                            it.tcpTestStatus != TestStatus.ALIVE ||
-                                it.tcpLatencyMs == null
-                            ) &&
-                            (
-                                it.realTestStatus != TestStatus.ALIVE ||
-                                    it.realLatencyMs == null
-                                )
-                    }
-                    8 -> confirmDeleteSubscriptionFromMain(source, profiles.size)
+                    5 -> confirmSubscriptionProfileCleanup(source, profiles, labels[which]) { true }
+                    6 -> confirmDeleteSubscriptionFromMain(source, profiles.size)
                 }
             }
             .show()
@@ -1754,18 +1691,8 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             repository.all()
         composeProfileStatsCache = ComposeProfileStats(
             total = all.size,
-            alive = all.count {
-                it.tcpTestStatus == TestStatus.ALIVE ||
-                    it.realTestStatus == TestStatus.ALIVE
-            },
-            failed = all.count {
-                it.tcpTestStatus != TestStatus.ALIVE &&
-                    it.realTestStatus != TestStatus.ALIVE &&
-                    (
-                        it.tcpTestStatus in setOf(TestStatus.DEAD, TestStatus.ERROR) ||
-                            it.realTestStatus in setOf(TestStatus.DEAD, TestStatus.ERROR)
-                        )
-            }
+            alive = all.count { it.realTestStatus == TestStatus.ALIVE && it.realLatencyMs != null },
+            failed = all.count { it.realTestStatus in setOf(TestStatus.DEAD, TestStatus.ERROR) }
         )
         val values =
             all.asSequence()
@@ -2187,166 +2114,68 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         }
     }
 
-    private fun testSingleProfile(
-        profile: ConfigProfile,
-        method: PingMethod = PingMethod.TCP_CONNECT
-    ) {
-        if (
-            method == PingMethod.XRAY_HTTP &&
-            ConnectionRuntime.current().state !in
-                setOf(
-                    ConnectionState.DISCONNECTED,
-                    ConnectionState.ERROR
-                )
-        ) {
+    private fun testSingleProfile(profile: ConfigProfile) {
+        if (ConnectionRuntime.current().state !in setOf(ConnectionState.DISCONNECTED, ConnectionState.ERROR)) {
             toast(getString(R.string.xray_ping_requires_disconnect))
             return
         }
-
-        Diagnostics.info(
-            "Single profile test requested; method=${method.name}, " +
-                "profile=${profile.id}"
-        )
+        Diagnostics.info("Single profile test requested; method=XRAY_HTTP, profile=${profile.id}")
         cancelPingTasks()
-        val generation =
-            pingGeneration.incrementAndGet()
-
+        val generation = pingGeneration.incrementAndGet()
         storageWorker.execute prepareSingle@ {
             repository.update(profile.id) { current ->
                 current.testStatus = TestStatus.TESTING
-                when (method) {
-                    PingMethod.TCP_CONNECT ->
-                        current.tcpTestStatus = TestStatus.TESTING
-                    PingMethod.XRAY_HTTP ->
-                        current.realTestStatus = TestStatus.TESTING
-                }
+                current.realTestStatus = TestStatus.TESTING
             }
             runOnUiThreadIfAlive(::refresh)
-
-            if (
-                activityDestroyed.get() ||
-                pingGeneration.get() != generation
-            ) {
+            if (activityDestroyed.get() || pingGeneration.get() != generation) return@prepareSingle
+            val settings = settingsRepository.load().copy(pingMethod = PingMethod.XRAY_HTTP)
+            val future = try {
+                latencyWorker.submit singleNetwork@ {
+                    val result = runCatching {
+                        pingManager.measureSingle(profile = profile, settings = settings, workDir = cacheDir)
+                    }.getOrElse { error ->
+                        Diagnostics.recordThrowable("Single Real Delay test", error)
+                        failedPingResult(PingMethod.XRAY_HTTP, error)
+                    }
+                    if (Thread.currentThread().isInterrupted || pingGeneration.get() != generation) return@singleNetwork
+                    storageWorker.execute persistSingle@ {
+                        if (pingGeneration.get() != generation || activityDestroyed.get()) return@persistSingle
+                        repository.update(profile.id) { current -> applyPingResultToProfile(current, result) }
+                        Diagnostics.info(
+                            "Single profile test completed; method=XRAY_HTTP, profile=${profile.id}, " +
+                                "success=${result.success}, latency=${result.latencyMs}, error=${result.errorCategory.orEmpty()}"
+                        )
+                        runOnUiThreadIfAlive(::refresh)
+                    }
+                }
+            } catch (_: java.util.concurrent.RejectedExecutionException) {
                 return@prepareSingle
             }
-
-            val settings =
-                settingsRepository.load().copy(
-                    pingMethod = method
-                )
-
-            val future =
-                try {
-                    latencyWorker.submit singleNetwork@ {
-                        val result =
-                            runCatching {
-                                pingManager.measureSingle(
-                                    profile = profile,
-                                    settings = settings,
-                                    workDir = cacheDir
-                                )
-                            }.getOrElse { error ->
-                                Diagnostics.recordThrowable(
-                                    "Single ping test",
-                                    error
-                                )
-                                failedPingResult(
-                                    settings.pingMethod,
-                                    error
-                                )
-                            }
-
-                        if (
-                            Thread.currentThread().isInterrupted ||
-                            pingGeneration.get() != generation
-                        ) {
-                            return@singleNetwork
-                        }
-
-                        storageWorker.execute persistSingle@ {
-                            if (
-                                pingGeneration.get() != generation ||
-                                activityDestroyed.get()
-                            ) {
-                                return@persistSingle
-                            }
-
-                            repository.update(profile.id) { current ->
-                                applyPingResultToProfile(
-                                    current,
-                                    result
-                                )
-                            }
-                            Diagnostics.info(
-                                "Single profile test completed; " +
-                                    "method=${method.name}, " +
-                                    "profile=${profile.id}, " +
-                                    "success=${result.success}, " +
-                                    "latency=${result.latencyMs}, " +
-                                    "error=${result.errorCategory.orEmpty()}"
-                            )
-                            runOnUiThreadIfAlive(::refresh)
-                        }
-                    }
-                } catch (
-                    _: java.util.concurrent.RejectedExecutionException
-                ) {
-                    return@prepareSingle
-                }
-
             trackPingTasks(listOf(future))
         }
     }
 
-    private fun testProfiles(
-        method: PingMethod
-    ) {
-        val runtime =
-            ConnectionRuntime.current()
-
-        if (
-            method == PingMethod.XRAY_HTTP &&
-            runtime.state !in
-            setOf(
-                ConnectionState.DISCONNECTED,
-                ConnectionState.ERROR
-            )
-        ) {
-            toast(
-                getString(
-                    R.string
-                        .xray_ping_requires_disconnect
-                )
-            )
+    private fun testProfiles(@Suppress("UNUSED_PARAMETER") method: PingMethod = PingMethod.XRAY_HTTP) {
+        val runtime = ConnectionRuntime.current()
+        if (runtime.state !in setOf(ConnectionState.DISCONNECTED, ConnectionState.ERROR)) {
+            toast(getString(R.string.xray_ping_requires_disconnect))
             return
         }
-
-        Diagnostics.info(
-            "Batch profile test requested; method=${method.name}, " +
-                "subscription=${activeSubscriptionId.orEmpty()}"
-        )
+        Diagnostics.info("Batch profile test requested; method=XRAY_HTTP, subscription=${activeSubscriptionId.orEmpty()}")
         cancelPingTasks()
-        val generation =
-            pingGeneration.incrementAndGet()
-        composeBatchMethod = method
+        val generation = pingGeneration.incrementAndGet()
+        composeBatchMethod = PingMethod.XRAY_HTTP
         composeBatchCompleted.set(0)
         composeBatchTotal.set(0)
         composeBatchRunning.set(true)
         setBatchControlsEnabled(false)
         notifyComposeChanged()
-
         storageWorker.execute {
             val subscriptionId = activeSubscriptionId
-            val profiles =
-                repository.all()
-                    .filter { profile ->
-                        profile.enabled &&
-                            (
-                                subscriptionId == null ||
-                                    profile.subscriptionId == subscriptionId
-                                )
-                    }
-
+            val profiles = repository.all().filter { profile ->
+                profile.enabled && (subscriptionId == null || profile.subscriptionId == subscriptionId)
+            }
             if (profiles.isEmpty()) {
                 runOnUiThread {
                     composeBatchRunning.set(false)
@@ -2359,133 +2188,53 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                 }
                 return@execute
             }
-
             composeBatchTotal.set(profiles.size)
-            Diagnostics.info(
-                "Batch profile test started; method=${method.name}, " +
-                    "generation=$generation, total=${profiles.size}"
-            )
+            Diagnostics.info("Batch profile test started; method=XRAY_HTTP, generation=$generation, total=${profiles.size}")
             notifyComposeChanged()
-
-            repository.updateMany(
-                profiles.map { it.id }
-            ) { current ->
+            repository.updateMany(profiles.map { it.id }) { current ->
                 current.testStatus = TestStatus.TESTING
-                when (method) {
-                    PingMethod.TCP_CONNECT -> current.tcpTestStatus = TestStatus.TESTING
-                    PingMethod.XRAY_HTTP -> current.realTestStatus = TestStatus.TESTING
-                }
+                current.realTestStatus = TestStatus.TESTING
             }
-
             runOnUiThread {
                 refresh()
-                val total = profiles.size
-                if (method == PingMethod.XRAY_HTTP) {
-                    realDelayAllButton.text = "0/$total"
-                } else {
-                    tcpPingButton.text = "0/$total"
-                }
+                realDelayAllButton.text = "0/${profiles.size}"
             }
-
-            val settings =
-                settingsRepository.load()
-            settings.pingMethod = method
+            val settings = settingsRepository.load().copy(pingMethod = PingMethod.XRAY_HTTP)
             val totalProfiles = profiles.size
-            val remaining =
-                AtomicInteger(totalProfiles)
-            val completed =
-                AtomicInteger(0)
-            val tasks =
-                pingManager.batch(
-                    profiles = profiles,
-                    settings = settings,
-                    workDir = cacheDir
-                ) { profile, result ->
-                    if (
-                        pingGeneration.get() ==
-                        generation
-                    ) {
-                        pingResultBuffer[
-                            profile.id
-                        ] = result
-                        schedulePingFlush(
-                            generation
-                        )
-                    }
-
-                    val completedCount =
-                        completed.incrementAndGet()
-                    composeBatchCompleted.set(completedCount)
-
-                    if (
-                        completedCount == totalProfiles ||
-                        completedCount == 1 ||
-                        completedCount %
-                            maxOf(
-                                1,
-                                totalProfiles / 20
-                            ) == 0
-                    ) {
-                        runOnUiThreadIfAlive {
-                            if (
-                                pingGeneration.get() ==
-                                generation
-                            ) {
-                                val label =
-                                    "$completedCount/$totalProfiles"
-                                if (
-                                    method ==
-                                    PingMethod.XRAY_HTTP
-                                ) {
-                                    realDelayAllButton.text =
-                                        label
-                                } else {
-                                    tcpPingButton.text =
-                                        label
-                                }
-                                notifyComposeChanged()
-                            }
-                        }
-                    }
-
-                    if (
-                        remaining.decrementAndGet() ==
-                        0
-                    ) {
-                        schedulePingFlush(
-                            generation,
-                            immediate = true
-                        )
-                        Diagnostics.info(
-                            "Batch profile test completed; method=${method.name}, " +
-                                "generation=$generation, total=$totalProfiles"
-                        )
-                        runOnUiThread {
-                            composeBatchRunning.set(false)
-                            setBatchControlsEnabled(true)
+            val remaining = AtomicInteger(totalProfiles)
+            val completed = AtomicInteger(0)
+            val tasks = pingManager.batch(profiles, settings, cacheDir) { profile, result ->
+                if (pingGeneration.get() == generation) {
+                    pingResultBuffer[profile.id] = result
+                    schedulePingFlush(generation)
+                }
+                val completedCount = completed.incrementAndGet()
+                composeBatchCompleted.set(completedCount)
+                if (completedCount == totalProfiles || completedCount == 1 || completedCount % maxOf(1, totalProfiles / 20) == 0) {
+                    runOnUiThreadIfAlive {
+                        if (pingGeneration.get() == generation) {
+                            realDelayAllButton.text = "$completedCount/$totalProfiles"
                             notifyComposeChanged()
                         }
                     }
                 }
-
+                if (remaining.decrementAndGet() == 0) {
+                    schedulePingFlush(generation, immediate = true)
+                    Diagnostics.info("Batch profile test completed; method=XRAY_HTTP, generation=$generation, total=$totalProfiles")
+                    runOnUiThread {
+                        composeBatchRunning.set(false)
+                        setBatchControlsEnabled(true)
+                        notifyComposeChanged()
+                    }
+                }
+            }
             trackPingTasks(tasks)
         }
     }
 
-    private fun setBatchControlsEnabled(
-        enabled: Boolean
-    ) {
-        tcpPingButton.isEnabled = enabled
+    private fun setBatchControlsEnabled(enabled: Boolean) {
         realDelayAllButton.isEnabled = enabled
-
-        if (enabled) {
-            tcpPingButton.setText(
-                R.string.tcp_ping_icon
-            )
-            realDelayAllButton.setText(
-                R.string.real_delay_all_icon
-            )
-        }
+        if (enabled) realDelayAllButton.setText(R.string.real_delay_all_icon)
     }
 
     private fun schedulePingFlush(
@@ -2581,43 +2330,16 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     }
 
     private fun selectFastestProfile() {
-        val fastest =
-            repository.all()
-                .asSequence()
-                .filter { it.enabled }
-                .filter { dualLatencyTier(it) < 3 }
-                .minWithOrNull(
-                    compareBy<ConfigProfile> {
-                        dualLatencyTier(it)
-                    }.thenBy {
-                        dualLatencyScore(it)
-                    }.thenBy {
-                        it.name.lowercase(Locale.ROOT)
-                    }
-                )
-
+        val fastest = repository.all().asSequence()
+            .filter { it.enabled && it.realTestStatus == TestStatus.ALIVE && it.realLatencyMs != null }
+            .minWithOrNull(compareBy<ConfigProfile> { it.realLatencyMs ?: Long.MAX_VALUE }.thenBy { it.name.lowercase(Locale.ROOT) })
         if (fastest == null) {
-            toast(
-                getString(
-                    R.string
-                        .no_ping_results
-                )
-            )
+            toast(getString(R.string.no_ping_results))
             return
         }
-
-        repository.select(
-            fastest.id
-        )
+        repository.select(fastest.id)
         refresh()
-        toast(
-            getString(
-                R.string
-                    .fastest_selected,
-                fastest.name,
-                dualLatencyScore(fastest)
-            )
-        )
+        toast(getString(R.string.fastest_selected, fastest.name, fastest.realLatencyMs ?: Long.MAX_VALUE))
     }
 
     private fun showProfileDetails(profile: ConfigProfile) {
@@ -3016,12 +2738,8 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     }
 
     private fun confirmClearDeadProfiles() {
-        val dead = repository.all().filter { profile ->
-            val tcpFailed = profile.tcpTestStatus in setOf(TestStatus.DEAD, TestStatus.ERROR)
-            val realFailed = profile.realTestStatus in setOf(TestStatus.DEAD, TestStatus.ERROR)
-            val anyAlive = profile.tcpTestStatus == TestStatus.ALIVE ||
-                profile.realTestStatus == TestStatus.ALIVE
-            !anyAlive && tcpFailed && realFailed
+        val dead = repository.all().filter {
+            it.realTestStatus in setOf(TestStatus.DEAD, TestStatus.ERROR) && it.realLatencyMs == null
         }
         if (dead.isEmpty()) {
             toast(getString(R.string.no_dead_profiles))
@@ -3034,12 +2752,8 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             .setPositiveButton(R.string.delete) { _, _ ->
                 storageWorker.execute {
                     val selected = repository.selectedId()
-                    repository.deleteMany(
-                        dead.map { it.id }
-                    )
-                    if (dead.any { it.id == selected }) {
-                        repository.select(null)
-                    }
+                    repository.deleteMany(dead.map { it.id })
+                    if (dead.any { it.id == selected }) repository.select(null)
                     runOnUiThread {
                         subscriptionTabsSignature = ""
                         renderSubscriptionTabs(force = true)
@@ -3651,31 +3365,19 @@ class MainActivity : ThemedActivity(), MainComposeActions {
 
                 latencyWorker.execute {
                     val result = runCatching {
-                        if (
-                            settings.livePingMethod == PingMethod.TCP_CONNECT &&
-                            snapshot.mode == ConnectionMode.PROXY
-                        ) {
-                            pingManager.tcp(
-                                profile = profile,
-                                attempts = settings.testAttempts,
-                                timeoutMs = 5_000
-                            )
-                        } else {
-                            TunnelHealthVerifier.measure(
-                                settings = settings,
-                                mode = snapshot.mode,
-                                attempts = settings.testAttempts.coerceIn(2, 3),
-                                budgetMs = LIVE_PING_BUDGET_MS,
-                                isCancelled = {
-                                    val latest = ConnectionRuntime.current()
-                                    latest.state != ConnectionState.CONNECTED ||
-                                        latest.sessionId != sessionId
-                                }
-                            )
-                        }
+                        TunnelHealthVerifier.measure(
+                            settings = settings.copy(livePingMethod = PingMethod.XRAY_HTTP),
+                            mode = snapshot.mode,
+                            attempts = settings.testAttempts.coerceIn(2, 3),
+                            budgetMs = LIVE_PING_BUDGET_MS,
+                            isCancelled = {
+                                val latest = ConnectionRuntime.current()
+                                latest.state != ConnectionState.CONNECTED || latest.sessionId != sessionId
+                            }
+                        )
                     }.getOrElse {
-                        Diagnostics.recordThrowable("Live ping", it)
-                        failedPingResult(settings.livePingMethod, it)
+                        Diagnostics.recordThrowable("Live tunnel ping", it)
+                        failedPingResult(PingMethod.XRAY_HTTP, it)
                     }
 
                     // ICMP echo runs next to the tunnel measurement so the label
@@ -3741,51 +3443,24 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     private fun livePingIntervalMs(settings: AppSettings): Long =
         settings.livePingIntervalSeconds.coerceIn(3, 300) * 1_000L
 
-    private fun applyPingResultToProfile(
-        profile: ConfigProfile,
-        result: PingResult
-    ) {
-        val method = PingMethod.fromStored(
-            result.method,
-            PingMethod.TCP_CONNECT
-        )
+    private fun applyPingResultToProfile(profile: ConfigProfile, result: PingResult) {
         val status = when {
             result.success -> TestStatus.ALIVE
             result.errorCategory == "cancelled" -> TestStatus.UNTESTED
-            result.errorCategory in setOf(
-                "core_unavailable",
-                "invalid_test_url"
-            ) -> TestStatus.ERROR
+            result.errorCategory in setOf("core_unavailable", "invalid_test_url") -> TestStatus.ERROR
             else -> TestStatus.DEAD
         }
-
-        when (method) {
-            PingMethod.TCP_CONNECT -> {
-                profile.tcpLatencyMs = result.latencyMs
-                profile.tcpLatencyJitterMs = result.jitterMs
-                profile.tcpSuccessRatio = result.successRatio
-                profile.tcpTestStatus = status
-                profile.tcpLastTestAt = result.timestamp
-            }
-            PingMethod.XRAY_HTTP -> {
-                profile.realLatencyMs = result.latencyMs
-                profile.realLatencyJitterMs = result.jitterMs
-                profile.realSuccessRatio = result.successRatio
-                profile.realTestStatus = status
-                profile.realLastTestAt = result.timestamp
-            }
-        }
-
-        // Retain legacy fields for backup compatibility and older installs.
+        profile.realLatencyMs = result.latencyMs
+        profile.realLatencyJitterMs = result.jitterMs
+        profile.realSuccessRatio = result.successRatio
+        profile.realTestStatus = status
+        profile.realLastTestAt = result.timestamp
+        // Generic fields are backward-compatible mirrors of Real Delay only.
         profile.latencyMs = result.latencyMs
         profile.latencyJitterMs = result.jitterMs
         profile.latencySuccessRatio = result.successRatio
-        profile.latencyMethod = method.name
-        profile.lastTestAt = maxOf(
-            profile.tcpLastTestAt,
-            profile.realLastTestAt,
-            result.timestamp
-        )
+        profile.latencyMethod = PingMethod.XRAY_HTTP.name
+        profile.lastTestAt = maxOf(profile.realLastTestAt, result.timestamp)
         profile.testStatus = status
     }
 
@@ -3842,34 +3517,11 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         }
     }
 
-    private fun dualLatencyTier(profile: ConfigProfile): Int {
-        val tcpAlive =
-            profile.tcpTestStatus == TestStatus.ALIVE &&
-                profile.tcpLatencyMs != null
-        val realAlive =
-            profile.realTestStatus == TestStatus.ALIVE &&
-                profile.realLatencyMs != null
-        return when {
-            tcpAlive && realAlive -> 0
-            realAlive -> 1
-            tcpAlive -> 2
-            else -> 3
-        }
-    }
+    private fun realLatencyTier(profile: ConfigProfile): Int =
+        if (profile.realTestStatus == TestStatus.ALIVE && profile.realLatencyMs != null) 0 else 1
 
-    private fun dualLatencyScore(profile: ConfigProfile): Long {
-        val tcp = profile.tcpLatencyMs
-            ?.takeIf { profile.tcpTestStatus == TestStatus.ALIVE }
-        val real = profile.realLatencyMs
-            ?.takeIf { profile.realTestStatus == TestStatus.ALIVE }
-        return when {
-            tcp != null && real != null ->
-                ((tcp * 40L) + (real * 60L)) / 100L
-            real != null -> real + SINGLE_METHOD_PENALTY_MS
-            tcp != null -> tcp + SINGLE_METHOD_PENALTY_MS
-            else -> Long.MAX_VALUE
-        }
-    }
+    private fun realLatencyScore(profile: ConfigProfile): Long =
+        profile.realLatencyMs?.takeIf { profile.realTestStatus == TestStatus.ALIVE } ?: Long.MAX_VALUE
 
     private fun profileComparator(
         settings:
@@ -3885,8 +3537,8 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                         > {
                         it.favorite
                     }
-                        .thenBy(::dualLatencyTier)
-                        .thenBy(::dualLatencyScore)
+                        .thenBy(::realLatencyTier)
+                        .thenBy(::realLatencyScore)
                         .thenBy {
                             it.name.lowercase(
                                 Locale.ROOT
@@ -3896,9 +3548,9 @@ class MainActivity : ThemedActivity(), MainComposeActions {
                 ProfileSortMode
                     .LOWEST_LATENCY ->
                     compareBy<ConfigProfile>(
-                        ::dualLatencyTier
+                        ::realLatencyTier
                     )
-                        .thenBy(::dualLatencyScore)
+                        .thenBy(::realLatencyScore)
                         .thenBy {
                             it.name.lowercase(
                                 Locale.ROOT
@@ -3947,22 +3599,8 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         return base
     }
 
-    private fun pingMethodLabel(
-        method: PingMethod
-    ): String =
-        when (method) {
-            PingMethod.TCP_CONNECT ->
-                getString(
-                    R.string
-                        .ping_method_tcp_short
-                )
-
-            PingMethod.XRAY_HTTP ->
-                getString(
-                    R.string
-                        .ping_method_xray_short
-                )
-        }
+    private fun pingMethodLabel(@Suppress("UNUSED_PARAMETER") method: PingMethod): String =
+        getString(R.string.ping_method_xray_short)
 
     private fun handleShareIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND) {
@@ -4224,70 +3862,28 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     }
 
     private fun showScopeActions(favoritesOnly: Boolean) {
-        val scopeName = getString(
-            if (favoritesOnly) {
-                R.string.v33_scope_favorites_actions
-            } else {
-                R.string.v33_scope_all_actions
-            }
-        )
-        val profiles = repository.all()
-            .filter { !favoritesOnly || it.favorite }
+        val scopeName = getString(if (favoritesOnly) R.string.v33_scope_favorites_actions else R.string.v33_scope_all_actions)
+        val profiles = repository.all().filter { !favoritesOnly || it.favorite }
         if (profiles.isEmpty()) {
             toast(getString(R.string.v33_scope_empty))
             return
         }
-
         val labels = arrayOf(
             getString(R.string.v33_scope_update_all),
             getString(R.string.v33_scope_export),
-            getString(R.string.v33_scope_delete_no_tcp),
             getString(R.string.v33_scope_delete_no_real),
-            getString(R.string.v33_scope_delete_no_both),
             getString(R.string.v33_scope_delete_all)
         )
-
         AlertDialog.Builder(this)
             .setTitle(scopeName)
             .setItems(labels) { _, which ->
                 when (which) {
                     0 -> refreshSubscriptionsFromMain()
                     1 -> exportScopeLinks(scopeName, profiles)
-                    2 -> confirmScopeCleanup(
-                        scopeName = scopeName,
-                        profiles = profiles,
-                        title = labels[which]
-                    ) {
-                        it.tcpTestStatus != TestStatus.ALIVE ||
-                            it.tcpLatencyMs == null
+                    2 -> confirmScopeCleanup(scopeName, profiles, labels[which]) {
+                        it.realTestStatus != TestStatus.ALIVE || it.realLatencyMs == null
                     }
-                    3 -> confirmScopeCleanup(
-                        scopeName = scopeName,
-                        profiles = profiles,
-                        title = labels[which]
-                    ) {
-                        it.realTestStatus != TestStatus.ALIVE ||
-                            it.realLatencyMs == null
-                    }
-                    4 -> confirmScopeCleanup(
-                        scopeName = scopeName,
-                        profiles = profiles,
-                        title = labels[which]
-                    ) {
-                        (
-                            it.tcpTestStatus != TestStatus.ALIVE ||
-                                it.tcpLatencyMs == null
-                            ) &&
-                            (
-                                it.realTestStatus != TestStatus.ALIVE ||
-                                    it.realLatencyMs == null
-                                )
-                    }
-                    5 -> confirmScopeCleanup(
-                        scopeName = scopeName,
-                        profiles = profiles,
-                        title = labels[which]
-                    ) { true }
+                    3 -> confirmScopeCleanup(scopeName, profiles, labels[which]) { true }
                 }
             }
             .show()
@@ -4393,13 +3989,13 @@ class MainActivity : ThemedActivity(), MainComposeActions {
     override fun composeMagicClipboardBusy(): Boolean =
         magicClipboardBusy.get()
 
-    override fun composePingProfile(id: String, method: PingMethod) {
-        repository.find(id)?.let { testSingleProfile(it, method) }
+    override fun composePingProfile(id: String, @Suppress("UNUSED_PARAMETER") method: PingMethod) {
+        repository.find(id)?.let(::testSingleProfile)
     }
 
     override fun composeAdd() = showAddOptions()
     override fun composeRefreshSubscriptions() = refreshSubscriptionsFromMain()
-    override fun composeTestAll(method: PingMethod) = testProfiles(method)
+    override fun composeTestAll(@Suppress("UNUSED_PARAMETER") method: PingMethod) = testProfiles(PingMethod.XRAY_HTTP)
     override fun composeToggleConnection() = toggleConnection()
     override fun composePause() = showPauseOptions()
     override fun composeLivePing() = requestLivePingNow()
@@ -4864,10 +4460,10 @@ class MainActivity : ThemedActivity(), MainComposeActions {
 
         val enabled = repository.all().filter(::allowed)
         val tested = enabled
-            .filter { dualLatencyTier(it) < 3 }
+            .filter { realLatencyTier(it) < 3 }
             .minWithOrNull(
-                compareBy<ConfigProfile>(::dualLatencyTier)
-                    .thenBy(::dualLatencyScore)
+                compareBy<ConfigProfile>(::realLatencyTier)
+                    .thenBy(::realLatencyScore)
                     .thenBy { it.name.lowercase(Locale.ROOT) }
             )
         if (tested != null) return tested
@@ -5267,14 +4863,10 @@ class MainActivity : ThemedActivity(), MainComposeActions {
             4 * 1024 * 1024
 
         private val SHARE_SCHEMES = setOf(
-            "vless",
-            "vmess",
-            "trojan",
-            "ss",
-            "socks",
-            "socks5",
-            "http",
-            "https"
+            "vless", "vmess", "trojan", "ss", "shadowsocks",
+            "socks", "socks5", "http", "https",
+            "hy2", "hysteria2", "hysteria",
+            "wg", "wireguard", "ssh", "openssh"
         )
     }
 }
