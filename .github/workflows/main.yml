@@ -135,9 +135,11 @@ jobs:
             app/src/main/java/com/trivox/client/network/SubscriptionManager.kt
           grep -Fq 'fetchCatalog' \
             app/src/main/java/com/trivox/client/network/NordVpnSubscriptionManager.kt
-          grep -Fq 'BATCH_XRAY_ATTEMPTS = 2' app/src/main/java/com/trivox/client/network/PingManager.kt
-          grep -Fq 'BATCH_XRAY_MAX_TARGETS = 2' app/src/main/java/com/trivox/client/network/PingManager.kt
-          grep -Fq 'allowSingleSample = false' app/src/main/java/com/trivox/client/network/PingManager.kt
+          grep -Fq 'BATCH_XRAY_ATTEMPTS = 1' app/src/main/java/com/trivox/client/network/PingManager.kt
+          grep -Fq 'BATCH_XRAY_MAX_TARGETS = 4' app/src/main/java/com/trivox/client/network/PingManager.kt
+          grep -Fq 'allowSingleSample = true' app/src/main/java/com/trivox/client/network/PingManager.kt
+          grep -Fq 'waitForLocalProxyListener' app/src/main/java/com/trivox/client/network/PingManager.kt
+          grep -Fq 'BatchOutboundGraph.select' app/src/main/java/com/trivox/client/network/BatchRealDelayRunner.kt
           grep -Fq 'showConnectionStartPending' \
             app/src/main/java/com/trivox/client/ui/MainActivity.kt
           grep -Fq 'EXIT_REASON_PACKAGE_UPDATED' \

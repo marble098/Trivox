@@ -178,10 +178,24 @@ def audit(root: Path) -> tuple[list[Finding], dict[str, object]]:
             add("error", "ping-negative-dns-cache", ping, "Negative DNS cache is missing.")
         if "preferredXrayTarget" not in text:
             add("error", "ping-single-target", ping, "Real delay still depends on one target.")
-        if "BATCH_XRAY_ATTEMPTS = 2" not in text:
-            add("error", "ping-batch-verification", ping, "Batch real-delay is not requiring a confirmation sample.")
-        if "BATCH_XRAY_MAX_TARGETS = 2" not in text or "allowSingleSample = false" not in text:
-            add("error", "ping-batch-fallback", ping, "Batch real-delay verification or fallback bounds regressed.")
+        if "BATCH_XRAY_ATTEMPTS = 1" not in text:
+            add(
+                "error",
+                "ping-batch-verification",
+                ping,
+                "Failure-only isolated Real Delay rescue must use one verified sample.",
+            )
+        if (
+            "BATCH_XRAY_MAX_TARGETS = 4" not in text
+            or "allowSingleSample = true" not in text
+            or "waitForLocalProxyListener" not in text
+        ):
+            add(
+                "error",
+                "ping-batch-fallback",
+                ping,
+                "Real Delay rescue lost listener readiness or target diversity.",
+            )
         if "statusCode in 200..299" not in text:
             add("error", "ping-redirect", ping, "HTTP redirects can still be accepted as successful probes.")
 
@@ -236,8 +250,24 @@ def audit(root: Path) -> tuple[list[Finding], dict[str, object]]:
     real_policy = root / "app/src/main/java/com/trivox/client/network/RealDelayPolicy.kt"
     if real_policy.is_file():
         policy_text = read(real_policy)
-        if "rescueTargets" not in policy_text or "startGraceMs = 85" not in policy_text:
-            add("error", "turbo-rescue-regression", real_policy, "Turbo Real Delay rescue policy is missing.")
+        if (
+            "TRIVOX_REAL_DELAY_ROOTFIX_V3" not in policy_text
+            or "rescueTargets" not in policy_text
+            or "VerifiedHttpProbe.strongTraceTarget" not in policy_text
+        ):
+            add(
+                "error",
+                "turbo-rescue-regression",
+                real_policy,
+                "Fast Real Delay rescue policy is missing.",
+            )
+
+    batch_real = root / "app/src/main/java/com/trivox/client/network/BatchRealDelayRunner.kt"
+    if batch_real.is_file():
+        batch_text = read(batch_real)
+        for marker in ("BatchOutboundGraph.select", "dependencyTags", "rewriteReferences", "awaitLocalListeners"):
+            if marker not in batch_text:
+                add("error", "batch-real-delay-rootfix", batch_real, f"Batch Real Delay marker is missing: {marker}")
 
     profile_adapter = root / "app/src/main/java/com/trivox/client/ui/ProfileAdapter.kt"
     if profile_adapter.is_file():

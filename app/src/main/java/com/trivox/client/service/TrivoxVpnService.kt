@@ -327,6 +327,18 @@ class TrivoxVpnService : VpnService() {
             return
         }
 
+        ConnectionRuntime.update(
+            ConnectionRuntime.Snapshot(
+                state =
+                    ConnectionState.PREPARING,
+                profileId = profile.id,
+                profileName = profile.name,
+                mode =
+                    ConnectionMode.VPN,
+                sessionId = sessionId
+            )
+        )
+
         /*
          * WireGuard itself does not need Trivox's localhost mixed listener.
          * Only expose/reserve that port when the user explicitly enabled it.
@@ -372,18 +384,6 @@ class TrivoxVpnService : VpnService() {
         }
         Diagnostics.debug(
             "Smart endpoint bootstrap (vpn): resolved=${endpointBootstrapIps.size}"
-        )
-
-        ConnectionRuntime.update(
-            ConnectionRuntime.Snapshot(
-                state =
-                    ConnectionState.PREPARING,
-                profileId = profile.id,
-                profileName = profile.name,
-                mode =
-                    ConnectionMode.VPN,
-                sessionId = sessionId
-            )
         )
 
         val builder = Builder()
@@ -526,7 +526,8 @@ class TrivoxVpnService : VpnService() {
                 effectiveSettings,
                 ConnectionMode.VPN,
                 tun!!.fd,
-                bootstrapIps = endpointBootstrapIps
+                bootstrapIps = endpointBootstrapIps,
+                verifyUserRoute = shouldVerifyUserRoute(settings, profile)
             )
 
         val validation =
@@ -1189,6 +1190,23 @@ class TrivoxVpnService : VpnService() {
 
         networkCallback = null
         networkHandover.reset()
+    }
+
+    private fun shouldVerifyUserRoute(
+        settings: AppSettings,
+        profile: ConfigProfile
+    ): Boolean {
+        // OpenSSH deliberately excludes Trivox itself from the VPN to prevent
+        // the SSH transport from tunnelling into its own TUN. A Java HTTP
+        // health probe from this process would therefore test the direct
+        // network, not the user's VPN route.
+        if (OpenSshProfileCodec.isOpenSsh(profile)) return false
+
+        return when (settings.appRoutingMode) {
+            AppRoutingMode.ALL -> true
+            AppRoutingMode.ALLOW_SELECTED -> packageName in settings.routedPackages
+            AppRoutingMode.BYPASS_SELECTED -> packageName !in settings.routedPackages
+        }
     }
 
     private fun wireGuardHasIpv6Address(

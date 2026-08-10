@@ -7,6 +7,8 @@ import android.content.Context
 import com.trivox.client.util.Diagnostics
 import org.json.JSONObject
 import java.lang.reflect.Proxy
+import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -44,11 +46,7 @@ class XrayCoreAdapter(
     private val className =
         "libXray.LibXray"
 
-    override fun isAvailable(): Boolean =
-        runCatching {
-            Class.forName(className)
-            true
-        }.getOrDefault(false)
+    override fun isAvailable(): Boolean = CORE_AVAILABLE
 
     override fun version(): String =
         synchronized(NATIVE_LOCK) {
@@ -75,6 +73,12 @@ class XrayCoreAdapter(
                 ?.let {
                     return@synchronized it
                 }
+
+            val validationKey = validationFingerprint(configJson)
+            if (isValidationCached(validationKey)) {
+                Diagnostics.debug("Xray config validation cache hit")
+                return@synchronized CoreResult(true)
+            }
 
             if (!awaitNativeReadyUnsafe()) {
                 return@synchronized CoreResult(
@@ -113,6 +117,9 @@ class XrayCoreAdapter(
                     },
                     result.error
                 )
+                if (result.success) {
+                    rememberValidated(validationKey)
+                }
                 result
             } finally {
                 file.delete()
@@ -689,6 +696,42 @@ class XrayCoreAdapter(
                 .simpleName
     }
 
+    private fun validationFingerprint(configJson: String): String {
+        val bytes = MessageDigest.getInstance("SHA-256")
+            .digest(configJson.toByteArray(Charsets.UTF_8))
+        return bytes.joinToString(separator = "") { byte ->
+            "%02x".format(byte.toInt() and 0xff)
+        }
+    }
+
+    private fun isValidationCached(key: String): Boolean {
+        val storedAt = VALIDATION_CACHE[key] ?: return false
+        val fresh = System.currentTimeMillis() - storedAt <= VALIDATION_CACHE_TTL_MS
+        if (!fresh) VALIDATION_CACHE.remove(key, storedAt)
+        return fresh
+    }
+
+    private fun rememberValidated(key: String) {
+        val now = System.currentTimeMillis()
+        VALIDATION_CACHE[key] = now
+        if (VALIDATION_CACHE.size <= MAX_VALIDATION_CACHE_ENTRIES) return
+
+        VALIDATION_CACHE.entries.forEach { entry ->
+            if (now - entry.value > VALIDATION_CACHE_TTL_MS) {
+                VALIDATION_CACHE.remove(entry.key, entry.value)
+            }
+        }
+        if (VALIDATION_CACHE.size > MAX_VALIDATION_CACHE_ENTRIES) {
+            val iterator = VALIDATION_CACHE.keys.iterator()
+            while (
+                VALIDATION_CACHE.size > MAX_VALIDATION_CACHE_ENTRIES &&
+                iterator.hasNext()
+            ) {
+                VALIDATION_CACHE.remove(iterator.next())
+            }
+        }
+    }
+
     private fun unavailable() =
         CoreResult(
             false,
@@ -701,11 +744,21 @@ class XrayCoreAdapter(
         private val NATIVE_LOCK =
             Any()
 
+        private val CORE_AVAILABLE: Boolean by lazy(LazyThreadSafetyMode.PUBLICATION) {
+            runCatching {
+                Class.forName("libXray.LibXray")
+                true
+            }.getOrDefault(false)
+        }
+
         private val NATIVE_RUNNING =
             AtomicBoolean(false)
 
         private val NATIVE_READY_AT_NANOS =
             AtomicLong(0L)
+
+        private val VALIDATION_CACHE =
+            ConcurrentHashMap<String, Long>()
 
         private val ACTIVE_PROTECT =
             AtomicReference<
@@ -722,5 +775,7 @@ class XrayCoreAdapter(
 
         private const val
             CLEANUP_COOLDOWN_MS = 180L
+        private const val VALIDATION_CACHE_TTL_MS = 10 * 60_000L
+        private const val MAX_VALIDATION_CACHE_ENTRIES = 48
     }
 }

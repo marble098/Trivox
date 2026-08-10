@@ -160,6 +160,40 @@ class CoreManager(context: Context) {
         }
 
         /*
+         * If Trivox itself is outside the Android VPN app set (split tunnel or
+         * OpenSSH transport), ACTIVE_NETWORK would test the direct network and
+         * could falsely report the VPN as healthy. In that case use a very short
+         * native/log settle check and accept the running core provisionally.
+         */
+        if (request.mode == ConnectionMode.VPN && !request.verifyUserRoute) {
+            if (!waitCancellable(UNVERIFIABLE_ROUTE_SETTLE_MS, isCancelled)) {
+                stopAfterRejectedStart()
+                return cancelledStart()
+            }
+            val category = XrayProbeLogInspector.classifySince(logMark)
+                ?.lowercase()
+                ?.takeIf(::isDefinitiveTransportFailure)
+            if (category != null || !isRunning()) {
+                stopAfterRejectedStart()
+                val reason = category ?: "core_not_running"
+                SmartConnectionOptimizer.recordOutcome(
+                    profile = request.profile,
+                    success = false,
+                    errorCategory = reason
+                )
+                return CoreResult(
+                    false,
+                    "${request.profile.protocol.uppercase()} startup failed ($reason)."
+                )
+            }
+            Diagnostics.info(
+                "Skipped direct-process VPN health proof because Trivox is outside " +
+                    "the captured app route; running Xray accepted provisionally."
+            )
+            return started
+        }
+
+        /*
          * Native process startup is not a connection result. TCP ping only proves
          * endpoint reachability, and libXray Real Delay validates an isolated
          * proxy-mode path. Before the service exposes CONNECTED, verify the live
@@ -350,6 +384,25 @@ class CoreManager(context: Context) {
             }
     }
 
+    private fun waitCancellable(
+        delayMs: Int,
+        isCancelled: () -> Boolean
+    ): Boolean {
+        var remaining = delayMs.coerceAtLeast(0)
+        while (remaining > 0) {
+            if (isCancelled() || Thread.currentThread().isInterrupted) return false
+            val slice = remaining.coerceAtMost(40)
+            try {
+                Thread.sleep(slice.toLong())
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            }
+            remaining -= slice
+        }
+        return !isCancelled() && !Thread.currentThread().isInterrupted
+    }
+
     private fun cancelledStart(): CoreResult =
         CoreResult(false, "Connection start cancelled")
 
@@ -371,6 +424,7 @@ class CoreManager(context: Context) {
         )
 
     companion object {
+        private const val UNVERIFIABLE_ROUTE_SETTLE_MS = 140
         private const val VPN_VERIFICATION_BUDGET_MS = 3_200
         private const val VPN_VERIFICATION_PROBE_TIMEOUT_MS = 1_500
         private const val VPN_VERIFICATION_GRACE_MS = 160

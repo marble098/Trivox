@@ -52,7 +52,8 @@ data class CoreStartRequest(
     val settings: AppSettings,
     val mode: ConnectionMode,
     val tunFd: Int? = null,
-    val bootstrapIps: List<String> = emptyList()
+    val bootstrapIps: List<String> = emptyList(),
+    val verifyUserRoute: Boolean = true
 )
 
 data class CoreResult(val success: Boolean, val error: String = "", val data: JSONObject? = null)

@@ -54,14 +54,8 @@ object TunnelHealthVerifier {
         val routes = routesFor(mode)
         val samples = mutableListOf<Long>()
         var lastFailure = "tunnel_timeout"
-        val targets = buildList {
-            if (dnsFallbackTargets) {
-                VerifiedHttpProbe.targetForUserUrl(settings.testUrl)?.let(::add)
-                addAll(VerifiedHttpProbe.fallback204Targets)
-            }
-            addAll(VerifiedHttpProbe.dnsFreeTraceTargets)
-        }.distinctBy { it.url }
-        val targetLimit = (attempts.coerceIn(2, 3) + 2).coerceAtMost(targets.size)
+        val targets = probeTargets(settings.testUrl, dnsFallbackTargets)
+        val targetLimit = (attempts.coerceIn(1, 3) + 1).coerceAtMost(targets.size)
 
         for (target in targets.take(targetLimit)) {
             if (cancelled(isCancelled)) return cancelledResult(timestamp)
@@ -97,6 +91,20 @@ object TunnelHealthVerifier {
         hardFailure()?.let { lastFailure = it }
         return failureResult(timestamp, mode, lastFailure)
     }
+
+    internal fun probeTargets(
+        requestedUrl: String,
+        includeDnsFallbacks: Boolean
+    ): List<VerifiedHttpProbe.Target> = buildList {
+        if (includeDnsFallbacks) {
+            VerifiedHttpProbe.targetForUserUrl(requestedUrl)?.let(::add)
+        }
+        add(VerifiedHttpProbe.strongTraceTarget)
+        if (includeDnsFallbacks) {
+            addAll(VerifiedHttpProbe.fallback204Targets)
+        }
+        addAll(VerifiedHttpProbe.dnsFreeTraceTargets.drop(1))
+    }.distinctBy { it.url }
 
     private fun preferredFailure(current: String, candidate: String?): String {
         if (candidate.isNullOrBlank()) return current
