@@ -186,8 +186,17 @@ jobs:
             app/src/main/java/com/trivox/client/service/TrivoxVpnService.kt
           grep -Fq 'setUsesChronometer(true)' \
             app/src/main/java/com/trivox/client/service/NotificationSupport.kt
-          grep -Fq 'requestLivePingNow' \
-            app/src/main/java/com/trivox/client/ui/MainActivity.kt
+          if grep -R -n -E 'requestLivePingNow|livePingTick|IcmpProbe|fun icmp\(' \
+            app/src/main/java app/src/test; then
+            echo "Removed ICMP/Automatic Live Ping code returned." >&2
+            exit 1
+          fi
+          grep -Fq 'SmartConnectionOptimizer' \
+            app/src/main/java/com/trivox/client/core/CoreManager.kt
+          grep -Fq 'FRAGMENT_OUTBOUND_TAG' \
+            app/src/main/java/com/trivox/client/config/XrayConfigBuilder.kt
+          grep -Fq 'riskScore' \
+            app/src/main/java/com/trivox/client/network/LeakProtectionManager.kt
           grep -Fq 'QuickConnectTileService' \
             app/src/main/AndroidManifest.xml
           grep -Fq 'BIND_QUICK_SETTINGS_TILE' \

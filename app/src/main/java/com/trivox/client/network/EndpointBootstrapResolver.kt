@@ -1,0 +1,83 @@
+package com.trivox.client.network
+
+import java.net.InetAddress
+import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+
+/**
+ * Resolves only the selected proxy endpoint before Xray depends on its own DNS.
+ * Results are process-memory hints only and are never persisted.
+ */
+internal object EndpointBootstrapResolver {
+    private data class CacheEntry(
+        val addresses: List<String>,
+        val storedAt: Long
+    )
+
+    private val cache = ConcurrentHashMap<String, CacheEntry>()
+
+    fun resolve(host: String, timeoutMs: Long = 1_250L): List<String> {
+        val clean = host.trim().removePrefix("[").removeSuffix("]")
+        if (clean.isBlank()) return emptyList()
+        if (isIpLiteral(clean)) return listOf(clean.lowercase(Locale.ROOT))
+
+        val key = clean.lowercase(Locale.ROOT)
+        val now = System.currentTimeMillis()
+        cache[key]
+            ?.takeIf { now - it.storedAt <= CACHE_TTL_MS }
+            ?.let { return it.addresses }
+
+        /*
+         * Use a fresh daemon resolver per cache miss. InetAddress DNS may ignore
+         * Thread.interrupt on some Android resolvers; a shared single-thread
+         * executor would then poison every later connection after one timeout.
+         */
+        val executor = Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "trivox-bootstrap-dns").apply { isDaemon = true }
+        }
+        val future = executor.submit<List<String>> {
+            InetAddress.getAllByName(clean)
+                .asSequence()
+                .mapNotNull { it.hostAddress }
+                .map { it.substringBefore('%').lowercase(Locale.ROOT) }
+                .filter(String::isNotBlank)
+                .distinct()
+                .take(4)
+                .toList()
+        }
+        return try {
+            future.get(timeoutMs.coerceIn(250L, 3_000L), TimeUnit.MILLISECONDS)
+                .also { addresses ->
+                    if (addresses.isNotEmpty()) {
+                        cache[key] = CacheEntry(addresses, now)
+                    }
+                }
+        } catch (_: Throwable) {
+            future.cancel(true)
+            emptyList()
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
+    internal fun isIpLiteral(value: String): Boolean {
+        val clean = value.trim()
+            .removePrefix("[")
+            .removeSuffix("]")
+            .substringBefore('%')
+        val ipv4 = clean.split('.')
+            .takeIf { it.size == 4 }
+            ?.all { part ->
+                part.isNotEmpty() &&
+                    part.length <= 3 &&
+                    part.all(Char::isDigit) &&
+                    (part.toIntOrNull() ?: -1) in 0..255
+            } == true
+        if (ipv4) return true
+        return ':' in clean && clean.matches(Regex("[0-9a-fA-F:.]+"))
+    }
+
+    private const val CACHE_TTL_MS = 5 * 60_000L
+}

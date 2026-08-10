@@ -28,6 +28,7 @@ import com.trivox.client.data.ConnectionState
 import com.trivox.client.data.DnsMode
 import com.trivox.client.data.SettingsRepository
 import com.trivox.client.config.OpenSshProfileCodec
+import com.trivox.client.network.EndpointBootstrapResolver
 import com.trivox.client.ssh.OpenSshTunnelBridge
 import com.trivox.client.util.Diagnostics
 import org.json.JSONArray
@@ -361,6 +362,18 @@ class TrivoxVpnService : VpnService() {
             mixedListenerPort = null
         }
 
+        val endpointBootstrapIps = if (
+            settings.smartConnectionOptimizer &&
+            !OpenSshProfileCodec.isOpenSsh(profile)
+        ) {
+            EndpointBootstrapResolver.resolve(profile.server)
+        } else {
+            emptyList()
+        }
+        Diagnostics.debug(
+            "Smart endpoint bootstrap (vpn): resolved=${endpointBootstrapIps.size}"
+        )
+
         ConnectionRuntime.update(
             ConnectionRuntime.Snapshot(
                 state =
@@ -512,7 +525,8 @@ class TrivoxVpnService : VpnService() {
                 effectiveProfile,
                 effectiveSettings,
                 ConnectionMode.VPN,
-                tun!!.fd
+                tun!!.fd,
+                bootstrapIps = endpointBootstrapIps
             )
 
         val validation =

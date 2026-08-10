@@ -52,12 +52,6 @@ class SettingsActivity : ThemedActivity() {
         val darkMode = switch(R.id.darkModeSwitch)
         val hideIp = check(R.id.hideIpOnMainCheck)
         val sortMode = spinner(R.id.sortModeSpinner)
-        val pingMethod = spinner(R.id.pingMethodSpinner)
-        val pingSummary = text(R.id.pingMethodSummary)
-        pingMethod.visibility = View.GONE
-        pingSummary.visibility = View.GONE
-        val livePingEnabled = switch(R.id.livePingEnabledSwitch)
-        val livePingInterval = edit(R.id.livePingIntervalInput)
         val pingAttempts = spinner(R.id.pingAttemptsSpinner)
         val testUrl = edit(R.id.testUrlInput)
         val realDelayProfile = spinner(R.id.realDelayProfileSpinner)
@@ -179,8 +173,6 @@ class SettingsActivity : ThemedActivity() {
         dnsMode.setSelection(dnsModes.indexOf(settings.dnsMode).coerceAtLeast(0))
 
         hideIp.isChecked = settings.hideIpOnMain
-        livePingEnabled.isChecked = settings.livePingEnabled
-        livePingInterval.setText(settings.livePingIntervalSeconds.toString())
         testUrl.setText(settings.testUrl)
         realDelayGroupSize.setText(settings.realDelayGroupSize.toString())
         realDelayWorkers.setText(settings.realDelayWorkers.toString())
@@ -246,7 +238,6 @@ class SettingsActivity : ThemedActivity() {
         findViewById<Button>(R.id.saveButton).setOnClickListener {
             val port = mixedPort.intValue()
             val mtuValue = mtu.intValue()
-            val liveIntervalValue = livePingInterval.intValue()
             val keepIdleValue = tcpKeepAliveIdle.intValue()
             val keepIntervalValue = tcpKeepAliveInterval.intValue()
             val userTimeoutValue = tcpUserTimeout.intValue()
@@ -270,7 +261,6 @@ class SettingsActivity : ThemedActivity() {
             val basicValid =
                 port != null && Validators.validPort(port) &&
                     mtuValue != null && mtuValue in 576..9000 &&
-                    liveIntervalValue != null && liveIntervalValue in 3..300 &&
                     validTestUrl(testUrlValue)
             if (!basicValid) {
                 toast(R.string.invalid_port)
@@ -326,10 +316,7 @@ class SettingsActivity : ThemedActivity() {
             settings.localProxyInVpn = localProxyInVpn.isChecked
             settings.autoUpdateCheck = autoUpdate.isChecked
             settings.sortMode = sortModes[sortMode.selectedItemPosition]
-            settings.livePingMethod = PingMethod.XRAY_HTTP
             settings.pingMethod = PingMethod.XRAY_HTTP
-            settings.livePingEnabled = livePingEnabled.isChecked
-            settings.livePingIntervalSeconds = liveIntervalValue!!
             settings.testAttempts = attempts[pingAttempts.selectedItemPosition].toInt()
             settings.testUrl = testUrlValue
             settings.realDelayProfile = realDelayProfiles[

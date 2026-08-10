@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="p3_smart_optimizer">بهینه‌ساز هوشمند اتصال</string>
+    <string name="p3_smart_optimizer_hint">بوت‌استرپ DNS، زمان‌بندی هندشیک و اعتبارسنجی مسیر را برای هر پروتکل و ترنسپورت به‌صورت محلی تطبیق می‌دهد؛ هیچ هوش ابری یا اطلاعات محرمانه کانفیگ از دستگاه خارج نمی‌شود.</string>
+    <string name="p3_fragment_auto">پروفایل خودکار Fragment</string>
+    <string name="p3_fragment_auto_hint">برای ترنسپورت‌های TCP سازگار Fragment امن TLS Hello را انتخاب می‌کند و روی WireGuard، Hysteria، mKCP و زنجیره پروکسی اعمال نمی‌شود.</string>
+    <string name="p3_fragment_manual_hint">در حالت دستی همه مقادیر قبل از رسیدن به Xray اعتبارسنجی و محدود می‌شوند.</string>
+    <string name="p3_leak_guard_v2">Leak Guard V2 • تعمیر خودکار</string>
+    <string name="p3_leak_guard_v2_hint">مسیر VPN، DNS فیزیکی و VPN، پوشش IPv4/IPv6 و مسیر خروج را مقایسه می‌کند و در صورت نیاز DNS و Routing را سخت‌گیرانه‌تر کرده و اتصال را بازسازی می‌کند.</string>
+</resources>

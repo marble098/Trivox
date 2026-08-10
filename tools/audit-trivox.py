@@ -103,10 +103,6 @@ def audit(root: Path) -> tuple[list[Finding], dict[str, object]]:
             "REQUIRED_SUCCESS_NUMERATOR",
         "app/src/main/java/com/trivox/client/network/PingManager.kt":
             "FALLBACK_CONNECTIVITY_URLS",
-        "app/src/main/java/com/trivox/client/network/IcmpProbe.kt":
-            "TRIVOX_P2_VERIFIED_ICMP",
-        "app/src/test/java/com/trivox/client/network/IcmpProbeP2Test.kt":
-            "subMillisecondReplyIsNotForcedToOneMillisecond",
         "app/src/test/java/com/trivox/client/network/RealDelayPolicyP2Test.kt":
             "turboKeepsFastProofAndAddsFailureOnlyRescue",
         "app/src/test/java/com/trivox/client/config/ConfigParserHysteria2P2Test.kt":
@@ -223,15 +219,12 @@ def audit(root: Path) -> tuple[list[Finding], dict[str, object]]:
         for marker in ("fun tcp(", "fun batchTcp(", "fun wireGuardTcp(", "trivox-tcp-ping", "PingMethod.TCP_CONNECT"):
             if marker in ping_text:
                 add("error", "active-tcp-ping-engine", ping, f"Active TCP Ping implementation returned: {marker}")
-        if "IcmpProbe.measure" not in ping_text:
-            add("error", "verified-icmp-wiring", ping, "Live ICMP is not delegated to the verified multi-echo probe.")
+        if "IcmpProbe" in ping_text or "fun icmp(" in ping_text:
+            add("error", "icmp-returned", ping, "ICMP implementation returned to PingManager.")
 
     icmp_probe = root / "app/src/main/java/com/trivox/client/network/IcmpProbe.kt"
-    if icmp_probe.is_file():
-        icmp_text = read(icmp_probe)
-        for marker in ('"-c",', "verifiedReplyAddresses", "icmp_reply_identity_mismatch", "coerceAtLeast(0L)"):
-            if marker not in icmp_text:
-                add("error", "icmp-integrity-regression", icmp_probe, f"Verified ICMP marker is missing: {marker}")
+    if icmp_probe.exists():
+        add("error", "icmp-file-returned", icmp_probe, "ICMP source file must stay deleted.")
 
     parser = root / "app/src/main/java/com/trivox/client/config/ConfigParser.kt"
     if parser.is_file():
@@ -253,6 +246,37 @@ def audit(root: Path) -> tuple[list[Finding], dict[str, object]]:
             add("error", "tcp-ping-adapter-ui", profile_adapter, "Profile adapter exposes TCP Ping.")
         if "tcpLatency.visibility = View.GONE" not in adapter_text:
             add("error", "tcp-metric-visible", profile_adapter, "Legacy TCP metric view is not hidden.")
+
+    xray_builder = root / "app/src/main/java/com/trivox/client/config/XrayConfigBuilder.kt"
+    p3_optimizer = root / "app/src/main/java/com/trivox/client/network/SmartConnectionOptimizer.kt"
+    p3_fragment = root / "app/src/main/java/com/trivox/client/config/XrayFragmentPolicy.kt"
+    p3_bootstrap = root / "app/src/main/java/com/trivox/client/network/EndpointBootstrapResolver.kt"
+    for path, marker in (
+        (p3_optimizer, "verificationPlan"),
+        (p3_fragment, "XrayFragmentPolicy"),
+        (p3_bootstrap, "EndpointBootstrapResolver"),
+    ):
+        if not path.is_file() or marker not in read(path):
+            add("error", "p3-smart-connection", path, f"P3 smart connection marker missing: {marker}")
+
+    if main.is_file():
+        p3_main_text = read(main)
+        for marker in ("requestLivePingNow", "livePingTick", "composeLivePing", "liveIcmp"):
+            if marker in p3_main_text:
+                add("error", "automatic-live-ping-returned", main, f"Removed Automatic Live Ping marker returned: {marker}")
+
+    if xray_builder.is_file():
+        p3_xray = read(xray_builder)
+        for marker in ('"dialerProxy"', 'FRAGMENT_OUTBOUND_TAG', 'installBootstrapHosts', 'serveExpiredTTL'):
+            if marker not in p3_xray:
+                add("error", "p3-xray-runtime", xray_builder, f"P3 Xray runtime marker missing: {marker}")
+
+    leak_v2 = root / "app/src/main/java/com/trivox/client/network/LeakProtectionManager.kt"
+    if leak_v2.is_file():
+        leak_text = read(leak_v2)
+        for marker in ("riskScore", "ipv6LeakRisk", "EXIT_PROBE_URLS", "routedPackages = emptySet()"):
+            if marker not in leak_text:
+                add("error", "leak-guard-v2", leak_v2, f"Leak Guard V2 marker missing: {marker}")
 
     coordinator = root / "app/src/main/java/com/trivox/client/network/SubscriptionRefreshCoordinator.kt"
     if coordinator.is_file():

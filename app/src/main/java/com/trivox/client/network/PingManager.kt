@@ -44,7 +44,7 @@ import javax.net.ssl.SSLSocketFactory
 
 /**
  * Verified profile-latency engine.
- * Stored ranking uses XRAY_HTTP application-data proof only. ICMP remains
+ * Stored ranking uses XRAY_HTTP application-data proof only. endpoint remains
  * separate endpoint telemetry and is never substituted for tunnel delay.
  */
 class PingManager(
@@ -371,9 +371,6 @@ class PingManager(
             }
         }.getOrElse { failure("TLS_HANDSHAKE", timestamp, it) }
     }
-
-    fun icmp(host: String, timeoutSeconds: Int = 2): PingResult =
-        IcmpProbe.measure(host = host, attempts = 3, timeoutSeconds = timeoutSeconds)
 
     fun batch(
         profiles: List<ConfigProfile>,

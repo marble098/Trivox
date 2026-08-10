@@ -7,6 +7,7 @@ import com.trivox.client.config.XrayConfigBuilder
 import com.trivox.client.data.ConnectionMode
 import com.trivox.client.data.ConnectionState
 import com.trivox.client.network.TunnelHealthVerifier
+import com.trivox.client.network.SmartConnectionOptimizer
 import com.trivox.client.network.XrayProbeLogInspector
 import com.trivox.client.util.Diagnostics
 import java.io.File
@@ -165,40 +166,22 @@ class CoreManager(context: Context) {
          * route selected by the user: Android VPN for VPN mode, localhost mixed
          * listener for proxy mode.
          */
-        val wireGuard = request.profile.protocol.equals(
-            "wireguard",
-            ignoreCase = true
+        val plan = SmartConnectionOptimizer.verificationPlan(
+            profile = request.profile,
+            settings = request.settings,
+            mode = request.mode
         )
-        val adaptive = request.settings.adaptiveHandshake
-        val budgetMs = if (wireGuard) {
-            request.settings.wireGuardHandshakeTimeoutMs
-        } else if (adaptive) {
-            GENERAL_ADAPTIVE_VERIFY_BUDGET_MS
-        } else {
-            GENERAL_CONSERVATIVE_VERIFY_BUDGET_MS
-        }
+        Diagnostics.debug(
+            "Smart connection verification: ${plan.strategy}; " +
+                "attempts=${plan.attempts}; budget=${plan.budgetMs}"
+        )
         var health = TunnelHealthVerifier.measure(
             settings = request.settings,
             mode = request.mode,
-            attempts = if (adaptive) 3 else 2,
-            budgetMs = budgetMs,
-            perProbeTimeoutMs = if (wireGuard) {
-                (budgetMs / 3).coerceIn(2_000, 7_000)
-            } else if (adaptive) {
-                GENERAL_ADAPTIVE_PROBE_TIMEOUT_MS
-            } else {
-                GENERAL_CONSERVATIVE_PROBE_TIMEOUT_MS
-            },
-            initialDelayMs = when {
-                wireGuard && adaptive -> WIREGUARD_ADAPTIVE_GRACE_MS
-                wireGuard -> WIREGUARD_CONSERVATIVE_GRACE_MS
-                request.mode == ConnectionMode.VPN && adaptive ->
-                    VPN_ADAPTIVE_GRACE_MS
-                request.mode == ConnectionMode.VPN ->
-                    VPN_CONSERVATIVE_GRACE_MS
-                adaptive -> PROXY_ADAPTIVE_GRACE_MS
-                else -> PROXY_CONSERVATIVE_GRACE_MS
-            },
+            attempts = plan.attempts,
+            budgetMs = plan.budgetMs,
+            perProbeTimeoutMs = plan.perProbeTimeoutMs,
+            initialDelayMs = plan.initialDelayMs,
             isCancelled = isCancelled,
             hardFailure = {
                 XrayProbeLogInspector.classifySince(logMark)
@@ -232,6 +215,11 @@ class CoreManager(context: Context) {
             )
             if (retry.success) {
                 Diagnostics.info("Live-route verification recovered on DNS-free retry")
+                SmartConnectionOptimizer.recordOutcome(
+                    profile = request.profile,
+                    success = true,
+                    errorCategory = null
+                )
                 return started
             }
             if (retry.errorCategory != null && retry.errorCategory != "tunnel_timeout") {
@@ -243,7 +231,14 @@ class CoreManager(context: Context) {
             stopAfterRejectedStart()
             return cancelledStart()
         }
-        if (health.success) return started
+        if (health.success) {
+            SmartConnectionOptimizer.recordOutcome(
+                profile = request.profile,
+                success = true,
+                errorCategory = null
+            )
+            return started
+        }
 
         stopAfterRejectedStart()
 
@@ -259,8 +254,13 @@ class CoreManager(context: Context) {
         val protocol = request.profile.protocol.uppercase()
         val error =
             "$protocol core started, but no verified HTTPS traffic crossed the " +
-                "$route$category. TCP/Real Delay results are ranking tests and " +
-                "cannot guarantee that the live route is usable."
+                "$route$category. Real Delay is a ranking test and cannot " +
+                "guarantee that the live route is usable."
+        SmartConnectionOptimizer.recordOutcome(
+            profile = request.profile,
+            success = false,
+            errorCategory = health.errorCategory
+        )
         return CoreResult(false, error)
     }
 
@@ -268,7 +268,8 @@ class CoreManager(context: Context) {
         category?.lowercase() in setOf(
             "gaiexception", "unknownhostexception", "sockettimeoutexception",
             "interruptedioexception", "connectexception", "tunnel_timeout",
-            "invalid_trace_body"
+            "invalid_trace_body", "connection_reset", "dns_timeout",
+            "dns_failure", "dns_pipe_closed", "timeout"
         )
 
     private fun isImmediateTransportFailure(category: String): Boolean =
@@ -312,22 +313,13 @@ class CoreManager(context: Context) {
             settings = request.settings,
             mode = request.mode,
             tunFd = request.tunFd,
-            errorLogPath = Diagnostics.xrayErrorLogPath()
+            errorLogPath = Diagnostics.xrayErrorLogPath(),
+            bootstrapIps = request.bootstrapIps
         )
 
     companion object {
         private const val TRANSIENT_RETRY_BUDGET_MS = 4_200
         private const val TRANSIENT_RETRY_PROBE_TIMEOUT_MS = 1_900
         private const val TRANSIENT_RETRY_GRACE_MS = 260
-        private const val GENERAL_ADAPTIVE_VERIFY_BUDGET_MS = 7_000
-        private const val GENERAL_CONSERVATIVE_VERIFY_BUDGET_MS = 11_000
-        private const val GENERAL_ADAPTIVE_PROBE_TIMEOUT_MS = 2_800
-        private const val GENERAL_CONSERVATIVE_PROBE_TIMEOUT_MS = 4_500
-        private const val PROXY_ADAPTIVE_GRACE_MS = 40
-        private const val PROXY_CONSERVATIVE_GRACE_MS = 120
-        private const val VPN_ADAPTIVE_GRACE_MS = 90
-        private const val VPN_CONSERVATIVE_GRACE_MS = 260
-        private const val WIREGUARD_ADAPTIVE_GRACE_MS = 350
-        private const val WIREGUARD_CONSERVATIVE_GRACE_MS = 850
     }
 }

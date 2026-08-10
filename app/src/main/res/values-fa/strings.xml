@@ -50,7 +50,6 @@
     <string name="local_endpoints">پروکسی Mixed روی 127.0.0.1:%1$d</string>
     <string name="tcp_test">اتصال TCP</string>
     <string name="proxy_test">تأخیر واقعی Xray</string>
-    <string name="icmp_unavailable">پینگ ICMP در این دستگاه در دسترس نیست.</string>
     <string name="routing_all">تونل همه برنامه‌ها</string>
     <string name="routing_allow">فقط برنامه‌های انتخاب‌شده</string>
     <string name="routing_bypass">عبور برنامه‌های انتخاب‌شده از وی‌پی‌ان</string>
@@ -123,9 +122,6 @@
     <string name="select_fastest">انتخاب سریع‌ترین کانفیگ تست‌شده</string>
     <string name="no_ping_results">هنوز نتیجه پینگ موفقی وجود ندارد؛ ابتدا کانفیگ‌ها را تست کنید.</string>
     <string name="fastest_selected">کانفیگ %1$s با پینگ %2$d میلی‌ثانیه انتخاب شد.</string>
-    <string name="live_ping_off">پینگ لحظه‌ای —</string>
-    <string name="live_ping_waiting">در حال پینگ لحظه‌ای…</string>
-    <string name="live_ping_value">لحظه‌ای %1$d ms</string>
     <string name="exit_info_off">آی‌پی خروجی —</string>
     <string name="exit_info_waiting">در انتظار شناسایی آی‌پی خروجی…</string>
     <string name="exit_info_loading">در حال دریافت آی‌پی و کشور…</string>
@@ -206,13 +202,8 @@
     <string name="ping_method_tcp_short">TCP</string>
     <string name="ping_method_xray_short">Alive</string>
     <string name="latency_method_format">%2$d ms • %1$s</string>
-    <string name="live_ping_value_method">زنده: %1$d ms • %2$s</string>
-    <string name="live_ping_failed">پینگ زنده ناموفق بود</string>
     <string name="ping_jitter_value">جیتر: %1$d ms</string>
     <string name="ping_success_value">نمونه‌های موفق: %1$d%%</string>
-    <string name="live_ping_click_hint">برای اندازه‌گیری لحظه‌ای کانفیگ متصل ضربه بزنید</string>
-    <string name="live_ping_measuring">پینگ زنده: در حال اندازه‌گیری...</string>
-    <string name="live_ping_in_progress">اندازه‌گیری پینگ زنده در حال اجرا است.</string>
     <string name="subscription_all_count">همه (%1$d)</string>
     <string name="subscription_tab_count">%1$s (%2$d)</string>
     <string name="subscription_management_section">مدیریت ساب‌ها</string>
@@ -296,7 +287,6 @@
     <string name="chain_added">زنجیره پروکسی افزوده شد.</string>
 
     <string name="tcp_ping">پینگ TCP</string>
-    <string name="live_ping_method">روش پینگ زنده</string>
     <string name="real_delay_off">تأخیر واقعی —</string>
     <string name="real_delay_waiting">تأخیر واقعی</string>
     <string name="real_delay_measuring">سنجش تأخیر واقعی…</string>
