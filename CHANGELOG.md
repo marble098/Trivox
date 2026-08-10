@@ -1,5 +1,9 @@
 # Changelog
 
+## D8/R8 Kotlin metadata build fix — 2026-08-10
+
+- Pinned Kotlin to `2.3.21` (was `2.4.10`). AGP `8.13.2` bundles R8 `8.13.19`, which only supports Kotlin metadata up through the 2.3 series; building with Kotlin 2.4.x against that R8 caused release/minified builds (including the direct-download APK job) to fail with repeated `D8: Unexpected error during rewriting of Kotlin metadata` / `Should never be called` warnings and errors across nearly every Kotlin class.
+
 ## Compose Material 3 migration — 2026-08-08
 
 - Removed the application `res/layout` layer and enabled Jetpack Compose Material 3.

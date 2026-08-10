@@ -8,7 +8,7 @@
 | AndroidX Core KTX | 1.17.0 | Apache-2.0 | https://developer.android.com/jetpack/androidx |
 | AndroidX AppCompat | 1.7.1 | Apache-2.0 | https://developer.android.com/jetpack/androidx |
 | AndroidX RecyclerView | 1.4.0 | Apache-2.0 | https://developer.android.com/jetpack/androidx |
-| Kotlin | 2.4.10 | Apache-2.0 | https://kotlinlang.org |
+| Kotlin | 2.3.21 | Apache-2.0 | https://kotlinlang.org |
 | Gradle Wrapper | 8.13 | Apache-2.0 | https://gradle.org |
 
 The Xray/libXray binary is not stored in the source ZIP. The wizard downloads it from upstream. Users distributing APKs must comply with the upstream licenses and retain required notices/source availability obligations. No external tun2socks helper is bundled.

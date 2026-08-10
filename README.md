@@ -76,7 +76,7 @@ See [BUILDING.md](BUILDING.md), [CORE_INTEGRATION.md](CORE_INTEGRATION.md), and 
 - App version: generated automatically from Git history by CI
 - Xray/libXray pin: `v26.7.28`
 - AGP: `8.13.2`
-- Kotlin: `2.4.10`
+- Kotlin: `2.3.21`
 - Gradle: `8.13`
 - JDK: `17`
 - compile/target SDK: `36`; min SDK: `26`
