@@ -613,33 +613,56 @@ object Diagnostics {
         }
     }
 
+    private val SENSITIVE_KEY_NAMES = listOf(
+        "uuid", "password", "pass", "pwd", "passphrase",
+        "token", "accessToken", "access_token",
+        "refreshToken", "refresh_token",
+        "sessionToken", "session_token",
+        "privateKey", "private_key",
+        "publicKey", "public_key",
+        "shortId", "short_id",
+        "authorization", "auth",
+        "psk", "presharedKey", "preshared_key",
+        "secret", "secretKey", "secret_key",
+        "apiKey", "api_key",
+        "clientSecret", "client_secret",
+        "cookie", "bearer", "seed", "mnemonic"
+    )
+
+    private val URI_REDACT_REGEX = Regex(
+        "(?i)(vless|vmess|" +
+            "trojan|ss|socks|ssh|" +
+            "wireguard|https?)://[^\\s\"'<>]+"
+    )
+
+    private val PEM_PRIVATE_KEY_REGEX = Regex(
+        "-----BEGIN [^-]*PRIVATE KEY-----" +
+            "[\\s\\S]*?" +
+            "-----END [^-]*PRIVATE KEY-----"
+    )
+
+    private val WIREGUARD_INI_KEY_REGEX = Regex(
+        "(?im)^(\\s*(?:PrivateKey|PresharedKey)\\s*=\\s*).+$"
+    )
+
+    private val SENSITIVE_JSON_KV_REGEX = Regex(
+        "(?i)\"?\\b(" +
+            SENSITIVE_KEY_NAMES.joinToString("|") { Regex.escape(it) } +
+            ")\\b\"?\\s*[:=]\\s*\"?([^,}\"\\n]+?)\"?(?=[,}\"\\n]|$)"
+    )
+
+    private val BARE_UUID_REGEX = Regex(
+        "[0-9a-fA-F]{8}-" +
+            "[0-9a-fA-F-]{27,}"
+    )
+
     fun sanitize(input: String): String =
         input
-            .replace(
-                Regex(
-                    "(?i)(vless|vmess|" +
-                        "trojan|ss|socks|" +
-                        "https?)://[^\\s]+"
-                ),
-                "<redacted-uri>"
-            )
-            .replace(
-                Regex(
-                    "(?i)\\b(uuid|password|" +
-                        "pass|token|privateKey|" +
-                        "publicKey|shortId)\\b" +
-                        "\\s*[:=]\\s*" +
-                        "[^,}\\s]+"
-                ),
-                "\$1=<redacted>"
-            )
-            .replace(
-                Regex(
-                    "[0-9a-fA-F]{8}-" +
-                        "[0-9a-fA-F-]{27,}"
-                ),
-                "<redacted-uuid>"
-            )
+            .replace(PEM_PRIVATE_KEY_REGEX, "<redacted-private-key>")
+            .replace(URI_REDACT_REGEX, "<redacted-uri>")
+            .replace(WIREGUARD_INI_KEY_REGEX, "\$1<redacted>")
+            .replace(SENSITIVE_JSON_KV_REGEX, "\$1=<redacted>")
+            .replace(BARE_UUID_REGEX, "<redacted-uuid>")
 
     private fun installExceptionHandler() {
         previousHandler =

@@ -68,6 +68,10 @@ class TrivoxVpnService : VpnService() {
     private var networkCallback:
         ConnectivityManager
             .NetworkCallback? = null
+    @Volatile
+    private var currentDefaultNetwork: Network? = null
+    @Volatile
+    private var networkChangeRunnable: Runnable? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -726,8 +730,15 @@ class TrivoxVpnService : VpnService() {
         }
 
         unregisterNetworkCallback()
+        currentDefaultNetwork = null
         var observedInitial = false
 
+        // Android does not guarantee the order of onAvailable/onLost during a
+        // network handover (e.g. Wi-Fi -> mobile can deliver onAvailable(new)
+        // before onLost(old), or vice versa). Both callbacks below only ever
+        // record which network is currently the default and then schedule a
+        // debounced re-evaluation, so the reconnect decision never depends on
+        // which callback happened to fire first.
         val callback =
             object :
                 ConnectivityManager
@@ -737,92 +748,33 @@ class TrivoxVpnService : VpnService() {
                 ) {
                     if (!observedInitial) {
                         observedInitial = true
+                        currentDefaultNetwork = network
                         return
                     }
-
-                    val current =
-                        ConnectionRuntime
-                            .current()
 
                     if (
                         stopRequested.get() ||
-                        current.sessionId !=
-                        sessionId ||
-                        current.state !=
-                        ConnectionState
-                            .RECONNECTING
+                        network == currentDefaultNetwork
                     ) {
                         return
                     }
 
-                    if (
-                        !reconnectQueued
-                            .compareAndSet(
-                                false,
-                                true
-                            )
-                    ) {
-                        return
-                    }
-
-                    val accepted =
-                        executeSafely {
-                            try {
-                                val latest =
-                                    ConnectionRuntime
-                                        .current()
-
-                                if (
-                                    !stopRequested
-                                        .get() &&
-                                    latest.sessionId ==
-                                    sessionId &&
-                                    latest.state ==
-                                    ConnectionState
-                                        .RECONNECTING
-                                ) {
-                                    reconnectCore(
-                                        request
-                                    )
-                                }
-                            } finally {
-                                reconnectQueued
-                                    .set(false)
-                            }
-                        }
-
-                    if (!accepted) {
-                        reconnectQueued.set(
-                            false
-                        )
-                    }
+                    currentDefaultNetwork = network
+                    scheduleNetworkChangeCheck(request)
                 }
 
                 override fun onLost(
                     network: Network
                 ) {
                     if (
-                        !stopRequested.get()
+                        stopRequested.get() ||
+                        network != currentDefaultNetwork
                     ) {
-                        ConnectionRuntime
-                            .updateSession(
-                                sessionId
-                            ) {
-                                if (
-                                    it.state ==
-                                    ConnectionState
-                                        .CONNECTED
-                                ) {
-                                    it.copy(
-                                        state =
-                                            ConnectionState
-                                                .RECONNECTING
-                                    )
-                                } else {
-                                    it
-                                }
-                            }
+                        return
                     }
+
+                    currentDefaultNetwork = null
+                    scheduleNetworkChangeCheck(request)
                 }
             }
 
@@ -834,6 +786,101 @@ class TrivoxVpnService : VpnService() {
         ).registerDefaultNetworkCallback(
             callback
         )
+    }
+
+    private fun scheduleNetworkChangeCheck(
+        request: CoreStartRequest
+    ) {
+        networkChangeRunnable?.let {
+            handler.removeCallbacks(it)
+        }
+
+        val runnable = Runnable {
+            onNetworkChangeSettled(request)
+        }
+        networkChangeRunnable = runnable
+        handler.postDelayed(
+            runnable,
+            NETWORK_CHANGE_DEBOUNCE_MS
+        )
+    }
+
+    private fun onNetworkChangeSettled(
+        request: CoreStartRequest
+    ) {
+        if (stopRequested.get()) {
+            return
+        }
+
+        val current =
+            ConnectionRuntime.current()
+
+        if (current.sessionId != sessionId) {
+            return
+        }
+
+        if (currentDefaultNetwork == null) {
+            // No default network right now. Mark the session as
+            // recovering but do not attempt a reconnect yet; either a
+            // fresh onAvailable will retrigger this check, or the
+            // monitor loop will eventually time the session out.
+            if (current.state == ConnectionState.CONNECTED) {
+                ConnectionRuntime.updateSession(sessionId) {
+                    if (it.state == ConnectionState.CONNECTED) {
+                        it.copy(state = ConnectionState.RECONNECTING)
+                    } else {
+                        it
+                    }
+                }
+            }
+            return
+        }
+
+        if (
+            current.state != ConnectionState.CONNECTED &&
+            current.state != ConnectionState.RECONNECTING
+        ) {
+            return
+        }
+
+        if (current.state == ConnectionState.CONNECTED) {
+            ConnectionRuntime.updateSession(sessionId) {
+                if (it.state == ConnectionState.CONNECTED) {
+                    it.copy(state = ConnectionState.RECONNECTING)
+                } else {
+                    it
+                }
+            }
+        }
+
+        if (
+            !reconnectQueued.compareAndSet(false, true)
+        ) {
+            return
+        }
+
+        val accepted =
+            executeSafely {
+                try {
+                    val latest =
+                        ConnectionRuntime.current()
+
+                    if (
+                        !stopRequested.get() &&
+                        latest.sessionId == sessionId &&
+                        latest.state == ConnectionState.RECONNECTING &&
+                        currentDefaultNetwork != null
+                    ) {
+                        reconnectCore(request)
+                    }
+                } finally {
+                    reconnectQueued.set(false)
+                }
+            }
+
+        if (!accepted) {
+            reconnectQueued.set(false)
+        }
     }
 
     private fun reconnectCore(
@@ -1144,6 +1191,11 @@ class TrivoxVpnService : VpnService() {
         }
 
         networkCallback = null
+        currentDefaultNetwork = null
+        networkChangeRunnable?.let {
+            handler.removeCallbacks(it)
+        }
+        networkChangeRunnable = null
     }
 
     private fun wireGuardHasIpv6Address(
@@ -1356,5 +1408,8 @@ class TrivoxVpnService : VpnService() {
         private const val
             NATIVE_STABILITY_WINDOW_MS =
                 30_000L
+        private const val
+            NETWORK_CHANGE_DEBOUNCE_MS =
+                1_200L
     }
 }
