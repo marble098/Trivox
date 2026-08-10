@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v38_fragment_section">فرگمنت TLS</string>
+    <string name="v38_fragment_enabled">فعال‌سازی فرگمنت TLS</string>
+    <string name="v38_fragment_packets">بسته‌های هدف</string>
+    <string name="v38_fragment_length">طول فرگمنت (بایت)</string>
+    <string name="v38_fragment_interval">فاصله فرگمنت (میلی‌ثانیه)</string>
+    <string name="v38_fragment_hint">بسته‌های TLS handshake را تکه‌تکه می‌کند تا از فیلترینگ عمیق بسته عبور کند. برای اکثر شبکه‌های سانسورشده «tlshello» استفاده کنید.</string>
+</resources>

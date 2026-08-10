@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v38_fragment_section">TLS Fragment</string>
+    <string name="v38_fragment_enabled">Enable TLS fragmentation</string>
+    <string name="v38_fragment_packets">Target packets</string>
+    <string name="v38_fragment_length">Fragment length (bytes)</string>
+    <string name="v38_fragment_interval">Fragment interval (ms)</string>
+    <string name="v38_fragment_hint">Splits TLS handshake packets to bypass deep packet inspection. Use "tlshello" for most censored networks.</string>
+</resources>

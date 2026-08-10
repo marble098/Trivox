@@ -368,6 +368,51 @@ internal fun UnifiedSettingsScreen(
 
 
         item {
+            SettingsSection(activity.getString(R.string.v38_fragment_section)) {
+                BooleanSetting(
+                    activity.getString(R.string.v38_fragment_enabled),
+                    settings.fragmentEnabled
+                ) {
+                    actions.composeSaveSettings(settings.copy(fragmentEnabled = it))
+                }
+                if (settings.fragmentEnabled) {
+                    ChoiceSetting(
+                        label = activity.getString(R.string.v38_fragment_packets),
+                        value = settings.fragmentPackets,
+                        choices = listOf(
+                            "tlshello" to "TLS Hello",
+                            "1-3" to "Packets 1-3",
+                            "1-5" to "Packets 1-5"
+                        )
+                    ) {
+                        actions.composeSaveSettings(settings.copy(fragmentPackets = it))
+                    }
+                    StringSetting(
+                        label = activity.getString(R.string.v38_fragment_length),
+                        value = settings.fragmentLength,
+                        singleLine = true,
+                        validator = { it.isNotBlank() }
+                    ) {
+                        actions.composeSaveSettings(settings.copy(fragmentLength = it))
+                    }
+                    StringSetting(
+                        label = activity.getString(R.string.v38_fragment_interval),
+                        value = settings.fragmentInterval,
+                        singleLine = true,
+                        validator = { it.isNotBlank() }
+                    ) {
+                        actions.composeSaveSettings(settings.copy(fragmentInterval = it))
+                    }
+                    Text(
+                        activity.getString(R.string.v38_fragment_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+                item {
             SettingsSection(activity.getString(R.string.v26_notification_section)) {
                 val actionChoices = notificationActionChoices(activity)
                 ChoiceSetting(
