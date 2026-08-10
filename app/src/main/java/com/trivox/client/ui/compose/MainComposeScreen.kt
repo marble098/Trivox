@@ -95,6 +95,7 @@ import kotlinx.coroutines.delay
 import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
+import org.json.JSONObject
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.graphics.Brush
@@ -1280,7 +1281,7 @@ private fun ConfigsTab(
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 if (settings.gridMode) {
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(172.dp),
+                        columns = GridCells.Adaptive(164.dp),
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1356,6 +1357,62 @@ private fun ProfileCard(
     }
 }
 
+private data class ProfileDisplayMeta(
+    val protocol: String,
+    val security: String,
+    val transport: String
+)
+
+private fun profileDisplayMeta(profile: ConfigProfile): ProfileDisplayMeta {
+    val outbound = runCatching { JSONObject(profile.outboundJson) }.getOrNull()
+    val stream = outbound?.optJSONObject("streamSettings")
+    val protocol = when (profile.protocol.trim().lowercase(Locale.ROOT)) {
+        "hysteria", "hysteria2", "hy2" -> "HYSTERIA2"
+        "wireguard", "wg" -> "WIREGUARD"
+        "shadowsocks", "ss" -> "SHADOWSOCKS"
+        else -> profile.protocol.uppercase(Locale.ROOT)
+    }
+    val rawTransport = stream?.optString("network").orEmpty()
+        .ifBlank { stream?.optString("method").orEmpty() }
+        .lowercase(Locale.ROOT)
+    val transport = when {
+        protocol == "WIREGUARD" -> "UDP"
+        protocol == "HYSTERIA2" -> "HYSTERIA2"
+        rawTransport in setOf("", "none", "raw", "tcp") -> "RAW"
+        rawTransport in setOf("ws", "websocket") -> "WS"
+        rawTransport == "grpc" -> "gRPC"
+        rawTransport in setOf("xhttp", "splithttp") -> "XHTTP"
+        rawTransport in setOf("httpupgrade", "http-upgrade") -> "HTTPUpgrade"
+        rawTransport in setOf("kcp", "mkcp") -> "mKCP"
+        rawTransport in setOf("hysteria", "hysteria2", "hy2") -> "HYSTERIA2"
+        else -> rawTransport.uppercase(Locale.ROOT)
+    }
+    val rawSecurity = stream?.optString("security").orEmpty().trim().lowercase(Locale.ROOT)
+    val security = when {
+        protocol == "WIREGUARD" -> "WG"
+        protocol == "HYSTERIA2" -> "TLS"
+        rawSecurity.isBlank() || rawSecurity == "none" -> "NONE"
+        rawSecurity == "tls" -> "TLS"
+        rawSecurity == "reality" -> "REALITY"
+        else -> rawSecurity.uppercase(Locale.ROOT)
+    }
+    return ProfileDisplayMeta(protocol, security, transport)
+}
+
+@Composable
+private fun ProfileMetaLine(profile: ConfigProfile) {
+    val meta = remember(profile.outboundJson, profile.protocol) { profileDisplayMeta(profile) }
+    Text(
+        "${meta.protocol} • ${meta.security} • ${meta.transport}",
+        fontSize = 9.5.sp,
+        lineHeight = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.primary,
+        maxLines = 2,
+        overflow = TextOverflow.Clip
+    )
+}
+
 @Composable
 private fun CompactProfileCard(
     activity: Activity,
@@ -1364,43 +1421,35 @@ private fun CompactProfileCard(
     actions: MainComposeActions
 ) {
     Column(
-        Modifier.padding(horizontal = 13.dp, vertical = 13.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        Modifier.padding(horizontal = 9.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         Row(verticalAlignment = Alignment.Top) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(verticalAlignment = Alignment.Top) {
                     if (profile.favorite) {
-                        Text(
-                            "★",
-                            color = Color(0xFFFFB020),
-                            fontSize = 13.sp,
-                            modifier = Modifier.padding(end = 4.dp)
-                        )
+                        Text("★", color = Color(0xFFFFB020), fontSize = 11.sp, modifier = Modifier.padding(end = 3.dp))
                     }
                     Text(
                         profile.name,
-                        style = MaterialTheme.typography.titleSmall,
+                        fontSize = 12.sp,
+                        lineHeight = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        maxLines = 2,
+                        overflow = TextOverflow.Clip
                     )
                 }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    ProtocolBadge(profile.protocol)
-                    Text(
-                        profileHost(profile, hideIp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                ProfileMetaLine(profile)
+                Text(
+                    profileHost(profile, hideIp),
+                    fontSize = 9.5.sp,
+                    lineHeight = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip
+                )
             }
-            ProfileOverflowButton(size = 30.dp, iconSize = 17) {
+            ProfileOverflowButton(size = 26.dp, iconSize = 15) {
                 actions.composeProfileActions(profile.id)
             }
         }
@@ -1410,25 +1459,25 @@ private fun CompactProfileCard(
             status = profile.realTestStatus,
             modifier = Modifier.fillMaxWidth()
         )
-        if (
-            profile.realTestStatus == TestStatus.TESTING
-        ) LinearProgressIndicator(Modifier.fillMaxWidth())
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            TextButton(
-                onClick = { actions.composePingProfile(profile.id, PingMethod.XRAY_HTTP) },
-                enabled = profile.realTestStatus != TestStatus.TESTING,
-                modifier = Modifier.weight(1f).height(36.dp)
-            ) {
-                TrivoxAutoFitButtonText(
-                    text = if (profile.realTestStatus == TestStatus.TESTING)
-                        "${activity.getString(R.string.compose_real_label)}…"
-                    else activity.getString(R.string.compose_test_real),
-                    modifier = Modifier.fillMaxWidth(),
-                    maxFontSize = 13.sp,
-                    minFontSize = 8.sp,
-                    style = MaterialTheme.typography.labelMedium
-                )
-            }
+        if (profile.realTestStatus == TestStatus.TESTING) {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+        }
+        TextButton(
+            onClick = { actions.composePingProfile(profile.id, PingMethod.XRAY_HTTP) },
+            enabled = profile.realTestStatus != TestStatus.TESTING,
+            modifier = Modifier.fillMaxWidth().height(31.dp)
+        ) {
+            TrivoxAutoFitButtonText(
+                text = if (profile.realTestStatus == TestStatus.TESTING) {
+                    activity.getString(R.string.compose_real_label)
+                } else {
+                    activity.getString(R.string.compose_test_real)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                maxFontSize = 11.sp,
+                minFontSize = 8.sp,
+                style = MaterialTheme.typography.labelSmall
+            )
         }
     }
 }
@@ -1441,84 +1490,85 @@ private fun ListProfileCard(
     actions: MainComposeActions
 ) {
     Column(
-        Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         Row(verticalAlignment = Alignment.Top) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(verticalAlignment = Alignment.Top) {
                     if (profile.favorite) {
-                        Text(
-                            "★",
-                            color = Color(0xFFFFB020),
-                            fontSize = 15.sp,
-                            modifier = Modifier.padding(end = 5.dp)
-                        )
+                        Text("★", color = Color(0xFFFFB020), fontSize = 12.sp, modifier = Modifier.padding(end = 4.dp))
                     }
                     Text(
                         profile.name,
-                        style = MaterialTheme.typography.titleMedium,
+                        fontSize = 13.sp,
+                        lineHeight = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                        maxLines = 2,
+                        overflow = TextOverflow.Clip
                     )
                 }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    ProtocolBadge(profile.protocol)
-                    Text(
-                        profileHost(profile, hideIp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis
-                    )
-                }
+                ProfileMetaLine(profile)
+                Text(
+                    profileHost(profile, hideIp),
+                    fontSize = 10.sp,
+                    lineHeight = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip
+                )
             }
-            ProfileOverflowButton(size = 34.dp, iconSize = 19) {
+            ProfileOverflowButton(size = 28.dp, iconSize = 16) {
                 actions.composeProfileActions(profile.id)
             }
         }
-        LatencyCell(
-            label = activity.getString(R.string.compose_real_label),
-            latency = profile.realLatencyMs,
-            status = profile.realTestStatus,
-            modifier = Modifier.fillMaxWidth()
-        )
-        if (
-            profile.realTestStatus == TestStatus.TESTING
-        ) LinearProgressIndicator(Modifier.fillMaxWidth())
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            LatencyCell(
+                label = activity.getString(R.string.compose_real_label),
+                latency = profile.realLatencyMs,
+                status = profile.realTestStatus,
+                modifier = Modifier.weight(1f)
+            )
             OutlinedButton(
                 onClick = { actions.composePingProfile(profile.id, PingMethod.XRAY_HTTP) },
                 enabled = profile.realTestStatus != TestStatus.TESTING,
-                modifier = Modifier.weight(1f).height(40.dp).trivoxSpringPress(profile.realTestStatus != TestStatus.TESTING)
+                modifier = Modifier.height(32.dp).widthIn(min = 86.dp)
+                    .trivoxSpringPress(profile.realTestStatus != TestStatus.TESTING),
+                contentPadding = PaddingValues(horizontal = 8.dp)
             ) {
                 TrivoxAutoFitButtonText(
-                    text = if (profile.realTestStatus == TestStatus.TESTING)
-                        "${activity.getString(R.string.compose_real_label)}…"
-                    else activity.getString(R.string.compose_test_real),
-                    modifier = Modifier.fillMaxWidth(),
-                    maxFontSize = 14.sp,
-                    minFontSize = 8.sp
+                    text = if (profile.realTestStatus == TestStatus.TESTING) {
+                        activity.getString(R.string.compose_real_label)
+                    } else {
+                        activity.getString(R.string.compose_test_real)
+                    },
+                    maxFontSize = 11.sp,
+                    minFontSize = 8.sp,
+                    style = MaterialTheme.typography.labelSmall
                 )
             }
         }
-        if (
-            profile.exitCountry.isNotBlank() ||
-            (!hideIp && profile.exitIp.isNotBlank())
-        ) {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        if (profile.realTestStatus == TestStatus.TESTING) {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+        }
+        if (profile.exitCountry.isNotBlank() || (!hideIp && profile.exitIp.isNotBlank())) {
             Text(
                 buildExitLine(profile, hideIp),
-                style = MaterialTheme.typography.bodySmall,
+                fontSize = 9.5.sp,
+                lineHeight = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1, overflow = TextOverflow.Ellipsis
+                maxLines = 1,
+                overflow = TextOverflow.Clip
             )
         }
     }
 }
 
+@Composable
 @Composable
 private fun SubscriptionsTab(
     activity: Activity,

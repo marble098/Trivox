@@ -54,6 +54,8 @@ class SettingsActivity : ThemedActivity() {
         val sortMode = spinner(R.id.sortModeSpinner)
         val pingMethod = spinner(R.id.pingMethodSpinner)
         val pingSummary = text(R.id.pingMethodSummary)
+        pingMethod.visibility = View.GONE
+        pingSummary.visibility = View.GONE
         val livePingEnabled = switch(R.id.livePingEnabledSwitch)
         val livePingInterval = edit(R.id.livePingIntervalInput)
         val pingAttempts = spinner(R.id.pingAttemptsSpinner)
@@ -134,35 +136,6 @@ class SettingsActivity : ThemedActivity() {
             )
         )
         sortMode.setSelection(sortModes.indexOf(settings.sortMode).coerceAtLeast(0))
-
-        val pingMethods = PingMethod.entries
-        pingMethod.adapter = compactAdapter(
-            arrayOf(
-                getString(R.string.ping_method_tcp),
-                getString(R.string.ping_method_xray)
-            )
-        )
-        pingMethod.setSelection(
-            pingMethods.indexOf(settings.livePingMethod).coerceAtLeast(0)
-        )
-        pingMethod.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(
-                parent: AdapterView<*>?,
-                view: View?,
-                position: Int,
-                id: Long
-            ) {
-                pingSummary.setText(
-                    if (pingMethods[position] == PingMethod.TCP_CONNECT) {
-                        R.string.ping_method_tcp_summary
-                    } else {
-                        R.string.ping_method_xray_summary
-                    }
-                )
-            }
-
-            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
-        }
 
         val attempts = arrayOf("2", "3", "4", "5")
         pingAttempts.adapter = compactAdapter(attempts)
@@ -353,10 +326,8 @@ class SettingsActivity : ThemedActivity() {
             settings.localProxyInVpn = localProxyInVpn.isChecked
             settings.autoUpdateCheck = autoUpdate.isChecked
             settings.sortMode = sortModes[sortMode.selectedItemPosition]
-            settings.livePingMethod = pingMethods[pingMethod.selectedItemPosition]
-            // Keep the original batch-test default; the main screen still has
-            // dedicated TCP Ping and Real Delay actions.
-            settings.pingMethod = PingMethod.TCP_CONNECT
+            settings.livePingMethod = PingMethod.XRAY_HTTP
+            settings.pingMethod = PingMethod.XRAY_HTTP
             settings.livePingEnabled = livePingEnabled.isChecked
             settings.livePingIntervalSeconds = liveIntervalValue!!
             settings.testAttempts = attempts[pingAttempts.selectedItemPosition].toInt()
