@@ -117,7 +117,7 @@ class PingManager(
             attempts = 1,
             timeoutSeconds = SINGLE_XRAY_TIMEOUT_SECONDS,
             allowSingleSample = true,
-            maxTargetsPerSample = 1
+            maxTargetsPerSample = 3
         )
     }
 
@@ -401,8 +401,20 @@ class PingManager(
             }
             started = true
 
-            if (!waitCancellable(PROBE_START_GRACE_MS)) {
-                return cancelled(PingMethod.XRAY_HTTP.name, timestamp)
+            if (!waitForLocalProxyListener(
+                    port = probeSettings.socksPort,
+                    timeoutMs = PROBE_LISTENER_READY_TIMEOUT_MS
+                )
+            ) {
+                return if (Thread.currentThread().isInterrupted) {
+                    cancelled(PingMethod.XRAY_HTTP.name, timestamp)
+                } else {
+                    basicFailure(
+                        PingMethod.XRAY_HTTP.name,
+                        timestamp,
+                        "local_proxy_listener_unavailable"
+                    )
+                }
             }
 
             val verified = verifiedLocalProxy(
@@ -484,7 +496,21 @@ class PingManager(
                 )
             }
             started = true
-            waitCancellable(PROBE_START_GRACE_MS)
+            if (!waitForLocalProxyListener(
+                    port = settings.socksPort,
+                    timeoutMs = PROBE_LISTENER_READY_TIMEOUT_MS
+                )
+            ) {
+                return if (Thread.currentThread().isInterrupted) {
+                    cancelled(PingMethod.XRAY_HTTP.name, timestamp)
+                } else {
+                    basicFailure(
+                        PingMethod.XRAY_HTTP.name,
+                        timestamp,
+                        "local_proxy_listener_unavailable"
+                    )
+                }
+            }
             verifiedLocalProxy(
                 settings,
                 attempts = 2,
@@ -520,43 +546,101 @@ class PingManager(
         val timestamp = System.currentTimeMillis()
         val count = attempts.coerceIn(1, 5)
         val targets = verifiedTargets(requestedUrl)
-            .take(targetLimit.coerceIn(1, MAX_HTTP_TARGETS_PER_SAMPLE))
+            .take(
+                targetLimit.coerceIn(
+                    1,
+                    MAX_HTTP_TARGETS_PER_SAMPLE
+                )
+            )
         val samples = mutableListOf<Long>()
         var lastFailure = "verified_https_failed"
         var acceptedTarget: String? = null
+        val perProbeTimeoutMs = (
+            timeoutMs /
+                targets.size.coerceAtLeast(1)
+            ).coerceIn(
+                MIN_COMPAT_PROBE_TIMEOUT_MS,
+                timeoutMs
+            )
 
         for (sampleIndex in 0 until count) {
             if (Thread.currentThread().isInterrupted) {
-                return cancelled(PingMethod.XRAY_HTTP.name, timestamp)
-            }
-            val target = targets[(sampleIndex % targets.size)]
-            var accepted = false
-            for (route in listOf(
-                VerifiedHttpProbe.Route.HTTP_PROXY,
-                VerifiedHttpProbe.Route.SOCKS_PROXY
-            )) {
-                val probe = VerifiedHttpProbe.probe(
-                    settings = settings,
-                    route = route,
-                    target = target,
-                    timeoutMs = timeoutMs,
-                    nonce = timestamp + sampleIndex
+                return cancelled(
+                    PingMethod.XRAY_HTTP.name,
+                    timestamp
                 )
-                if (probe.success && probe.latencyMs != null) {
-                    samples += probe.latencyMs * NANOS_PER_MILLISECOND
-                    acceptedTarget = probe.target
-                    preferredLocalProxyTarget.set(probe.target)
-                    accepted = true
+            }
+
+            var accepted = false
+
+            for (targetOffset in targets.indices) {
+                val target =
+                    targets[
+                        (
+                            sampleIndex +
+                                targetOffset
+                            ) % targets.size
+                    ]
+
+                for (
+                    route in listOf(
+                        VerifiedHttpProbe.Route.SOCKS_PROXY,
+                        VerifiedHttpProbe.Route.HTTP_PROXY
+                    )
+                ) {
+                    val probe =
+                        VerifiedHttpProbe.probe(
+                            settings = settings,
+                            route = route,
+                            target = target,
+                            timeoutMs = perProbeTimeoutMs,
+                            nonce =
+                                timestamp +
+                                    sampleIndex * 17L +
+                                    targetOffset
+                        )
+
+                    if (
+                        probe.success &&
+                        probe.latencyMs != null
+                    ) {
+                        samples +=
+                            probe.latencyMs *
+                                NANOS_PER_MILLISECOND
+                        acceptedTarget =
+                            probe.target
+                        preferredLocalProxyTarget
+                            .set(probe.target)
+                        accepted = true
+                        break
+                    }
+
+                    lastFailure =
+                        probe.errorCategory
+                            ?: lastFailure
+                }
+
+                if (accepted) {
                     break
                 }
-                lastFailure = probe.errorCategory ?: lastFailure
             }
-            if (!accepted && samples.size + (count - sampleIndex - 1) < requiredSamples(count)) {
+
+            if (
+                !accepted &&
+                samples.size +
+                    (count - sampleIndex - 1) <
+                    requiredSamples(count)
+            ) {
                 break
             }
         }
 
-        val summary = PingStatistics.summarize(samples, count)
+        val summary =
+            PingStatistics.summarize(
+                samples,
+                count
+            )
+
         return PingResult(
             method = PingMethod.XRAY_HTTP.name,
             success = summary.success,
@@ -565,7 +649,12 @@ class PingManager(
             successRatio = summary.successRatio,
             resolvedIp = acceptedTarget,
             timestamp = timestamp,
-            errorCategory = if (summary.success) null else lastFailure
+            errorCategory =
+                if (summary.success) {
+                    null
+                } else {
+                    lastFailure
+                }
         )
     }
 
@@ -686,7 +775,7 @@ class PingManager(
                                     workDir = workDir,
                                     attempts = BATCH_XRAY_ATTEMPTS,
                                     timeoutSeconds = BATCH_XRAY_TIMEOUT_SECONDS,
-                                    allowSingleSample = false,
+                                    allowSingleSample = true,
                                     maxTargetsPerSample = BATCH_XRAY_MAX_TARGETS
                                 )
                             }
@@ -977,6 +1066,56 @@ class PingManager(
         return data
     }
 
+    private fun waitForLocalProxyListener(
+        port: Int,
+        timeoutMs: Int
+    ): Boolean {
+        val deadline =
+            System.nanoTime() +
+                timeoutMs
+                    .coerceIn(
+                        250,
+                        3_000
+                    ) *
+                    NANOS_PER_MILLISECOND
+
+        while (
+            System.nanoTime() <
+            deadline
+        ) {
+            if (Thread.currentThread().isInterrupted) {
+                return false
+            }
+
+            val ready = runCatching {
+                Socket().use { socket ->
+                    socket.connect(
+                        InetSocketAddress(
+                            "127.0.0.1",
+                            port
+                        ),
+                        PROBE_LISTENER_CONNECT_TIMEOUT_MS
+                    )
+                }
+                true
+            }.getOrDefault(false)
+
+            if (ready) {
+                return true
+            }
+
+            if (
+                !waitCancellable(
+                    PROBE_LISTENER_RETRY_MS
+                )
+            ) {
+                return false
+            }
+        }
+
+        return false
+    }
+
     private fun waitCancellable(delayMs: Int): Boolean {
         var remaining = delayMs
         while (remaining > 0) {
@@ -1095,12 +1234,15 @@ class PingManager(
         private const val DNS_CACHE_TTL_MS = 60_000L
         private const val NEGATIVE_DNS_CACHE_TTL_MS = 15_000L
         private const val RESOLVER_ROTATION_COOLDOWN_MS = 5_000L
-        private const val BATCH_XRAY_ATTEMPTS = 2
+        private const val BATCH_XRAY_ATTEMPTS = 1
         private const val BATCH_XRAY_TIMEOUT_SECONDS = 5
-        private const val BATCH_XRAY_MAX_TARGETS = 2
+        private const val BATCH_XRAY_MAX_TARGETS = 4
         private const val MAX_HTTP_TARGETS_PER_SAMPLE = 4
-        private const val PROBE_START_GRACE_MS = 90
-        private const val WIREGUARD_PROBE_START_GRACE_MS = 220
+        private const val PROBE_LISTENER_READY_TIMEOUT_MS = 1_700
+        private const val PROBE_LISTENER_CONNECT_TIMEOUT_MS = 120
+        private const val PROBE_LISTENER_RETRY_MS = 40
+        private const val MIN_COMPAT_PROBE_TIMEOUT_MS = 1_150
+private const val WIREGUARD_PROBE_START_GRACE_MS = 220
         private const val NANOS_PER_MILLISECOND = 1_000_000L
         /* Retained as a documented compatibility pool for diagnostics/audits. */
         private val FALLBACK_CONNECTIVITY_URLS = listOf(

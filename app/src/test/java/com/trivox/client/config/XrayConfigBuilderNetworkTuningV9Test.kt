@@ -41,8 +41,8 @@ class XrayConfigBuilderNetworkTuningV9Test {
         assertEquals(10, sockopt.getInt("tcpKeepAliveInterval"))
         assertEquals(18_000, sockopt.getInt("tcpUserTimeout"))
         assertTrue(sockopt.getBoolean("tcpFastOpen"))
-        assertEquals("UseIP", sockopt.getString("domainStrategy"))
-        assertEquals(2, sockopt.getJSONObject("happyEyeballs").getInt("maxConcurrentTry"))
+        assertFalse(sockopt.has("domainStrategy"))
+        assertFalse(sockopt.has("happyEyeballs"))
     }
 
     @Test

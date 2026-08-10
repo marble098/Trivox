@@ -244,7 +244,7 @@ object XrayConfigBuilder {
         if (settings.adaptiveHandshake && !sockopt.has("happyEyeballs")) {
             val hasDialerProxy = sockopt.optString("dialerProxy").isNotBlank()
             val hasTargetStrategy = outbound.optString("targetStrategy").isNotBlank()
-            var domainStrategy = sockopt.optString("domainStrategy").trim()
+            val domainStrategy = sockopt.optString("domainStrategy").trim()
 
             /*
              * Happy Eyeballs only works when the proxy endpoint is resolved by
@@ -254,15 +254,6 @@ object XrayConfigBuilder {
              * resolution: each hop can have a different hostname, and forcing
              * the wrong resolver path can create a DNS-via-proxy loop.
              */
-            if (
-                domainStrategy.isBlank() &&
-                allowAutomaticDnsStrategy &&
-                !hasDialerProxy &&
-                !hasTargetStrategy
-            ) {
-                domainStrategy = "UseIP"
-                sockopt.put("domainStrategy", domainStrategy)
-            }
 
             if (
                 domainStrategy.isNotBlank() &&
