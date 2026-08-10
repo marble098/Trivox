@@ -126,22 +126,25 @@ class ConfigRepository(context: Context) {
     ) {
         synchronized(GLOBAL_LOCK) {
             val items = read()
+            val identityIndex =
+                buildIdentityIndex(items)
 
             profiles.forEach { profile ->
+                val incomingIdentity =
+                    profileIdentity(profile)
                 val duplicate =
-                    items.indexOfFirst {
-                        it.raw.trim() ==
-                            profile.raw.trim()
-                    }
+                    identityIndex[incomingIdentity]
 
-                if (duplicate < 0) {
+                if (duplicate == null) {
+                    identityIndex[incomingIdentity] =
+                        items.size
                     items += profile.copy()
                 } else if (
                     profile.subscriptionId != null
                 ) {
                     val old = items[duplicate]
 
-                    items[duplicate] =
+                    val merged =
                         mergePreserved(
                             incoming =
                                 profile.copy(
@@ -149,11 +152,31 @@ class ConfigRepository(context: Context) {
                                 ),
                             old = old
                         )
+                    items[duplicate] = merged
+                    identityIndex[
+                        profileIdentity(merged)
+                    ] = duplicate
                 }
             }
 
             write(items)
         }
+    }
+
+    /**
+     * Precomputes each profile's canonical identity once so repeated
+     * dedup/merge lookups are O(1) map reads instead of re-hashing every
+     * existing profile's outboundJson on every scan (which would be
+     * O(existing * incoming) hashing work for a large catalog).
+     */
+    private fun buildIdentityIndex(
+        items: List<ConfigProfile>
+    ): HashMap<String, Int> {
+        val index = HashMap<String, Int>(items.size * 2)
+        items.forEachIndexed { i, profile ->
+            index[profileIdentity(profile)] = i
+        }
+        return index
     }
 
     /**
@@ -178,6 +201,10 @@ class ConfigRepository(context: Context) {
         }
 
         val items = read()
+        val identityIndex = buildIdentityIndex(items)
+        val idIndex = HashMap<String, Int>(items.size * 2)
+        items.forEachIndexed { i, p -> idIndex[p.id] = i }
+
         var added = 0
         var updated = 0
         var moved = 0
@@ -194,11 +221,11 @@ class ConfigRepository(context: Context) {
                 }
             )
             val identity = profileIdentity(incoming)
-            val index = items.indexOfFirst {
-                it.id == incoming.id || profileIdentity(it) == identity
-            }
+            val index = idIndex[incoming.id] ?: identityIndex[identity]
 
-            if (index < 0) {
+            if (index == null) {
+                idIndex[incoming.id] = items.size
+                identityIndex[identity] = items.size
                 items += incoming
                 added += 1
                 return@forEach
@@ -214,6 +241,8 @@ class ConfigRepository(context: Context) {
                 incoming = incoming.copy(id = old.id),
                 old = old
             )
+            idIndex[merged.id] = index
+            identityIndex[profileIdentity(merged)] = index
 
             when {
                 old.subscriptionId != subscriptionId -> {
@@ -244,9 +273,7 @@ class ConfigRepository(context: Context) {
     }
 
     private fun profileIdentity(profile: ConfigProfile): String =
-        profile.raw.trim().ifBlank {
-            profile.outboundJson.trim()
-        }
+        ProfileIdentity.of(profile)
 
     fun replaceSubscription(
         subscriptionId: String,
@@ -259,10 +286,10 @@ class ConfigRepository(context: Context) {
                     it.subscriptionId ==
                         subscriptionId
                 }
-            val previousByRaw =
+            val previousByIdentity =
                 subscriptionProfiles
                     .associateBy {
-                        it.raw.trim()
+                        profileIdentity(it)
                     }
             val previousById =
                 subscriptionProfiles
@@ -277,6 +304,13 @@ class ConfigRepository(context: Context) {
                             subscriptionId
                     }
                     .toMutableList()
+            val retainedIdentityIndex =
+                buildIdentityIndex(retained)
+            val retainedIdIndex =
+                HashMap<String, Int>(retained.size * 2)
+            retained.forEachIndexed { i, p ->
+                retainedIdIndex[p.id] = i
+            }
 
             profiles.forEach { profile ->
                 val incoming =
@@ -285,8 +319,8 @@ class ConfigRepository(context: Context) {
                             subscriptionId
                     )
                 val old =
-                    previousByRaw[
-                        incoming.raw.trim()
+                    previousByIdentity[
+                        profileIdentity(incoming)
                     ] ?: previousById[
                         incoming.id
                     ]
@@ -304,14 +338,14 @@ class ConfigRepository(context: Context) {
                         )
                     }
 
+                val mergedIdentity = profileIdentity(merged)
                 val duplicate =
-                    retained.indexOfFirst {
-                        it.id == merged.id ||
-                            it.raw.trim() ==
-                            merged.raw.trim()
-                    }
+                    retainedIdIndex[merged.id]
+                        ?: retainedIdentityIndex[mergedIdentity]
 
-                if (duplicate < 0) {
+                if (duplicate == null) {
+                    retainedIdIndex[merged.id] = retained.size
+                    retainedIdentityIndex[mergedIdentity] = retained.size
                     retained += merged
                 }
             }
@@ -331,6 +365,17 @@ class ConfigRepository(context: Context) {
             }
 
             val items = read()
+            val anyIdIndex = HashMap<String, Int>(items.size * 2)
+            val anyIdentityIndex = buildIdentityIndex(items)
+            val sameSubIdIndex = HashMap<String, Int>()
+            val sameSubIdentityIndex = HashMap<String, Int>()
+            items.forEachIndexed { i, p ->
+                anyIdIndex[p.id] = i
+                if (p.subscriptionId == subscriptionId) {
+                    sameSubIdIndex[p.id] = i
+                    sameSubIdentityIndex[profileIdentity(p)] = i
+                }
+            }
             var mergedCount = 0
 
             profiles.forEach { profile ->
@@ -339,23 +384,17 @@ class ConfigRepository(context: Context) {
                         subscriptionId =
                             subscriptionId
                     )
+                val incomingIdentity =
+                    profileIdentity(incoming)
                 val index =
-                    items.indexOfFirst {
-                        it.subscriptionId ==
-                            subscriptionId &&
-                            (
-                                it.id ==
-                                    incoming.id ||
-                                    it.raw.trim() ==
-                                    incoming.raw.trim()
-                                )
-                    }
+                    sameSubIdIndex[incoming.id]
+                        ?: sameSubIdentityIndex[incomingIdentity]
 
-                if (index >= 0) {
+                if (index != null) {
                     val old =
                         items[index]
 
-                    items[index] =
+                    val merged =
                         mergePreserved(
                             incoming =
                                 incoming.copy(
@@ -363,17 +402,24 @@ class ConfigRepository(context: Context) {
                                 ),
                             old = old
                         )
+                    items[index] = merged
+                    val mergedIdentity = profileIdentity(merged)
+                    anyIdIndex[merged.id] = index
+                    anyIdentityIndex[mergedIdentity] = index
+                    sameSubIdIndex[merged.id] = index
+                    sameSubIdentityIndex[mergedIdentity] = index
                 } else {
                     val duplicate =
-                        items.indexOfFirst {
-                            it.id ==
-                                incoming.id ||
-                                it.raw.trim() ==
-                                incoming.raw.trim()
-                        }
+                        anyIdIndex[incoming.id]
+                            ?: anyIdentityIndex[incomingIdentity]
 
-                    if (duplicate < 0) {
+                    if (duplicate == null) {
+                        val newIndex = items.size
                         items += incoming
+                        anyIdIndex[incoming.id] = newIndex
+                        anyIdentityIndex[incomingIdentity] = newIndex
+                        sameSubIdIndex[incoming.id] = newIndex
+                        sameSubIdentityIndex[incomingIdentity] = newIndex
                     }
                 }
 

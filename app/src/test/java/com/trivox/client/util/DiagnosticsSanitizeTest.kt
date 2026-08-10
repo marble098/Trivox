@@ -41,7 +41,9 @@ class DiagnosticsSanitizeTest {
         val ini = "[Interface]\nPrivateKey = kO2S+1cV9example==\nAddress = 10.0.0.2/32"
         val sanitized = Diagnostics.sanitize(ini)
         assertFalse(sanitized.contains("kO2S+1cV9example=="))
-        assertTrue(sanitized.contains("PrivateKey ="))
+        assertTrue(sanitized.contains("PrivateKey"))
+        assertTrue(sanitized.contains("<redacted>"))
+        assertTrue(sanitized.contains("Address"))
     }
 
     @Test
