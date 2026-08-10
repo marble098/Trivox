@@ -5,13 +5,14 @@ package com.trivox.client.ui.compose
 // TRIVOX_V19_NATIVE_WIREGUARD_LEAK_GUARD
 
 import android.app.Activity
-import android.os.SystemClock
 import androidx.activity.compose.BackHandler
+import android.os.SystemClock
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -94,6 +95,9 @@ import kotlinx.coroutines.delay
 import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.graphics.Brush
 
 data class ComposeBatchState(
     val running: Boolean = false,
@@ -192,17 +196,16 @@ fun MainComposeScreen(activity: Activity, actions: MainComposeActions) {
         settingsOverride = settings
     ) {
         var simpleSettings by rememberSaveable { mutableStateOf(false) }
-        BackHandler(
-            enabled = settings.experienceMode == ExperienceMode.SIMPLE && simpleSettings
-        ) {
-            simpleSettings = false
-        }
 
         TrivoxGradientBackground(
             activity = activity,
             settingsOverride = settings
         ) {
             if (settings.experienceMode == ExperienceMode.SIMPLE) {
+                // System/gesture back inside Simple-mode settings returns to the
+                // VPN screen instead of falling through and closing the app.
+                BackHandler(enabled = simpleSettings) { simpleSettings = false }
+
                 if (simpleSettings) {
                     Column(Modifier.fillMaxSize()) {
                         TrivoxGlassBar {
@@ -220,12 +223,11 @@ fun MainComposeScreen(activity: Activity, actions: MainComposeActions) {
                                 )
                             }
                         }
-                        UnifiedSettingsScreen(
+                        SimpleSettingsScreen(
                             activity = activity,
                             actions = actions,
                             uiRevision = revision,
-                            modifier = Modifier.weight(1f),
-                            simple = true
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 } else {
@@ -270,7 +272,7 @@ fun MainComposeScreen(activity: Activity, actions: MainComposeActions) {
                                     colors = NavigationBarItemDefaults.colors(
                                         selectedIconColor = MaterialTheme.colorScheme.primary,
                                         selectedTextColor = MaterialTheme.colorScheme.primary,
-                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f),
+                                        indicatorColor = Color.Transparent,
                                         unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.70f),
                                         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.70f)
                                     ),
@@ -355,21 +357,36 @@ private fun SimpleHomeScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
+            val simpleAccent = if (active) Color(0xFFE5484D) else Color(0xFF12A594)
             ElevatedCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .border(
                         BorderStroke(
                             1.dp,
-                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.92f)
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.80f)
                         ),
                         TrivoxOuterShape
                     ),
                 shape = TrivoxOuterShape,
                 colors = CardDefaults.elevatedCardColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f)
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
                 )
             ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(
+                                    simpleAccent.copy(alpha = 0.10f),
+                                    simpleAccent,
+                                    simpleAccent.copy(alpha = 0.10f)
+                                )
+                            )
+                        )
+                )
                 Column(
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -453,12 +470,15 @@ private fun SimpleHomeScreen(
         item {
             SectionCard(activity.getString(R.string.v26_community_section)) {
                 Text(
-                    activity.getString(R.string.v37_community_feed),
+                    activity.getString(
+                        R.string.v26_source_attribution,
+                        settings.communityChannelUsername
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    activity.getString(R.string.v37_community_feed_hint),
+                    activity.getString(R.string.v26_community_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -611,6 +631,11 @@ private fun UsageHistoryCard(
                 )
             }
         }
+        Text(
+            activity.getString(R.string.v26_usage_estimate_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f)
+        )
     }
 }
 
@@ -698,13 +723,27 @@ private fun HomeTab(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
+            val heroStatusColor = when (runtime.state) {
+                ConnectionState.CONNECTED ->
+                    MaterialTheme.colorScheme.secondary
+                ConnectionState.ERROR ->
+                    MaterialTheme.colorScheme.error
+                ConnectionState.PREPARING,
+                ConnectionState.CONNECTING,
+                ConnectionState.RECONNECTING ->
+                    MaterialTheme.colorScheme.primary
+                ConnectionState.STOPPING ->
+                    MaterialTheme.colorScheme.tertiary
+                ConnectionState.DISCONNECTED ->
+                    MaterialTheme.colorScheme.outline
+            }
             ElevatedCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .border(
                         BorderStroke(
                             1.dp,
-                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.92f)
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.80f)
                         ),
                         TrivoxOuterShape
                     ),
@@ -713,6 +752,20 @@ private fun HomeTab(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
             ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(
+                                    heroStatusColor.copy(alpha = 0.10f),
+                                    heroStatusColor,
+                                    heroStatusColor.copy(alpha = 0.10f)
+                                )
+                            )
+                        )
+                )
                 Column(
                     Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -721,25 +774,11 @@ private fun HomeTab(
                         StatusDot(runtime.state)
                         Spacer(Modifier.width(9.dp))
                         Column(Modifier.weight(1f)) {
-                            val statusColor = when (runtime.state) {
-                                ConnectionState.CONNECTED ->
-                                    MaterialTheme.colorScheme.secondary
-                                ConnectionState.ERROR ->
-                                    MaterialTheme.colorScheme.error
-                                ConnectionState.PREPARING,
-                                ConnectionState.CONNECTING,
-                                ConnectionState.RECONNECTING ->
-                                    MaterialTheme.colorScheme.primary
-                                ConnectionState.STOPPING ->
-                                    MaterialTheme.colorScheme.tertiary
-                                ConnectionState.DISCONNECTED ->
-                                    MaterialTheme.colorScheme.onSurface
-                            }
                             Text(
                                 stateLabel(activity, runtime.state),
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = statusColor,
+                                color = heroStatusColor,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -768,7 +807,6 @@ private fun HomeTab(
                         }
                     }
 
-                    if (settings.homeShowModeSelector) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = settings.mode == ConnectionMode.VPN,
@@ -784,7 +822,6 @@ private fun HomeTab(
                             enabled = !connected,
                             modifier = Modifier.weight(1f)
                         )
-                    }
                     }
 
                     val connectionColor by animateColorAsState(
@@ -868,7 +905,6 @@ private fun HomeTab(
             }
         }
 
-        
         if (settings.homeShowUsage) {
             item {
                 UsageHistoryCard(activity, actions, runtime)
@@ -876,50 +912,49 @@ private fun HomeTab(
         }
 
         if (settings.homeShowMap) {
-        item {
-            WorldMapCard(
-                connected =
-                    runtime.state ==
-                        ConnectionState.CONNECTED,
-                sessionId =
-                    runtime.sessionId,
-                settings = settings,
-                exitIp =
-                    selected
-                        ?.exitIp
-                        .orEmpty(),
-                countryCode =
-                    selected
-                        ?.exitCountryCode
-                        .orEmpty(),
-                countryName =
-                    selected
-                        ?.exitCountry
-                        .orEmpty(),
-                flagText =
-                    buildString {
-                        append(
-                            selected
-                                ?.exitFlag
-                                .orEmpty()
-                        )
-                        append(' ')
-                        append(
-                            selected
-                                ?.name
-                                .orEmpty()
-                        )
-                    },
-                hideIp =
-                    settings.hideIpOnMain
-            )
-        }
+            item {
+                WorldMapCard(
+                    connected =
+                        runtime.state ==
+                            ConnectionState.CONNECTED,
+                    sessionId =
+                        runtime.sessionId,
+                    settings = settings,
+                    exitIp =
+                        selected
+                            ?.exitIp
+                            .orEmpty(),
+                    countryCode =
+                        selected
+                            ?.exitCountryCode
+                            .orEmpty(),
+                    countryName =
+                        selected
+                            ?.exitCountry
+                            .orEmpty(),
+                    flagText =
+                        buildString {
+                            append(
+                                selected
+                                    ?.exitFlag
+                                    .orEmpty()
+                            )
+                            append(' ')
+                            append(
+                                selected
+                                    ?.name
+                                    .orEmpty()
+                            )
+                        },
+                    hideIp =
+                        settings.hideIpOnMain
+                )
+            }
         }
 
-        if (settings.homeShowNetwork) {
         item {
             SectionCard(activity.getString(R.string.compose_latency_section)) {
-                if (selected != null) {
+                if (selected != null && settings.homeShowConnectionDetails) {
                     ConnectionIpDetails(
                         activity = activity,
                         profile = selected,
@@ -980,9 +1015,6 @@ private fun HomeTab(
             }
         }
 
-        }
-
-        if (settings.homeShowLeakGuard) {
         item {
             SectionCard(activity.getString(R.string.v19_leak_guard_title)) {
                 Row(
@@ -1048,7 +1080,6 @@ private fun HomeTab(
                     }
                 }
             }
-        }
         }
 
             }
@@ -1189,10 +1220,7 @@ private fun ConfigsTab(
                         selectedSource = null
                         actions.composeSelectSubscription(null)
                     },
-                    onLongClick = {
-                        actions.composeSubscriptionActions("trivox-scope-all")
-                    },
-                    onMore = {
+                    onMenuClick = {
                         actions.composeSubscriptionActions("trivox-scope-all")
                     }
                 )
@@ -1207,10 +1235,7 @@ private fun ConfigsTab(
                         selectedSource = null
                         actions.composeSelectSubscription(null)
                     },
-                    onLongClick = {
-                        actions.composeSubscriptionActions("trivox-scope-favorites")
-                    },
-                    onMore = {
+                    onMenuClick = {
                         actions.composeSubscriptionActions("trivox-scope-favorites")
                     }
                 )
@@ -1218,15 +1243,18 @@ private fun ConfigsTab(
             if ((sourceCounts[CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID] ?: 0) > 0) {
                 item {
                     ConfigScopeChip(
-                        label = activity.getString(R.string.v37_community_feed),
+                        label = "@" + settings.communityChannelUsername,
                         count = sourceCounts[CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID] ?: 0,
                         selected = selectedSource == CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID,
                         onClick = {
-                            favoritesOnly = false
                             selectedSource = CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID
                             actions.composeSelectSubscription(CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID)
                         },
-                        onMore = actions::composeOpenCommunityChannel
+                        onMenuClick = {
+                            actions.composeSubscriptionActions(
+                                CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID
+                            )
+                        }
                     )
                 }
             }
@@ -1236,20 +1264,15 @@ private fun ConfigsTab(
                     count = sourceCounts[source.id] ?: 0,
                     selected = selectedSource == source.id,
                     onClick = {
-                        favoritesOnly = false
                         selectedSource = source.id
                         actions.composeSelectSubscription(source.id)
                     },
-                    onLongClick = {
-                        actions.composeSubscriptionActions(source.id)
-                    },
-                    onMore = {
+                    onMenuClick = {
                         actions.composeSubscriptionActions(source.id)
                     }
                 )
             }
         }
-
 
         if (profiles.isEmpty()) {
             EmptyCard(activity.getString(R.string.no_profiles))
@@ -1324,11 +1347,8 @@ private fun ProfileCard(
         ),
         colors = CardDefaults.cardColors(
             containerColor = if (selected)
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.46f)
-            else MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = if (selected) 3.dp else 1.dp
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.34f)
+            else MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         if (compact) CompactProfileCard(activity, profile, hideIp, actions)
@@ -1344,89 +1364,71 @@ private fun CompactProfileCard(
     actions: MainComposeActions
 ) {
     Column(
-        Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+        Modifier.padding(horizontal = 13.dp, vertical = 13.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(9.dp)
-        ) {
-            Surface(
-                modifier = Modifier.size(38.dp),
-                shape = RoundedCornerShape(13.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-            ) {
-                Box(contentAlignment = Alignment.Center) {
+        Row(verticalAlignment = Alignment.Top) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (profile.favorite) {
+                        Text(
+                            "★",
+                            color = Color(0xFFFFB020),
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(end = 4.dp)
+                        )
+                    }
                     Text(
-                        profile.exitFlag.ifBlank { if (profile.favorite) "★" else "◇" },
-                        fontSize = 17.sp
+                        profile.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ProtocolBadge(profile.protocol)
+                    Text(
+                        profileHost(profile, hideIp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
-            Column(Modifier.weight(1f)) {
-                Text(
-                    profile.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    profile.protocol.uppercase(Locale.ROOT),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1
-                )
-            }
-            Box(
-                Modifier
-                    .size(34.dp)
-                    .clickable { actions.composeProfileActions(profile.id) },
-                contentAlignment = Alignment.Center
-            ) {
-                Text("⋮", fontSize = 21.sp, color = MaterialTheme.colorScheme.primary)
+            ProfileOverflowButton(size = 30.dp, iconSize = 17) {
+                actions.composeProfileActions(profile.id)
             }
         }
-
-        Text(
-            profileEndpoint(profile, hideIp),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-
         LatencyCell(
             label = activity.getString(R.string.compose_real_label),
             latency = profile.realLatencyMs,
             status = profile.realTestStatus,
             modifier = Modifier.fillMaxWidth()
         )
-        if (profile.realTestStatus == TestStatus.TESTING) {
-            LinearProgressIndicator(Modifier.fillMaxWidth())
-        }
-        OutlinedButton(
-            onClick = { actions.composePingProfile(profile.id, PingMethod.XRAY_HTTP) },
-            enabled = profile.realTestStatus != TestStatus.TESTING,
-            modifier = Modifier.fillMaxWidth().height(38.dp)
-        ) {
-            TrivoxAutoFitButtonText(
-                text = activity.getString(R.string.v37_profile_test),
-                modifier = Modifier.fillMaxWidth(),
-                maxFontSize = 13.sp,
-                minFontSize = 8.sp
-            )
-        }
-        if (profile.exitCountry.isNotBlank()) {
-            Text(
-                buildExitLine(profile, hideIp),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+        if (
+            profile.realTestStatus == TestStatus.TESTING
+        ) LinearProgressIndicator(Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            TextButton(
+                onClick = { actions.composePingProfile(profile.id, PingMethod.XRAY_HTTP) },
+                enabled = profile.realTestStatus != TestStatus.TESTING,
+                modifier = Modifier.weight(1f).height(36.dp)
+            ) {
+                TrivoxAutoFitButtonText(
+                    text = if (profile.realTestStatus == TestStatus.TESTING)
+                        "${activity.getString(R.string.compose_real_label)}…"
+                    else activity.getString(R.string.compose_test_real),
+                    modifier = Modifier.fillMaxWidth(),
+                    maxFontSize = 13.sp,
+                    minFontSize = 8.sp,
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
         }
     }
 }
@@ -1439,104 +1441,80 @@ private fun ListProfileCard(
     actions: MainComposeActions
 ) {
     Column(
-        Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
+        Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(11.dp)
-        ) {
-            Surface(
-                modifier = Modifier.size(44.dp),
-                shape = RoundedCornerShape(15.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-            ) {
-                Box(contentAlignment = Alignment.Center) {
+        Row(verticalAlignment = Alignment.Top) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (profile.favorite) {
+                        Text(
+                            "★",
+                            color = Color(0xFFFFB020),
+                            fontSize = 15.sp,
+                            modifier = Modifier.padding(end = 5.dp)
+                        )
+                    }
                     Text(
-                        profile.exitFlag.ifBlank { if (profile.favorite) "★" else "◇" },
-                        fontSize = 19.sp
+                        profile.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis
                     )
                 }
-            }
-            Column(Modifier.weight(1f)) {
-                Text(
-                    profile.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ProtocolBadge(profile.protocol)
                     Text(
-                        profile.protocol.uppercase(Locale.ROOT),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        "• " + profileEndpoint(profile, hideIp),
+                        profileHost(profile, hideIp),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        maxLines = 1, overflow = TextOverflow.Ellipsis
                     )
                 }
             }
-            Box(
-                Modifier
-                    .size(38.dp)
-                    .clickable { actions.composeProfileActions(profile.id) },
-                contentAlignment = Alignment.Center
-            ) {
-                Text("⋮", fontSize = 23.sp, color = MaterialTheme.colorScheme.primary)
+            ProfileOverflowButton(size = 34.dp, iconSize = 19) {
+                actions.composeProfileActions(profile.id)
             }
         }
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(9.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            LatencyCell(
-                label = activity.getString(R.string.compose_real_label),
-                latency = profile.realLatencyMs,
-                status = profile.realTestStatus,
-                modifier = Modifier.weight(1f)
-            )
+        LatencyCell(
+            label = activity.getString(R.string.compose_real_label),
+            latency = profile.realLatencyMs,
+            status = profile.realTestStatus,
+            modifier = Modifier.fillMaxWidth()
+        )
+        if (
+            profile.realTestStatus == TestStatus.TESTING
+        ) LinearProgressIndicator(Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
                 onClick = { actions.composePingProfile(profile.id, PingMethod.XRAY_HTTP) },
                 enabled = profile.realTestStatus != TestStatus.TESTING,
-                modifier = Modifier.height(46.dp).width(118.dp)
+                modifier = Modifier.weight(1f).height(40.dp).trivoxSpringPress(profile.realTestStatus != TestStatus.TESTING)
             ) {
                 TrivoxAutoFitButtonText(
-                    text = activity.getString(R.string.v37_profile_test),
+                    text = if (profile.realTestStatus == TestStatus.TESTING)
+                        "${activity.getString(R.string.compose_real_label)}…"
+                    else activity.getString(R.string.compose_test_real),
                     modifier = Modifier.fillMaxWidth(),
-                    maxFontSize = 13.sp,
+                    maxFontSize = 14.sp,
                     minFontSize = 8.sp
                 )
             }
-        }
-        if (profile.realTestStatus == TestStatus.TESTING) {
-            LinearProgressIndicator(Modifier.fillMaxWidth())
         }
         if (
             profile.exitCountry.isNotBlank() ||
             (!hideIp && profile.exitIp.isNotBlank())
         ) {
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    buildExitLine(profile, hideIp),
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Text(
+                buildExitLine(profile, hideIp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -1643,12 +1621,12 @@ private fun SubscriptionsTab(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            activity.getString(R.string.v37_community_feed),
+                            "@${settings.communityChannelUsername}",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            activity.getString(R.string.v37_community_feed_hint),
+                            activity.getString(R.string.v26_community_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 2,
@@ -1745,22 +1723,32 @@ private fun SubscriptionCard(
         shape = TrivoxOuterShape,
         border = BorderStroke(
             1.dp,
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.92f)
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.80f)
         ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Column(
-            Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(7.dp)
+            Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    modifier = Modifier.size(8.dp),
+                    shape = CircleShape,
+                    color = if (source.enabled) {
+                        MaterialTheme.colorScheme.secondary
+                    } else {
+                        MaterialTheme.colorScheme.outline
+                    }
+                ) {}
+                Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
                         source.name,
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -1789,11 +1777,9 @@ private fun SubscriptionCard(
                         fontWeight = FontWeight.Bold
                     )
                 }
-                Spacer(Modifier.width(4.dp))
-                TextButton(onClick = {
+                Spacer(Modifier.width(6.dp))
+                ProfileOverflowButton(size = 30.dp, iconSize = 17) {
                     actions.composeSubscriptionActions(source.id)
-                }) {
-                    Text("⋮", fontSize = 18.sp)
                 }
             }
 
@@ -1880,24 +1866,19 @@ private fun SettingsTab(
     )
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ConfigScopeChip(
     label: String,
     count: Int? = null,
     selected: Boolean,
     onClick: () -> Unit,
-    onLongClick: (() -> Unit)? = null,
-    onMore: (() -> Unit)? = null
+    onMenuClick: (() -> Unit)? = null
 ) {
     Surface(
         modifier = Modifier
             .animateContentSize()
             .trivoxSpringPress()
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick
-            ),
+            .clickable(onClick = onClick),
         shape = TrivoxInnerShape,
         color = if (selected) {
             MaterialTheme.colorScheme.secondaryContainer
@@ -1916,13 +1897,13 @@ private fun ConfigScopeChip(
         shadowElevation = 0.dp
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp),
+            modifier = Modifier.padding(start = 12.dp, end = 6.dp, top = 7.dp, bottom = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(
                 label,
-                modifier = Modifier.widthIn(min = 0.dp, max = 172.dp),
+                modifier = Modifier.widthIn(min = 0.dp, max = 150.dp),
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                 maxLines = 1,
@@ -1950,18 +1931,23 @@ private fun ConfigScopeChip(
                     )
                 }
             }
-            if (onMore != null) {
+            if (onMenuClick != null) {
                 Box(
                     modifier = Modifier
-                        .size(28.dp)
-                        .clickable(onClick = onMore),
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onMenuClick),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         "⋮",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.onSecondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
                     )
                 }
             }
@@ -2328,12 +2314,61 @@ private fun stateLabel(activity: Activity, state: ConnectionState): String = act
     }
 )
 
-private fun profileEndpoint(profile: ConfigProfile, hideIp: Boolean): String =
-    if (hideIp) {
-        profile.protocol.uppercase(Locale.ROOT)
-    } else {
-        "${profile.protocol.uppercase(Locale.ROOT)} • ${profile.server}:${profile.port}"
+private fun profileHost(profile: ConfigProfile, hideIp: Boolean): String =
+    if (hideIp) "••••" else "${profile.server}:${profile.port}"
+
+@Composable
+private fun protocolAccent(protocol: String): Color {
+    val key = protocol.lowercase(Locale.ROOT)
+    return when {
+        key.contains("vless") -> Color(0xFF56CFE1)
+        key.contains("vmess") -> Color(0xFF5DDEA2)
+        key.contains("trojan") -> Color(0xFFB9A3FF)
+        key.contains("ssr") -> Color(0xFFFFCA28)
+        key.contains("shadowsocks") || key == "ss" -> Color(0xFFFFA552)
+        key.contains("hysteria") || key.contains("hy2") -> Color(0xFFFF6E6E)
+        key.contains("tuic") -> Color(0xFFFF7EB6)
+        key.contains("wireguard") || key == "wg" -> Color(0xFF7DA6FF)
+        key.contains("ssh") -> Color(0xFF9AA7B4)
+        else -> MaterialTheme.colorScheme.primary
     }
+}
+
+@Composable
+private fun ProtocolBadge(protocol: String) {
+    val accent = protocolAccent(protocol)
+    Surface(
+        shape = CircleShape,
+        color = accent.copy(alpha = 0.16f),
+        contentColor = accent
+    ) {
+        Text(
+            protocol.uppercase(Locale.ROOT),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun ProfileOverflowButton(size: Dp, iconSize: Int, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            "⋮",
+            fontSize = iconSize.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
 
 private fun buildExitLine(profile: ConfigProfile, hideIp: Boolean): String =
     listOfNotNull(

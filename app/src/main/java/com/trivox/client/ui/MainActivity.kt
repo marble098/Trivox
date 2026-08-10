@@ -4172,8 +4172,55 @@ class MainActivity : ThemedActivity(), MainComposeActions {
         when (id) {
             "trivox-scope-all" -> showScopeActions(favoritesOnly = false)
             "trivox-scope-favorites" -> showScopeActions(favoritesOnly = true)
+            CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID -> showCommunityScopeActions()
             else -> showSubscriptionActions(id)
         }
+    }
+
+    /** Action sheet for the community chip: it has no row in SubscriptionRepository. */
+    private fun showCommunityScopeActions() {
+        val profiles = repository.all().filter {
+            it.subscriptionId == CommunityConfigManager.COMMUNITY_SUBSCRIPTION_ID
+        }
+        val settings = settingsRepository.load()
+        val labels = arrayOf(
+            getString(R.string.v15_subscription_update),
+            getString(R.string.v26_community_open),
+            getString(
+                if (settings.communitySourceEnabled) {
+                    R.string.v15_subscription_toggle_disable
+                } else {
+                    R.string.v15_subscription_toggle_enable
+                }
+            ),
+            getString(R.string.subscription_delete_all_profiles)
+        )
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.v26_community_section))
+            .setItems(labels) { _, which ->
+                when (which) {
+                    0 -> syncCommunityConfigs(
+                        silent = false,
+                        connectAfter = false,
+                        requireFresh = true
+                    )
+                    1 -> composeOpenCommunityChannel()
+                    2 -> {
+                        settingsRepository.save(
+                            settings.copy(
+                                communitySourceEnabled = !settings.communitySourceEnabled
+                            )
+                        )
+                        refresh()
+                    }
+                    3 -> confirmScopeCleanup(
+                        scopeName = getString(R.string.v26_community_section),
+                        profiles = profiles,
+                        title = labels[which]
+                    ) { true }
+                }
+            }
+            .show()
     }
 
     private fun showScopeActions(favoritesOnly: Boolean) {

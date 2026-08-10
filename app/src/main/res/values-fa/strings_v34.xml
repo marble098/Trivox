@@ -12,5 +12,5 @@
     <string name="v34_first_run_message">می‌توانید با حالت ساده برای ظاهر خلوت‌تر یا با حالت پیشرفته برای دسترسی کامل شروع کنید. بعداً از تنظیمات هم قابل تغییر است.</string>
     <string name="v34_choose_simple">شروع با حالت ساده</string>
     <string name="v34_choose_advanced">شروع با حالت پیشرفته</string>
-    <string name="v34_theme_hint">از این نسخه به بعد تم‌ها روی رنگ کارت‌ها، دکمه‌ها و بخش‌های تأکیدی هم اثر بیشتری می‌گذارند.</string>
+    <string name="v34_theme_hint">پالت رنگی و حالت روشن/تیره را از پایین انتخاب کنید.</string>
 </resources>

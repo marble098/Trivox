@@ -12,5 +12,5 @@
     <string name="v34_first_run_message">You can start with Simple mode for a cleaner layout or Advanced mode for full access. You can change this later in Settings.</string>
     <string name="v34_choose_simple">Use Simple mode</string>
     <string name="v34_choose_advanced">Use Advanced mode</string>
-    <string name="v34_theme_hint">Themes now affect more than the background, including cards, actions and emphasis colors.</string>
+    <string name="v34_theme_hint">Pick a color palette and light/dark mode below.</string>
 </resources>
