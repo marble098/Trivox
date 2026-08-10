@@ -14,6 +14,7 @@ class LeakProtectionManagerV21Test {
             vpnExitIp = null,
             underlyingIp = null,
             vpnDns = listOf("1.1.1.1"),
+            physicalDns = emptyList(),
             probeIncomplete = true
         )
 
@@ -29,7 +30,8 @@ class LeakProtectionManagerV21Test {
                 ipv6LeakRisk = false,
                 vpnExitIp = "203.0.113.10",
                 underlyingIp = "203.0.113.10",
-                vpnDns = emptyList()
+                vpnDns = emptyList(),
+                physicalDns = emptyList()
             ).hasLeak
         )
         assertTrue(
@@ -39,7 +41,8 @@ class LeakProtectionManagerV21Test {
                 ipv6LeakRisk = false,
                 vpnExitIp = "198.51.100.2",
                 underlyingIp = "203.0.113.2",
-                vpnDns = emptyList()
+                vpnDns = emptyList(),
+                physicalDns = emptyList()
             ).hasLeak
         )
     }
