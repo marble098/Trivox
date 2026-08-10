@@ -13,12 +13,16 @@ import org.json.JSONObject
 import java.io.File
 import java.net.ServerSocket
 import java.util.concurrent.Callable
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
 private const val BOOTSTRAP_RESOLVE_MAX_THREADS = 8
+private const val BOOTSTRAP_RESOLVE_TIMEOUT_MS = 1_500L
+private const val BOOTSTRAP_RESOLVE_WAIT_MS = 2_200L
+private const val POST_BATCH_STOP_SETTLE_MS = 80
 
 /**
  * Starts one bounded Xray process for a group of profiles. Each profile receives
@@ -92,6 +96,7 @@ internal class BatchRealDelayRunner(
         val logFile = File(workDir, "trivox-batch-real-${System.nanoTime()}.log")
         var started = false
         val delivered = HashSet<String>()
+        val batchFailures = ConcurrentHashMap<String, PingResult>()
 
         fun deliver(profile: ConfigProfile, result: PingResult) {
             synchronized(delivered) {
@@ -99,6 +104,9 @@ internal class BatchRealDelayRunner(
             }
             callback(profile, result)
         }
+
+        fun wasDelivered(profile: ConfigProfile): Boolean =
+            synchronized(delivered) { delivered.contains(profile.id) }
 
         try {
             val bootstrapIps = resolveBootstrapIps(profiles)
@@ -124,18 +132,88 @@ internal class BatchRealDelayRunner(
             try {
                 val futures = profiles.indices.map { index ->
                     executor.submit(Callable {
+                        val profile = profiles[index]
                         val result = measurePort(
                             settings = settings,
                             port = ports[index],
                             policy = policy
                         )
-                        deliver(profiles[index], result)
+                        if (result.success) {
+                            deliver(profile, result)
+                        } else {
+                            batchFailures[profile.id] = result
+                        }
                     })
                 }
                 waitFor(futures)
             } finally {
                 executor.shutdownNow()
                 executor.awaitTermination(1, TimeUnit.SECONDS)
+            }
+
+            /*
+             * Extreme false-negative rescue:
+             *
+             * A shared batch process is intentionally fast, but one congested
+             * route, a startup race, proxy-side DNS, or a shared-core quirk can
+             * still make a healthy profile miss every batch probe. Do not turn
+             * that transient miss into a red X. Stop the shared process first,
+             * then re-check only the would-be failures through the existing
+             * isolated single-profile Real Delay path. Passing profiles pay no
+             * extra cost; only failures get the slower compatibility proof.
+             */
+            val rescueCandidates = profiles.filterNot(::wasDelivered)
+            if (rescueCandidates.isNotEmpty() && !Thread.currentThread().isInterrupted) {
+                Diagnostics.info(
+                    "Real Delay isolated rescue for ${rescueCandidates.size}/${profiles.size} " +
+                        "would-be batch failures"
+                )
+            }
+
+            if (rescueCandidates.isNotEmpty() && started) {
+                val stopped = runCatching { core.stop().success }.getOrDefault(false)
+                if (stopped) {
+                    started = false
+                    waitCancellable(POST_BATCH_STOP_SETTLE_MS)
+                } else {
+                    Diagnostics.warning(
+                        "Batch Real Delay core did not stop cleanly before isolated rescue"
+                    )
+                }
+            }
+
+            rescueCandidates.forEach { profile ->
+                if (Thread.currentThread().isInterrupted) return@forEach
+
+                val batchFailure = batchFailures[profile.id]
+                    ?: failure(System.currentTimeMillis(), "verified_https_failed")
+
+                val isolated = if (!started) {
+                    runCatching { fallback(profile) }
+                        .onFailure {
+                            Diagnostics.warning(
+                                "Isolated Real Delay rescue failed for ${profile.id}: " +
+                                    "${it.message}"
+                            )
+                        }
+                        .getOrNull()
+                } else {
+                    null
+                }
+
+                if (isolated?.success == true) {
+                    deliver(profile, isolated)
+                } else {
+                    deliver(
+                        profile,
+                        batchFailure.copy(
+                            errorCategory =
+                                isolated?.errorCategory
+                                    ?.takeIf(String::isNotBlank)
+                                    ?: batchFailure.errorCategory
+                        )
+                    )
+                }
             }
         } catch (throwable: Throwable) {
             Diagnostics.recordThrowable("Batch verified Real Delay", throwable)
@@ -144,7 +222,7 @@ internal class BatchRealDelayRunner(
                 started = false
             }
             profiles.forEach { profile ->
-                if (!Thread.currentThread().isInterrupted) {
+                if (!Thread.currentThread().isInterrupted && !wasDelivered(profile)) {
                     deliver(profile, fallback(profile))
                 }
             }
@@ -180,16 +258,21 @@ internal class BatchRealDelayRunner(
         // Decoupled from policy.workers: DNS lookups are I/O-wait, not
         // CPU/bandwidth like the HTTP probes, so they can run with more
         // concurrency without competing with probe traffic for the device.
-        val executor = Executors.newFixedThreadPool(minOf(hosts.size, BOOTSTRAP_RESOLVE_MAX_THREADS))
+        val executor = Executors.newFixedThreadPool(
+            minOf(hosts.size, BOOTSTRAP_RESOLVE_MAX_THREADS)
+        )
         return try {
             val futures = hosts.map { host ->
                 host to executor.submit(Callable {
-                    EndpointBootstrapResolver.resolve(host, timeoutMs = 900L)
+                    EndpointBootstrapResolver.resolve(
+                        host,
+                        timeoutMs = BOOTSTRAP_RESOLVE_TIMEOUT_MS
+                    )
                 })
             }
             futures.associate { (host, future) ->
                 host to runCatching {
-                    future.get(1_500, TimeUnit.MILLISECONDS)
+                    future.get(BOOTSTRAP_RESOLVE_WAIT_MS, TimeUnit.MILLISECONDS)
                 }.getOrDefault(emptyList())
             }
         } finally {
@@ -359,7 +442,7 @@ internal class BatchRealDelayRunner(
         }
         if (Thread.currentThread().isInterrupted) return failure(timestamp, "cancelled")
 
-        // P2 Turbo rescue: only would-be failures pay alternate endpoint probes.
+        // Failure-only rescue: Turbo reaches a DNS-free trace first.
         if (
             policy.rescueTargets.isNotEmpty() &&
             tryTargets(policy.rescueTargets, policy.rescueProbeTimeoutMs)

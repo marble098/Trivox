@@ -1,6 +1,7 @@
 package com.trivox.client.network
 
 // TRIVOX_P2_TURBO_RESCUE
+// TRIVOX_EXTREME_REAL_ALL_V38
 
 import com.trivox.client.data.AppSettings
 import com.trivox.client.data.RealDelayProfile
@@ -21,12 +22,12 @@ internal data class RealDelayPolicy(
             total >= 160 -> copy(
                 groupSize = minOf(groupSize, 6),
                 workers = minOf(workers, 2),
-                startGraceMs = maxOf(startGraceMs, 100)
+                startGraceMs = maxOf(startGraceMs, 180)
             )
             total >= 64 -> copy(
                 groupSize = minOf(groupSize, 8),
                 workers = minOf(workers, 3),
-                startGraceMs = maxOf(startGraceMs, 90)
+                startGraceMs = maxOf(startGraceMs, 160)
             )
             else -> this
         }
@@ -34,41 +35,67 @@ internal data class RealDelayPolicy(
 
     companion object {
         fun from(settings: AppSettings): RealDelayPolicy {
+            val userTarget = VerifiedHttpProbe.targetForUserUrl(settings.testUrl)
             val allTargets = buildList {
-                VerifiedHttpProbe.targetForUserUrl(settings.testUrl)?.let(::add)
+                userTarget?.let(::add)
                 addAll(VerifiedHttpProbe.fallback204Targets)
                 addAll(VerifiedHttpProbe.dnsFreeTraceTargets)
             }.distinctBy { it.url }
+
+            /*
+             * Turbo keeps the configured URL as its fast first proof for
+             * compatibility, but its failure-only rescue starts with an
+             * IP-literal Cloudflare trace target. That makes the rescue
+             * independent from proxy-side DNS, which is a common reason a
+             * perfectly healthy config looks dead in a large Real All batch.
+             */
+            val turboRescueTargets = buildList {
+                add(VerifiedHttpProbe.strongTraceTarget)
+                addAll(VerifiedHttpProbe.dnsFreeTraceTargets.drop(1))
+                userTarget?.let(::add)
+                addAll(VerifiedHttpProbe.fallback204Targets)
+            }
+                .distinctBy { it.url }
+                .filterNot { candidate ->
+                    candidate.url == allTargets.firstOrNull()?.url
+                }
+
             return when (settings.realDelayProfile) {
                 RealDelayProfile.TURBO -> RealDelayPolicy(
-                    groupSize = 12,
-                    workers = 4,
-                    startGraceMs = 85,
-                    probeTimeoutMs = 2_600,
+                    groupSize = 10,
+                    workers = 3,
+                    startGraceMs = 220,
+                    probeTimeoutMs = 3_400,
                     targets = allTargets.take(1),
                     requiredProofs = 1,
-                    rescueTargets = allTargets.drop(1).take(2),
-                    rescueProbeTimeoutMs = 3_400
+                    rescueTargets = turboRescueTargets.take(4),
+                    rescueProbeTimeoutMs = 4_800
                 )
                 RealDelayProfile.BALANCED -> RealDelayPolicy(
                     groupSize = 8,
                     workers = 3,
-                    startGraceMs = 90,
-                    probeTimeoutMs = 3_600,
+                    startGraceMs = 120,
+                    probeTimeoutMs = 3_900,
                     targets = allTargets.take(2),
                     requiredProofs = 2,
-                    rescueTargets = allTargets.drop(2).take(1),
-                    rescueProbeTimeoutMs = 4_100
+                    rescueTargets = buildList {
+                        add(VerifiedHttpProbe.strongTraceTarget)
+                        addAll(allTargets.drop(2))
+                    }.distinctBy { it.url }.take(2),
+                    rescueProbeTimeoutMs = 4_600
                 )
                 RealDelayProfile.ACCURATE -> RealDelayPolicy(
                     groupSize = 6,
                     workers = 2,
-                    startGraceMs = 140,
-                    probeTimeoutMs = 5_000,
+                    startGraceMs = 180,
+                    probeTimeoutMs = 5_400,
                     targets = allTargets.take(3),
                     requiredProofs = 2,
-                    rescueTargets = allTargets.drop(3).take(1),
-                    rescueProbeTimeoutMs = 5_500
+                    rescueTargets = buildList {
+                        add(VerifiedHttpProbe.strongTraceTarget)
+                        addAll(allTargets.drop(3))
+                    }.distinctBy { it.url }.take(2),
+                    rescueProbeTimeoutMs = 6_000
                 )
                 RealDelayProfile.CUSTOM -> {
                     val count = settings.realDelayTargetCount.coerceIn(1, allTargets.size)
