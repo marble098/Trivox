@@ -19,6 +19,7 @@ class XrayConfigBuilderNetworkTuningV9Test {
                 "sockopt",
                 JSONObject().put("tcpKeepAliveIdle", 120)
             )
+
         val root = JSONObject(
             XrayConfigBuilder.build(
                 profile(outbound, "vless"),
@@ -41,8 +42,44 @@ class XrayConfigBuilderNetworkTuningV9Test {
         assertEquals(10, sockopt.getInt("tcpKeepAliveInterval"))
         assertEquals(18_000, sockopt.getInt("tcpUserTimeout"))
         assertTrue(sockopt.getBoolean("tcpFastOpen"))
-        assertEquals("UseIP", sockopt.getString("domainStrategy"))
-        assertEquals(2, sockopt.getJSONObject("happyEyeballs").getInt("maxConcurrentTry"))
+
+        /*
+         * P4 compatibility contract:
+         * Trivox must preserve an imported outbound's original DNS semantics.
+         * It must not invent UseIP/Happy-Eyeballs just because adaptive
+         * handshake is enabled.
+         */
+        assertFalse(sockopt.has("domainStrategy"))
+        assertFalse(sockopt.has("happyEyeballs"))
+    }
+
+    @Test
+    fun explicitProviderIpStrategyMayReceiveHappyEyeballsWithoutBeingOverwritten() {
+        val outbound = vlessOutbound()
+        outbound.getJSONObject("streamSettings")
+            .put(
+                "sockopt",
+                JSONObject().put("domainStrategy", "UseIPv4")
+            )
+
+        val root = JSONObject(
+            XrayConfigBuilder.build(
+                profile(outbound, "vless"),
+                AppSettings(adaptiveHandshake = true),
+                ConnectionMode.PROXY
+            )
+        )
+        val sockopt = root.getJSONArray("outbounds")
+            .getJSONObject(0)
+            .getJSONObject("streamSettings")
+            .getJSONObject("sockopt")
+
+        assertEquals("UseIPv4", sockopt.getString("domainStrategy"))
+        assertEquals(
+            2,
+            sockopt.getJSONObject("happyEyeballs")
+                .getInt("maxConcurrentTry")
+        )
     }
 
     @Test
@@ -63,6 +100,7 @@ class XrayConfigBuilderNetworkTuningV9Test {
         val stream = root.getJSONArray("outbounds")
             .getJSONObject(0)
             .getJSONObject("streamSettings")
+
         assertEquals("websocket", stream.getString("network"))
         assertFalse(stream.has("method"))
     }
@@ -86,6 +124,7 @@ class XrayConfigBuilderNetworkTuningV9Test {
                         )
                     )
             )
+
         val root = JSONObject(
             XrayConfigBuilder.build(
                 profile(outbound, "wireguard"),
@@ -151,7 +190,6 @@ class XrayConfigBuilderNetworkTuningV9Test {
         )
     }
 
-
     @Test
     fun hysteria2PortableAliasesArePromotedToCanonicalFields() {
         val outbound = JSONObject()
@@ -207,16 +245,25 @@ class XrayConfigBuilderNetworkTuningV9Test {
                             "users",
                             JSONArray().put(
                                 JSONObject()
-                                    .put("id", "00000000-0000-0000-0000-000000000000")
+                                    .put(
+                                        "id",
+                                        "00000000-0000-0000-0000-000000000000"
+                                    )
                                     .put("encryption", "none")
                             )
                         )
                 )
             )
         )
-        .put("streamSettings", JSONObject().put("network", "tcp"))
+        .put(
+            "streamSettings",
+            JSONObject().put("network", "tcp")
+        )
 
-    private fun profile(outbound: JSONObject, protocol: String) = ConfigProfile(
+    private fun profile(
+        outbound: JSONObject,
+        protocol: String
+    ) = ConfigProfile(
         name = "test",
         protocol = protocol,
         server = "example.com",

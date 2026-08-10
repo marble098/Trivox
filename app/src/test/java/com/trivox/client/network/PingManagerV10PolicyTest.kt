@@ -6,14 +6,15 @@ import com.trivox.client.core.CoreResult
 import com.trivox.client.data.AppSettings
 import com.trivox.client.data.ConfigProfile
 import org.json.JSONObject
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
 class PingManagerV10PolicyTest {
-    @Test fun realDelayNeverStopsOrReusesAnActiveLiveCore() {
+    @Test
+    fun realDelayNeverStopsOrReusesAnActiveLiveCore() {
         val adapter = object : CoreAdapter {
             override val id = "fake"
             override val capabilities = CoreCapabilities(
@@ -23,14 +24,18 @@ class PingManagerV10PolicyTest {
                 configValidation = true,
                 realDelayTest = true
             )
+
             override fun isAvailable() = true
             override fun version() = "test"
             override fun validate(configJson: String) = CoreResult(true)
+
             override fun start(
                 configJson: String,
                 protectSocket: ((Int) -> Boolean)?
             ) = error("must not start while a live core is active")
+
             override fun stop() = error("must not stop a live core")
+
             override fun state() = CoreResult(
                 true,
                 data = JSONObject().put(
@@ -38,12 +43,14 @@ class PingManagerV10PolicyTest {
                     JSONObject().put("running", true)
                 )
             )
+
             override fun realDelay(
                 configPath: String,
                 timeoutSeconds: Int,
                 url: String
             ) = error("native MeasureDelay is not a verified result")
         }
+
         val profile = ConfigProfile(
             name = "test",
             protocol = "vless",
@@ -52,6 +59,7 @@ class PingManagerV10PolicyTest {
             raw = "",
             outboundJson = "{}"
         )
+
         PingManager(adapter).use { manager ->
             val result = manager.realXray(
                 profile,
@@ -60,7 +68,7 @@ class PingManagerV10PolicyTest {
             )
             assertFalse(result.success)
             assertNull(result.latencyMs)
-            assertEquals("live_core_busy", result.errorCategory)
+            assertTrue(result.errorCategory == "live_core_busy")
         }
     }
 }
