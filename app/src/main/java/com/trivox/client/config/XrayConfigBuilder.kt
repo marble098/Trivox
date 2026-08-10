@@ -228,7 +228,7 @@ object XrayConfigBuilder {
         settings: AppSettings,
         allowAutomaticDnsStrategy: Boolean
     ) {
-        if (!settings.networkTuningEnabled && !settings.smartConnectionOptimizer) return
+        if (!settings.networkTuningEnabled) return
 
         val protocol = outbound.optString("protocol").lowercase()
         val stream = outbound.optJSONObject("streamSettings")
@@ -267,30 +267,17 @@ object XrayConfigBuilder {
         if (settings.tcpUserTimeoutMs > 0 && !sockopt.has("tcpUserTimeout")) {
             sockopt.put("tcpUserTimeout", settings.tcpUserTimeoutMs)
         }
-        if ((settings.adaptiveHandshake || settings.smartConnectionOptimizer) &&
-            !sockopt.has("happyEyeballs")) {
+        if (settings.adaptiveHandshake && !sockopt.has("happyEyeballs")) {
             val hasDialerProxy = sockopt.optString("dialerProxy").isNotBlank()
             val hasTargetStrategy = outbound.optString("targetStrategy").isNotBlank()
-            var domainStrategy = sockopt.optString("domainStrategy").trim()
+            val domainStrategy = sockopt.optString("domainStrategy").trim()
 
             /*
-             * Happy Eyeballs only works when the proxy endpoint is resolved by
-             * Sockopt. For a normal single profile we can safely select UseIP,
-             * because dns() installs a narrowly-scoped local bootstrap for that
-             * endpoint. Proxy chains are deliberately excluded from automatic
-             * resolution: each hop can have a different hostname, and forcing
-             * the wrong resolver path can create a DNS-via-proxy loop.
+             * Compatibility rule: never invent an IP-resolution strategy for an
+             * imported proxy. CDN/domain-fronted profiles can rely on Xray's
+             * original AsIs semantics. Happy Eyeballs is added only when the
+             * source configuration already opted into a compatible IP strategy.
              */
-            if (
-                domainStrategy.isBlank() &&
-                allowAutomaticDnsStrategy &&
-                !hasDialerProxy &&
-                !hasTargetStrategy
-            ) {
-                domainStrategy = "UseIP"
-                sockopt.put("domainStrategy", domainStrategy)
-            }
-
             if (
                 domainStrategy.isNotBlank() &&
                 !domainStrategy.equals("AsIs", ignoreCase = true) &&
@@ -756,10 +743,9 @@ object XrayConfigBuilder {
             ?.let { host ->
                 val domains = JSONArray().put("full:$host")
                 listOf(
+                    "localhost",
                     "tcp+local://1.1.1.1:53",
-                    "tcp+local://8.8.8.8:53",
-                    "https+local://1.1.1.1/dns-query",
-                    "https+local://8.8.8.8/dns-query"
+                    "tcp+local://8.8.8.8:53"
                 ).map { address ->
                     JSONObject()
                         .put("address", address)

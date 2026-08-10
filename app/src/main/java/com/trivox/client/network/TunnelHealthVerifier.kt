@@ -55,15 +55,11 @@ object TunnelHealthVerifier {
         val samples = mutableListOf<Long>()
         var lastFailure = "tunnel_timeout"
         val targets = buildList {
-            addAll(VerifiedHttpProbe.dnsFreeTraceTargets)
             if (dnsFallbackTargets) {
-                VerifiedHttpProbe.targetForUserUrl(settings.testUrl)
-                    ?.takeUnless { candidate ->
-                        VerifiedHttpProbe.dnsFreeTraceTargets.any { it.url == candidate.url }
-                    }
-                    ?.let(::add)
+                VerifiedHttpProbe.targetForUserUrl(settings.testUrl)?.let(::add)
                 addAll(VerifiedHttpProbe.fallback204Targets)
             }
+            addAll(VerifiedHttpProbe.dnsFreeTraceTargets)
         }.distinctBy { it.url }
         val targetLimit = (attempts.coerceIn(2, 3) + 2).coerceAtMost(targets.size)
 

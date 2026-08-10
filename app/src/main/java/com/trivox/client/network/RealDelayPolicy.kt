@@ -34,9 +34,11 @@ internal data class RealDelayPolicy(
 
     companion object {
         fun from(settings: AppSettings): RealDelayPolicy {
-            val allTargets = (
-                listOf(VerifiedHttpProbe.strongTraceTarget) + VerifiedHttpProbe.fallback204Targets
-            ).distinctBy { it.url }
+            val allTargets = buildList {
+                VerifiedHttpProbe.targetForUserUrl(settings.testUrl)?.let(::add)
+                addAll(VerifiedHttpProbe.fallback204Targets)
+                addAll(VerifiedHttpProbe.dnsFreeTraceTargets)
+            }.distinctBy { it.url }
             return when (settings.realDelayProfile) {
                 RealDelayProfile.TURBO -> RealDelayPolicy(
                     groupSize = 12,

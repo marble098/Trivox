@@ -134,7 +134,11 @@ class PingManager(
                 profile = profile,
                 settings = probeSettings,
                 mode = ConnectionMode.PROXY,
-                errorLogPath = logFile.absolutePath
+                errorLogPath = logFile.absolutePath,
+                bootstrapIps = EndpointBootstrapResolver.resolve(
+                    profile.server,
+                    timeoutMs = 900L
+                )
             )
             configFile.writeText(config, Charsets.UTF_8)
 
@@ -283,34 +287,45 @@ class PingManager(
         val samples = mutableListOf<Long>()
         var lastFailure = "verified_https_failed"
         var acceptedTarget: String? = null
+        val perProbeTimeoutMs = (
+            timeoutMs / targets.size.coerceAtLeast(1)
+        ).coerceIn(MIN_COMPAT_PROBE_TIMEOUT_MS, timeoutMs)
 
         for (sampleIndex in 0 until count) {
             if (Thread.currentThread().isInterrupted) {
                 return cancelled(PingMethod.XRAY_HTTP.name, timestamp)
             }
-            val target = targets[(sampleIndex % targets.size)]
+
             var accepted = false
-            for (route in listOf(
-                VerifiedHttpProbe.Route.HTTP_PROXY,
-                VerifiedHttpProbe.Route.SOCKS_PROXY
-            )) {
-                val probe = VerifiedHttpProbe.probe(
-                    settings = settings,
-                    route = route,
-                    target = target,
-                    timeoutMs = timeoutMs,
-                    nonce = timestamp + sampleIndex
-                )
-                if (probe.success && probe.latencyMs != null) {
-                    samples += probe.latencyMs * NANOS_PER_MILLISECOND
-                    acceptedTarget = probe.target
-                    preferredLocalProxyTarget.set(probe.target)
-                    accepted = true
-                    break
+            for (targetOffset in targets.indices) {
+                val target = targets[(sampleIndex + targetOffset) % targets.size]
+                for (route in listOf(
+                    VerifiedHttpProbe.Route.SOCKS_PROXY,
+                    VerifiedHttpProbe.Route.HTTP_PROXY
+                )) {
+                    val probe = VerifiedHttpProbe.probe(
+                        settings = settings,
+                        route = route,
+                        target = target,
+                        timeoutMs = perProbeTimeoutMs,
+                        nonce = timestamp + sampleIndex * 17L + targetOffset
+                    )
+                    if (probe.success && probe.latencyMs != null) {
+                        samples += probe.latencyMs * NANOS_PER_MILLISECOND
+                        acceptedTarget = probe.target
+                        preferredLocalProxyTarget.set(probe.target)
+                        accepted = true
+                        break
+                    }
+                    lastFailure = probe.errorCategory ?: lastFailure
                 }
-                lastFailure = probe.errorCategory ?: lastFailure
+                if (accepted) break
             }
-            if (!accepted && samples.size + (count - sampleIndex - 1) < requiredSamples(count)) {
+
+            if (
+                !accepted &&
+                samples.size + (count - sampleIndex - 1) < requiredSamples(count)
+            ) {
                 break
             }
         }
@@ -336,9 +351,9 @@ class PingManager(
             preferredLocalProxyTarget.get()
                 ?.let(VerifiedHttpProbe::targetForUserUrl)
                 ?.let(::add)
-            add(VerifiedHttpProbe.strongTraceTarget)
             VerifiedHttpProbe.targetForUserUrl(requestedUrl)?.let(::add)
             addAll(VerifiedHttpProbe.fallback204Targets)
+            addAll(VerifiedHttpProbe.dnsFreeTraceTargets)
         }.distinctBy { it.url }
 
     fun tlsHandshake(
@@ -733,6 +748,7 @@ class PingManager(
         private const val BATCH_XRAY_MAX_TARGETS = 2
         private const val MAX_HTTP_TARGETS_PER_SAMPLE = 4
         private const val PROBE_START_GRACE_MS = 90
+        private const val MIN_COMPAT_PROBE_TIMEOUT_MS = 1_200
         private const val WIREGUARD_PROBE_START_GRACE_MS = 220
         private const val NANOS_PER_MILLISECOND = 1_000_000L
         /* Retained as a documented compatibility pool for diagnostics/audits. */

@@ -171,25 +171,51 @@ class CoreManager(context: Context) {
             settings = request.settings,
             mode = request.mode
         )
+        /*
+         * Compatibility-first startup: Android VPN verification is deliberately
+         * bounded. A healthy Xray transport may need the first real application
+         * request before a public health endpoint becomes reachable.
+         */
+        val verificationAttempts = if (request.mode == ConnectionMode.VPN) {
+            minOf(plan.attempts, 2)
+        } else {
+            plan.attempts
+        }
+        val verificationBudgetMs = if (request.mode == ConnectionMode.VPN) {
+            minOf(plan.budgetMs, VPN_VERIFICATION_BUDGET_MS)
+        } else {
+            plan.budgetMs
+        }
+        val verificationProbeTimeoutMs = if (request.mode == ConnectionMode.VPN) {
+            minOf(plan.perProbeTimeoutMs, VPN_VERIFICATION_PROBE_TIMEOUT_MS)
+        } else {
+            plan.perProbeTimeoutMs
+        }
+        val verificationInitialDelayMs = if (request.mode == ConnectionMode.VPN) {
+            minOf(plan.initialDelayMs, VPN_VERIFICATION_GRACE_MS)
+        } else {
+            plan.initialDelayMs
+        }
         Diagnostics.debug(
             "Smart connection verification: ${plan.strategy}; " +
-                "attempts=${plan.attempts}; budget=${plan.budgetMs}"
+                "attempts=$verificationAttempts; budget=$verificationBudgetMs"
         )
         var health = TunnelHealthVerifier.measure(
             settings = request.settings,
             mode = request.mode,
-            attempts = plan.attempts,
-            budgetMs = plan.budgetMs,
-            perProbeTimeoutMs = plan.perProbeTimeoutMs,
-            initialDelayMs = plan.initialDelayMs,
+            attempts = verificationAttempts,
+            budgetMs = verificationBudgetMs,
+            perProbeTimeoutMs = verificationProbeTimeoutMs,
+            initialDelayMs = verificationInitialDelayMs,
             isCancelled = isCancelled,
             hardFailure = {
                 XrayProbeLogInspector.classifySince(logMark)
-                    ?.takeIf(::isImmediateTransportFailure)
+                    ?.takeIf(::isDefinitiveTransportFailure)
             }
         )
 
         if (
+            request.mode != ConnectionMode.VPN &&
             !health.success &&
             !isCancelled() &&
             isRunning() &&
@@ -209,7 +235,7 @@ class CoreManager(context: Context) {
                 isCancelled = isCancelled,
                 hardFailure = {
                     XrayProbeLogInspector.classifySince(logMark)
-                        ?.takeIf(::isImmediateTransportFailure)
+                        ?.takeIf(::isDefinitiveTransportFailure)
                 },
                 dnsFallbackTargets = false
             )
@@ -240,26 +266,54 @@ class CoreManager(context: Context) {
             return started
         }
 
+        val logCategory = XrayProbeLogInspector.classifySince(logMark)
+        val definitiveCategory = sequenceOf(logCategory, health.errorCategory)
+            .filterNotNull()
+            .map { it.lowercase() }
+            .firstOrNull(::isDefinitiveTransportFailure)
+
+        /*
+         * VPN compatibility rule:
+         * timeout/reset/WS probe races/DNS probe failures are not enough evidence
+         * to destroy a running Xray process. Those failures can be specific to
+         * the public verification target rather than the selected proxy itself.
+         */
+        if (
+            request.mode == ConnectionMode.VPN &&
+            definitiveCategory == null &&
+            isRunning()
+        ) {
+            Diagnostics.warning(
+                "Live-route verification was inconclusive (" +
+                    "${health.errorCategory.orEmpty()}); Xray is still running, " +
+                    "so the VPN session is accepted provisionally."
+            )
+            return started
+        }
+
         stopAfterRejectedStart()
 
-        val category = health.errorCategory
-            ?.takeIf(String::isNotBlank)
-            ?.let { " ($it)" }
-            .orEmpty()
+        val effectiveCategory = definitiveCategory
+            ?: health.errorCategory
+            ?: logCategory
+            ?: "core_not_running"
+        val category = " ($effectiveCategory)"
         val route = if (request.mode == ConnectionMode.VPN) {
             "Android VPN route"
         } else {
             "local proxy route"
         }
         val protocol = request.profile.protocol.uppercase()
-        val error =
-            "$protocol core started, but no verified HTTPS traffic crossed the " +
-                "$route$category. Real Delay is a ranking test and cannot " +
-                "guarantee that the live route is usable."
+        val error = if (definitiveCategory != null) {
+            "$protocol startup rejected by a definitive transport/config error " +
+                "on the $route$category."
+        } else {
+            "$protocol core stopped before the $route became usable$category."
+        }
         SmartConnectionOptimizer.recordOutcome(
             profile = request.profile,
             success = false,
-            errorCategory = health.errorCategory
+            errorCategory = effectiveCategory
         )
         return CoreResult(false, error)
     }
@@ -272,14 +326,13 @@ class CoreManager(context: Context) {
             "dns_failure", "dns_pipe_closed", "timeout"
         )
 
-    private fun isImmediateTransportFailure(category: String): Boolean =
-        category in setOf(
+    private fun isDefinitiveTransportFailure(category: String): Boolean =
+        category.lowercase() in setOf(
             "reality_mismatch",
-            "websocket_handshake",
             "authentication_failed",
+            "invalid_credentials",
             "tls_certificate",
-            "invalid_xray_config",
-            "connection_refused"
+            "invalid_xray_config"
         )
 
     private fun stopAfterRejectedStart() {
@@ -318,6 +371,9 @@ class CoreManager(context: Context) {
         )
 
     companion object {
+        private const val VPN_VERIFICATION_BUDGET_MS = 3_200
+        private const val VPN_VERIFICATION_PROBE_TIMEOUT_MS = 1_500
+        private const val VPN_VERIFICATION_GRACE_MS = 160
         private const val TRANSIENT_RETRY_BUDGET_MS = 4_200
         private const val TRANSIENT_RETRY_PROBE_TIMEOUT_MS = 1_900
         private const val TRANSIENT_RETRY_GRACE_MS = 260
