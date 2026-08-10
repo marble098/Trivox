@@ -41,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
@@ -483,12 +484,16 @@ internal fun UnifiedSettingsScreen(
                     onClick = actions::composeCommunitySync,
                     enabled = settings.communitySourceEnabled &&
                         !actions.composeCommunitySyncBusy(),
+                    shape = TrivoxUiTokens.buttonShape,
+                    contentPadding = TrivoxUiTokens.buttonContentPadding,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(activity.getString(R.string.v26_community_sync))
                 }
                 OutlinedButton(
                     onClick = actions::composeOpenCommunityChannel,
+                    shape = TrivoxUiTokens.buttonShape,
+                    contentPadding = TrivoxUiTokens.buttonContentPadding,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(activity.getString(R.string.v26_community_open))
@@ -513,6 +518,8 @@ internal fun UnifiedSettingsScreen(
                 }
                 OutlinedButton(
                     onClick = actions::composeCheckForUpdates,
+                    shape = TrivoxUiTokens.buttonShape,
+                    contentPadding = TrivoxUiTokens.buttonContentPadding,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(activity.getString(R.string.v15_check_update))
@@ -628,12 +635,16 @@ internal fun SimpleSettingsScreen(
                 OutlinedButton(
                     onClick = actions::composeCommunitySync,
                     enabled = settings.communitySourceEnabled && !actions.composeCommunitySyncBusy(),
+                    shape = TrivoxUiTokens.buttonShape,
+                    contentPadding = TrivoxUiTokens.buttonContentPadding,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(activity.getString(R.string.v26_community_sync))
                 }
                 OutlinedButton(
                     onClick = actions::composeOpenCommunityChannel,
+                    shape = TrivoxUiTokens.buttonShape,
+                    contentPadding = TrivoxUiTokens.buttonContentPadding,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(activity.getString(R.string.v26_community_open))
@@ -658,6 +669,8 @@ internal fun SimpleSettingsScreen(
                 }
                 OutlinedButton(
                     onClick = actions::composeCheckForUpdates,
+                    shape = TrivoxUiTokens.buttonShape,
+                    contentPadding = TrivoxUiTokens.buttonContentPadding,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(activity.getString(R.string.v15_check_update))
@@ -677,6 +690,8 @@ internal fun SimpleSettingsScreen(
                 onClick = {
                     actions.composeSaveSettings(settings.copy(experienceMode = ExperienceMode.ADVANCED))
                 },
+                shape = TrivoxUiTokens.buttonShape,
+                contentPadding = TrivoxUiTokens.buttonContentPadding,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(activity.getString(R.string.v37_switch_to_advanced))
@@ -795,8 +810,9 @@ private fun BooleanSetting(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(TrivoxCompactShape)
             .clickable { onCheckedChange(!checked) }
-            .padding(vertical = 2.dp),
+            .padding(vertical = 10.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(

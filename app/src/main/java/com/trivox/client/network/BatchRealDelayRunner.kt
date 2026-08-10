@@ -18,6 +18,8 @@ import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
+private const val BOOTSTRAP_RESOLVE_MAX_THREADS = 8
+
 /**
  * Starts one bounded Xray process for a group of profiles. Each profile receives
  * an isolated localhost SOCKS inbound and an inboundTag -> outboundTag route.
@@ -99,7 +101,8 @@ internal class BatchRealDelayRunner(
         }
 
         try {
-            val config = buildConfig(profiles, ports, settings, logFile)
+            val bootstrapIps = resolveBootstrapIps(profiles)
+            val config = buildConfig(profiles, ports, settings, logFile, bootstrapIps)
             val validation = core.validate(config)
             if (!validation.success) {
                 profiles.forEach { deliver(it, fallback(it)) }
@@ -158,11 +161,48 @@ internal class BatchRealDelayRunner(
         }
     }
 
+    /**
+     * Pre-resolves each profile's hostname before Xray starts, mirroring the
+     * single-profile Real Delay path. Without this, hostname-based profiles in
+     * a batch depend on a live DNS-over-TCP lookup inside the shared Xray
+     * process at connect time; under the tight Turbo probe budget that extra
+     * round trip is enough to time out configs that are otherwise healthy.
+     * EndpointBootstrapResolver caches per host and returns instantly for IP
+     * literals, so resolving in parallel here costs about one lookup's worth
+     * of wall time for the whole group, not one per profile.
+     */
+    private fun resolveBootstrapIps(
+        profiles: List<ConfigProfile>
+    ): Map<String, List<String>> {
+        val hosts = profiles.map { it.server }.distinct()
+        if (hosts.isEmpty()) return emptyMap()
+
+        // Decoupled from policy.workers: DNS lookups are I/O-wait, not
+        // CPU/bandwidth like the HTTP probes, so they can run with more
+        // concurrency without competing with probe traffic for the device.
+        val executor = Executors.newFixedThreadPool(minOf(hosts.size, BOOTSTRAP_RESOLVE_MAX_THREADS))
+        return try {
+            val futures = hosts.map { host ->
+                host to executor.submit(Callable {
+                    EndpointBootstrapResolver.resolve(host, timeoutMs = 900L)
+                })
+            }
+            futures.associate { (host, future) ->
+                host to runCatching {
+                    future.get(1_500, TimeUnit.MILLISECONDS)
+                }.getOrDefault(emptyList())
+            }
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
     private fun buildConfig(
         profiles: List<ConfigProfile>,
         ports: List<Int>,
         settings: AppSettings,
-        logFile: File
+        logFile: File,
+        bootstrapIps: Map<String, List<String>>
     ): String {
         val inbounds = JSONArray()
         val outbounds = JSONArray()
@@ -180,7 +220,8 @@ internal class BatchRealDelayRunner(
                     profile = profile,
                     settings = settings.copy().normalize(),
                     mode = ConnectionMode.PROXY,
-                    errorLogPath = logFile.absolutePath
+                    errorLogPath = logFile.absolutePath,
+                    bootstrapIps = bootstrapIps[profile.server].orEmpty()
                 )
             )
             built.optJSONObject("dns")?.let { dns ->

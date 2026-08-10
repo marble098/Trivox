@@ -202,6 +202,8 @@ internal object TrivoxUiTokens {
     val pagePadding = 14.dp
     val groupSpacing = 14.dp
     val rowSpacing = 10.dp
+    val buttonShape: Shape = TrivoxInnerShape
+    val buttonContentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)
     val systemBlueLight = Color(0xFF007AFF)
     val systemBlueDark = Color(0xFF0A84FF)
     val systemGreenLight = Color(0xFF34C759)
@@ -534,10 +536,10 @@ internal fun TrivoxLargeTopBar(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .padding(
-                        start = if (onBack == null) 20.dp else 100.dp,
-                        end = 20.dp,
-                        top = 3.dp,
-                        bottom = 5.dp
+                        start = if (onBack == null) 24.dp else 104.dp,
+                        end = 24.dp,
+                        top = 4.dp,
+                        bottom = 4.dp
                     )
                     .graphicsLayer {
                         alpha =
