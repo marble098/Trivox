@@ -346,6 +346,7 @@ data class AppSettings(
     var hideIpOnMain: Boolean = false,
     var homeShowModeSelector: Boolean = true,
     var homeShowUsage: Boolean = true,
+    var homeShowConnectionDetails: Boolean = true,
     var homeShowMap: Boolean = true,
     var homeShowNetwork: Boolean = true,
     var homeShowLeakGuard: Boolean = true,
@@ -464,6 +465,7 @@ data class AppSettings(
         .put("hideIpOnMain", hideIpOnMain)
         .put("homeShowModeSelector", homeShowModeSelector)
         .put("homeShowUsage", homeShowUsage)
+        .put("homeShowConnectionDetails", homeShowConnectionDetails)
         .put("homeShowMap", homeShowMap)
         .put("homeShowNetwork", homeShowNetwork)
         .put("homeShowLeakGuard", homeShowLeakGuard)
@@ -563,6 +565,8 @@ data class AppSettings(
                 hideIpOnMain = json.optBoolean("hideIpOnMain", false),
                 homeShowModeSelector = json.optBoolean("homeShowModeSelector", true),
                 homeShowUsage = json.optBoolean("homeShowUsage", true),
+                homeShowConnectionDetails =
+                    json.optBoolean("homeShowConnectionDetails", true),
                 homeShowMap = json.optBoolean("homeShowMap", true),
                 homeShowNetwork = json.optBoolean("homeShowNetwork", true),
                 homeShowLeakGuard = json.optBoolean("homeShowLeakGuard", true),
