@@ -1,25 +1,24 @@
 # Trivox community mirror
 # channel=@farahvpn
-# generated_at=2026-08-17T12:47:31+00:00
+# generated_at=2026-08-17T13:27:17+00:00
 # source_route=telegram
-# count=20
-trojan://ND91608427@intimate-moray.rooster465.autos:443?allowInsecure=1&sni=intimate-moray.rooster465.autos#
-vmess://eyJhZGQiOiIxNjUuMTQwLjIxNi4xNDIiLCJhaWQiOiIwIiwiaWQiOiJiNjVhMmQ2OS01NjM0LTQyYTItZTRiZS01NGU4YTYxNzY5MDAiLCJuZXQiOiJ0Y3AiLCJwb3J0IjoiNDQzIiwicHMiOiJcdWQ4M2NcdWRkZmFcdWQ4M2NcdWRkZjggSm9pbitUZWxlZ3JhbTpARmFyYWhWUE4gXHVkODNjXHVkZGZhXHVkODNjXHVkZGY4Iiwic2N5IjoiYXV0byIsInNraXAtY2VydC12ZXJpZnkiOnRydWUsInRscyI6IiIsInR5cGUiOiIiLCJ2IjoiMiJ9
-vless://9206ae06-88ee-49b1-a558-531ade80fcaa@178.128.112.70:443?security=reality&encryption=none&pbk=-O8QFkqeMAc6TzQp6eY1s38my_8jhBd7HDHxNki6QlY&headerType=none&fp=chrome&spx=/&type=tcp&flow=xtls-rprx-vision&sni=www.amazon.com&sid=7f7f#
-ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpvWklvQTY5UTh5aGNRVjhrYTNQYTNB@82.38.31.35:8080#
-vless://607801ac-dbdd-4938-a167-129015d9978e@91.192.81.214:443?encryption=none&flow=xtls-rprx-vision&fp=chrome&pbk=bMcyxNueltQhz5Kuxcf8odDStWHowYfLhKNdCbUweDc&security=reality&sid=d1742269&sni=www.cloudflare.com&type=tcp#
-vless://22696950-587f-42c0-af24-c1ffab17d0cd@91.197.3.43:52463?security=reality&encryption=none&pbk=zOv4BhJVbINHdcULln0vQ_6sxKiGjJPj4uyMttX9pWo&headerType=none&fp=random&spx=%2F&type=tcp&sni=yahoo.com&sid=cdaed92e1d0c#
-vless://77777777-8a3e-6666-b6d1-a9c5f0e8b3a2@cf.9999669.xyz:2087?&security=tls&sni=fgnix832fx.fx6hsv0.ccwu.cc&type=ws&headerType=none&host=fgnix832fx.fx6hsv0.ccwu.cc&path=%2F#
-ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpQV3BqUG8zdHFoUE40eVJa@8.209.74.72:20001#
-vmess://eyJhZGQiOiIxMzQuMTk1LjE5Ni4yMTEiLCJhaWQiOiIwIiwiYWxwbiI6IiIsImZwIjoiIiwiaG9zdCI6IiIsImlkIjoiZjhjOGRjM2QtMGQzNy00NmIwLThiMzQtYTcyMzI4ODJmY2ZlIiwiaW5zZWN1cmUiOiIwIiwibmV0IjoidGNwIiwicGF0aCI6IiIsInBvcnQiOiIxODAwMCIsInBzIjoiXHVkODNjXHVkZGU4XHVkODNjXHVkZGU2IEpvaW4rVGVsZWdyYW06QEZhcmFoVlBOIFx1ZDgzY1x1ZGRlOFx1ZDgzY1x1ZGRlNiIsInNjeSI6ImF1dG8iLCJzbmkiOiIiLCJ0bHMiOiIiLCJ0eXBlIjoibm9uZSIsInYiOiIyIiwic2tpcC1jZXJ0LXZlcmlmeSI6dHJ1ZX0=
-ss://YWVzLTI1Ni1nY206WEtGS2wyclVMaklwNzQ@185.226.172.8:8008#
-vless://4b00d726-e072-429b-997e-f07affea3b7f@162.159.81.104:80?type=ws&host=icy-darkness-8ff1.farzambia12mo.workers.dev&path=/eyJqdW5rIjoiUEVTdDRlR2hhc0JuYyIsInByb3RvY29sIjoidmwiLCJtb2RlIjoicHJlZml4IiwicGFuZWxJUHMiOlsiWzI2MDI6ZmM1OTpiMDo2NDo6XSJdfQ==?ed=2560#
-vless://28d0edc6-93c9-4465-bac9-720274d8b8c4@status.netraidly.ru:40443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=deepl.com&fp=qq&pbk=WRveYv8IuUyvai4jgnQ6nWCL971-wKboe8evES5arlg&sid=69d4&type=tcp&headerType=none#
-trojan://AE62539071@13.229.94.200:443?security=tls&insecure=0&headerType=none&fp=chrome&type=tcp&allowInsecure=0&sni=massive-terrapin.rooster465.autos#
-trojan://FH72359861@worthy-perch.rooster465.autos:443?allowInsecure=1#
-vless://fbb74aa8-b89a-4f20-9504-6b25aadf6681@132.243.223.88:443?security=reality&encryption=none&pbk=bZpzmeWiEJyJQy0W2hHc34Nr6BuFXj1UDd80Cbwh1Fk&headerType=none&fp=firefox&type=tcp&flow=xtls-rprx-vision&sni=fin2.freeinternat.com&sid=ff776ff77be48b88#
-vless://e99ba96d-dec8-42eb-be53-19e71eef7cab@5.253.42.164:40443?type=tcp&security=reality&encryption=none&flow=xtls-rprx-vision&fp=firefox&pbk=g77ZJbm18JEotapmVRjaXi133MzkbhkU2lxhVeXx8zw&sid=68a8&sni=deepl.com#
-vmess://eyJhZGQiOiIxMDQuMTcuNzcuNzciLCJhaWQiOiIwIiwiYWxwbiI6IiIsImZwIjoiIiwiaG9zdCI6InYycmF5MS5kb3phcHAueHl6IiwiaWQiOiI2MDQ0MTU0OC1iNjhlLTQzYjItODE5MS1lM2I4ODRiZTRiM2MiLCJuZXQiOiJ3cyIsInBhdGgiOiIvbE1uc1pVTjQvIiwicG9ydCI6Ijg0NDMiLCJwcyI6Ilx1ZDgzY1x1ZGRmYVx1ZDgzY1x1ZGRmOCBKb2luK1RlbGVncmFtOkBGYXJhaFZQTiBcdWQ4M2NcdWRkZmFcdWQ4M2NcdWRkZjgiLCJzY3kiOiJhdXRvIiwic25pIjoidjJyYXkxLmRvemFwcC54eXoiLCJ0bHMiOiJ0bHMiLCJ0eXBlIjoiIiwidiI6IjIiLCJza2lwLWNlcnQtdmVyaWZ5Ijp0cnVlfQ==
-trojan://FH72359861@natural-swan.rooster465.autos:443?allowInsecure=1#
-ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTprMWRCT21PQjRvcWk3VW1wMzdhMWJR@82.38.31.214:8080#
-vless://47a97b7f-044d-43d6-86b0-8b256873d1b5@45.121.50.241:50159?encryption=none&type=tcp&flow=xtls-rprx-vision&security=reality&sni=www.cloudflare.com&fp=chrome&pbk=E9gCs_C_mSDcHmlCZSMk1kSXpmua48DhgsT_aDpZ1WE&sid=4c3f80051030ba1b&allowInsecure=1#
+# count=19
+vless://d65cc14c-f53f-4fe2-b262-97856601319c@169.40.42.15:443?security=reality&encryption=none&pbk=e2RLf57Li_-MDZGE9ss1BWPgP54mqRb5PfXhW2jcVVg&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=yahoo.com&sid=c39cc7310a#
+vmess://eyJ2IjoiMiIsInBzIjoiXHVkODNjXHVkZGVkXHVkODNjXHVkZGYwIEpvaW4rVGVsZWdyYW06QEZhcmFoVlBOIFx1ZDgzY1x1ZGRlZFx1ZDgzY1x1ZGRmMCIsImFkZCI6Imxjdjh2OWw3b3lhbXh4Znoudi4zZG5zLnZpcCIsInBvcnQiOjQ0MywiYWlkIjowLCJzY3kiOiJhdXRvIiwibmV0Ijoid3MiLCJ0eXBlIjoibm9uZSIsInRscyI6InRscyIsImlkIjoiZjIzYmI0MjdjMWY5NDM3Mzg3NmMyZjQzZTlmNzkwZjMiLCJzbmkiOiJsY3Y4djlsN095YW14eGZaLnYuM2Rucy52aXAiLCJob3N0IjoibGN2OHY5bDdPeWFteHhmWi52LjNkbnMudmlwIiwicGF0aCI6Ii93cy12bWVzcyIsInNraXAtY2VydC12ZXJpZnkiOnRydWV9
+vmess://eyJ2IjoiMiIsInBzIjoiXHVkODNjXHVkZGVkXHVkODNjXHVkZGYwIEpvaW4rVGVsZWdyYW06QEZhcmFoVlBOIFx1ZDgzY1x1ZGRlZFx1ZDgzY1x1ZGRmMCIsImFkZCI6IjE1Ni4yNDUuMjMyLjIzOSIsInBvcnQiOiIzNTA0MyIsInR5cGUiOiJub25lIiwiaWQiOiJiMTVlNDgxZC0xN2U0LTQxYTgtODRjMi0yM2Q0ZjA1MTRkOWEiLCJhaWQiOiIwIiwibmV0Ijoid3MiLCJwYXRoIjoiLyIsImhvc3QiOiIiLCJ0bHMiOiIiLCJza2lwLWNlcnQtdmVyaWZ5Ijp0cnVlfQ==
+vless://a6f1755f-0140-4bea-8727-0db1bed7c4df@104.17.156.197:443?allowInsecure=1&encryption=none&host=juzi.qea.ccwu.cc&path=%2F&security=tls&sni=juzi.qea.ccwu.cc&type=ws#
+ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpvWklvQTY5UTh5aGNRVjhrYTNQYTNB@82.38.31.57:443#
+vmess://eyJhZGQiOiIyMTYuMTA2LjE4NS4xNDEiLCJhaWQiOiIwIiwiYWxwbiI6bnVsbCwiZnAiOm51bGwsImhvc3QiOiIiLCJpZCI6IjA0NjIxYmFlLWFiMzYtMTFlYy1iOTA5LTAyNDJhYzEyMDAwMiIsIm5hbWUiOiJcdWQ4M2NcdWRkZmFcdWQ4M2NcdWRkZjggVVMgNjciLCJuZXQiOiJ0Y3AiLCJwYXRoIjoiLyIsInBvcnQiOjIyMzI0LCJwcyI6Ilx1ZDgzY1x1ZGRmYVx1ZDgzY1x1ZGRmOCBKb2luK1RlbGVncmFtOkBGYXJhaFZQTiBcdWQ4M2NcdWRkZmFcdWQ4M2NcdWRkZjgiLCJzY3kiOm51bGwsInNraXAtY2VydC12ZXJpZnkiOnRydWUsInNuaSI6bnVsbCwidGxzIjoiIiwidHlwZSI6bnVsbCwidiI6bnVsbH0=
+vless://0b0915d7-6800-4580-a44b-77d84f105e6a@185.79.138.71:448?type=tcp&security=reality&pbk=CsDgNRcCwCkPIslfZpKTIK71KFpIFNsotbdzKcZVoH8&fp=chrome&sni=www.samsung.com&sid=cd21e552537c7c0b#
+vmess://eyJhZGQiOiI4NS45MC4yMTcuNDIiLCJhaWQiOiIwIiwiaG9zdCI6IiIsImlkIjoiMDQ2MjFiYWUtYWIzNi0xMWVjLWI5MDktMDI0MmFjMTIwMDAyIiwibmV0IjoidGNwIiwicGF0aCI6Ii8iLCJwb3J0IjoiMjIzMjQiLCJwcyI6Ilx1ZDgzY1x1ZGRlYVx1ZDgzY1x1ZGRmOCBKb2luK1RlbGVncmFtOkBGYXJhaFZQTiBcdWQ4M2NcdWRkZWFcdWQ4M2NcdWRkZjgiLCJza2lwLWNlcnQtdmVyaWZ5Ijp0cnVlLCJ0bHMiOiIiLCJ0eXBlIjoibm9uZSIsInYiOiIyIn0=
+vmess://eyJhZGQiOiIxNjUuMTQwLjIxNi4xNDEiLCJhaWQiOiIwIiwiaG9zdCI6IiIsImlkIjoiZTdkNzJhOGQtMjZmMi00YjU0LWIzNjYtMGM0M2UwYmNiYTdkIiwibmV0IjoidGNwIiwicGF0aCI6IiIsInBvcnQiOiI0NDMiLCJwcyI6Ilx1ZDgzY1x1ZGRmYVx1ZDgzY1x1ZGRmOCBKb2luK1RlbGVncmFtOkBGYXJhaFZQTiBcdWQ4M2NcdWRkZmFcdWQ4M2NcdWRkZjgiLCJzY3kiOiJhdXRvIiwic2tpcC1jZXJ0LXZlcmlmeSI6dHJ1ZSwic25pIjoiIiwidGVzdF9uYW1lIjoiMiIsInRscyI6IiIsInR5cGUiOiJub25lIiwidiI6IjIifQ==
+trojan://vpn@45.82.14.144:2025?type=ws&host=dns.google.com&path=/#
+vless://d26598cf-2cdf-4219-80d0-94646dff160d@206.82.3.131:443?encryption=none&type=tcp&headerType=none#
+trojan://QV31589740@great-krill.rooster465.autos:443?allowInsecure=0#
+vmess://eyJhZGQiOiIxNjUuMTQwLjIxNi4xNDEiLCJhaWQiOiIwIiwiaG9zdCI6IiIsImlkIjoiZTdkNzJhOGQtMjZmMi00YjU0LWIzNjYtMGM0M2UwYmNiYTdkIiwibmV0IjoidGNwIiwicGF0aCI6IiIsInBvcnQiOiI0NDMiLCJwcyI6Ilx1ZDgzY1x1ZGRmYVx1ZDgzY1x1ZGRmOCBKb2luK1RlbGVncmFtOkBGYXJhaFZQTiBcdWQ4M2NcdWRkZmFcdWQ4M2NcdWRkZjgiLCJzY3kiOiJhdXRvIiwic25pIjoiIiwidGVzdF9uYW1lIjoiMyIsInRscyI6IiIsInR5cGUiOiJub25lIiwidiI6IjIiLCJza2lwLWNlcnQtdmVyaWZ5Ijp0cnVlfQ==
+vless://f4685d27-73e3-4588-9622-add50b84046a@31.77.59.83:9800?security=none&encryption=none&headerType=none&type=tcp#
+vless://155e8dd4-a559-407a-9ea8-13a5e829f066@168.222.140.204:4100?&type=ws&headerType=none&path=%2Fv1#
+ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTp1VEJqWmhEbU9Nd0JWQUpJ@45.32.16.53:8388#
+vless://adce7c2a-3191-49ae-b61c-9b8258ea1b0e@89.208.113.16:443?&type=tcp&headerType=none&path=%2F#
+trojan://IQ68037294@correct-pony.rooster465.autos:443?allowInsecure=1&sni=correct-pony.rooster465.autos#
+ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTprMWRCT21PQjRvcWk3VW1wMzdhMWJR@82.38.31.205:8080#
