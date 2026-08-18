@@ -1,25 +1,24 @@
 # Trivox community mirror
 # channel=@farahvpn
-# generated_at=2026-08-18T21:33:28+00:00
+# generated_at=2026-08-18T21:52:31+00:00
 # source_route=telegram
-# count=20
-vmess://eyJhZGQiOiJ2MnAtdXMtZC55d2FuZHkudG9wIiwiYWlkIjowLCJob3N0IjoiIiwiaWQiOiJiODMxMzgxZC02MzI0LTRkNTMtYWQ0Zi04Y2RhNDhiMzA4MTEiLCJuZXQiOiJ3cyIsInBhdGgiOiIvYmxvZyIsInBvcnQiOiI5NDQ0IiwicHMiOiJcdWQ4M2NcdWRkZmFcdWQ4M2NcdWRkZjggSm9pbitUZWxlZ3JhbTpARmFyYWhWUE4gXHVkODNjXHVkZGZhXHVkODNjXHVkZGY4Iiwic25pIjoiIiwidGxzIjoidGxzIiwidHlwZSI6Im5vbmUiLCJ2IjoiMiIsInNraXAtY2VydC12ZXJpZnkiOnRydWV9
-trojan://AE62539071@known-albacore.rooster465.autos:443?security=tls#
-trojan://ND91608427@sure-humpback.rooster465.autos:443?allowInsecure=1&sni=sure-humpback.rooster465.autos#
-ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTptYTZ6YzRKb0xSSkE@176.97.73.215:8388#
-trojan://ND91608427@distinct-llama.rooster465.autos:443?allowInsecure=1&sni=distinct-llama.rooster465.autos#
-vmess://eyJ2IjoiMiIsInBzIjoiXHVkODNjXHVkZGY5XHVkODNjXHVkZGVkIEpvaW4rVGVsZWdyYW06QEZhcmFoVlBOIFx1ZDgzY1x1ZGRmOVx1ZDgzY1x1ZGRlZCIsImFkZCI6Ind3dy50cnVlLnRoIiwicG9ydCI6IjgwIiwidHlwZSI6Im5vbmUiLCJpZCI6ImExNTBkNTU0LWU5NjItNDYzMi04MjlmLWVlNTgzYWRhM2Y5NSIsImFpZCI6IjAiLCJuZXQiOiJ3cyIsInBhdGgiOiIvaHR1biIsImhvc3QiOiJkN3B1NW16cjljNGIwLmNsb3VkZnJvbnQubmV0IiwidGxzIjoiIiwic2tpcC1jZXJ0LXZlcmlmeSI6dHJ1ZX0=
-trojan://AE62539071@sacred-hound.rooster465.autos:443?allowInsecure=1#
-trojan://FH72359861@43.202.61.210:443?allowInsecure=0&sni=loyal-molly.rooster465.autos#
-trojan://ND91608427@communal-sunbird.rooster465.autos:443?allowInsecure=1&sni=communal-sunbird.rooster465.autos#
-trojan://ND91608427@pure-ram.rooster465.autos:443?allowInsecure=1&sni=pure-ram.rooster465.autos#
-trojan://ND91608427@definite-malamute.rooster465.autos:443?allowInsecure=1&sni=definite-malamute.rooster465.autos#
-ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpGRDNyQ3VPc3hPYXk@15.235.75.71:8388#
-trojan://AE62539071@viable-serval.rooster465.autos:443?security=tls&sni=viable-serval.rooster465.autos#
-vless://14da77da-4fb3-4e49-ac4f-7881ea19b267@neth6.lckdwn.ru:443?&type=ws&headerType=none&host=neth6.lckdwn.ru&path=%2F#
+# count=19
 vless://d4aad26f-70b6-4411-8517-17f7b4281886@tn.tmn141246.ru:2200?path=%2Fv1&security=&encryption=none&host=rzd.ru&type=ws&sni=tn.tmn141246.ru#
-vless://511c1563-2cb6-4064-abc6-a59ee49818a8@5.253.30.99:40443?type=tcp&security=reality&encryption=none&flow=xtls-rprx-vision&fp=qq&pbk=cwmcqsfS7klQlkcoUNuATEk0NiPY-NnRb9z8rCJDQw0&sid=88b6&sni=deepl.com&spx=/#
-trojan://ND91608427@humorous-malamute.rooster465.autos:443?allowInsecure=1&sni=humorous-malamute.rooster465.autos#
-vless://d65cc14c-f53f-4fe2-b262-97856601319c@169.40.42.184:443?security=reality&encryption=none&pbk=e2RLf57Li_-MDZGE9ss1BWPgP54mqRb5PfXhW2jcVVg&headerType=&fp=ios&type=tcp&flow=xtls-rprx-vision&sni=yahoo.com&sid=c39cc7310a#
-trojan://ND91608427@exotic-chow.rooster465.autos:443?allowInsecure=1&sni=exotic-chow.rooster465.autos#
-trojan://humanity@212.183.88.136:443?host=www.calmlunch.com&path=%2Fassignment&security=tls&sni=www.calmlunch.com&type=ws#
+vmess://eyJhZGQiOiI0Ny4yNTAuNDUuMjM0IiwiYWlkIjowLCJob3N0IjoiIiwiaWQiOiJjNzdmNDhmNS00YmUzLTQ0NjEtYjUyYi00OTk5OGU3Yjg5N2IiLCJuZXQiOiJ3cyIsInBhdGgiOiIvYXJraT9lZD0yMDQ4IiwicG9ydCI6NDMwNjMsInBzIjoiXHVkODNjXHVkZGYyXHVkODNjXHVkZGZlIEpvaW4rVGVsZWdyYW06QEZhcmFoVlBOIFx1ZDgzY1x1ZGRmMlx1ZDgzY1x1ZGRmZSIsInRscyI6IiIsInR5cGUiOiJhdXRvIiwic2VjdXJpdHkiOiJhdXRvIiwic2tpcC1jZXJ0LXZlcmlmeSI6dHJ1ZSwic25pIjoiIn0=
+trojan://FH72359861@natural-swan.rooster465.autos:443?allowInsecure=1#
+vless://e5cc16a6-ea42-46b2-82ae-ad2157e1641b@162.159.44.195:443?encryption=none&fp=chrome&host=hhlfy.twiladaphne.ndjp.net&path=/fp=chrome&security=tls&sni=hhlfy.twiladaphne.ndjp.net&type=ws#
+vless://48ff2b70-e180-582f-8866-d9a2edeed5f5@51.158.206.103:23576?security=reality&encryption=none&pbk=1y5h2FGWKXTJ9xLPCqPo6Mw7RxoZzh6fGkEQKNxpZ3s&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=fuck.rkn&sid=01#
+trojan://FH72359861@national-stingray.rooster465.autos:443?allowInsecure=1&sni=national-stingray.rooster465.autos#
+vless://884d811f-577b-421e-aabb-608660b0ecfa@80.78.246.111:9887?encryption=none&security=reality&sni=dl.google.com&fp=qq&pbk=bnRIb3Er1i-K6NGGByCO9UbGfOvu43ZoiK7ulPd1SzU&sid=aabbccdd&type=grpc&authority=&serviceName=grpc-tunnel&mode=gun#
+vless://4b00d726-e072-429b-997e-f07affea3b7f@162.159.81.177:80?type=ws&host=icy-darkness-8ff1.farzambia12mo.workers.dev&path=/eyJqdW5rIjoibHFUM0pwRHZXIiwicHJvdG9jb2wiOiJ2bCIsIm1vZGUiOiJwcmVmaXgiLCJwYW5lbElQcyI6WyJbMjYwMjpmYzU5OmIwOjY0OjpdIl19?ed=2560#
+vless://e5cc16a6-ea42-46b2-82ae-ad2157e1641b@dx.mmhh.eu.cc:443?encryption=none&security=tls&sni=hhlfy.twiladaphne.ndjp.net&type=ws&host=hhlfy.twiladaphne.ndjp.net&path=/fp%3Drandom&packetEncoding=xudp#
+vless://77777777-8a3e-6666-b6d1-a9c5f0e8b3a2@cf.9999669.xyz:2087?&security=tls&sni=fgnix832fx.fx6hsv0.ccwu.cc&type=ws&headerType=none&host=fgnix832fx.fx6hsv0.ccwu.cc&path=%2F#
+vless://77777777-8a3e-6666-b6d1-a9c5f0e8b3a2@172.64.53.74:443?security=tls&sni=fgnix832fx.fx6hsv0.ccwu.cc&type=ws&headerType=none&host=fgnix832fx.fx6hsv0.ccwu.cc&path=/#
+trojan://humanity@45.130.125.160:443?path=%2Fassignment&security=tls&insecure=0&host=www.calmlunch.com&type=ws&allowInsecure=0&sni=www.calmlunch.com#
+vless://af475b0e-0c07-40fe-b4db-3dea2c0a481d@91.193.58.17:2083?allowInsecure=1&sni=edgetunnel-cmliu.lyqnihao.dpdns.org&type=ws&host=edgetunnel-cmliu.lyqnihao.dpdns.org&path=/fp=chrome&security=tls#
+ss://MjAyMi1ibGFrZTMtY2hhY2hhMjAtcG9seTEzMDU6cGl2Kys0OXVrOVVkSTZKbzhCL0ZUTXo0bmNObUFvQnUvbUFMQXF5Ry9YMD0@129.146.201.41:50356#
+vmess://eyJ2IjoiMiIsInBzIjoiXHVkODNjXHVkZGZhXHVkODNjXHVkZGY4IEpvaW4rVGVsZWdyYW06QEZhcmFoVlBOIFx1ZDgzY1x1ZGRmYVx1ZDgzY1x1ZGRmOCIsImFkZCI6IjE5OC4yMy4xODQuMTIyIiwicG9ydCI6NDQzLCJhaWQiOiIwIiwic2N5IjoiYXV0byIsIm5ldCI6IndzIiwidHlwZSI6Im5vbmUiLCJ0bHMiOiJ0bHMiLCJpZCI6IjY5MTBmNzhlLTNjMzgtNDZhMS1iMjg3LTgzNzI3OWFkOWI0YSIsInNuaSI6InhjMTYzLm1laXppYmE1NTY2LmNvbSIsInBhdGgiOiIvODM3Mjc5YWQ5YjRhIiwic2tpcC1jZXJ0LXZlcmlmeSI6dHJ1ZX0=
+vless://d31aefb3-775b-4e87-a093-a4677addf10a@84.21.189.193:443?encryption=none&flow=xtls-rprx-vision&fp=firefox&pbk=3EwukQs0ows0H4l2atTgz_Mo5SV-v5p14D4zfA41tU4&security=reality&sid=c010293d0bafac&sni=stackoverflow.com&type=tcp#
+vless://e5cc16a6-ea42-46b2-82ae-ad2157e1641b@162.159.12.41:443?encryption=none&host=hhlfy.twiladaphne.ndjp.net&path=%2Ffp%3Drandom&security=tls&sni=hhlfy.twiladaphne.ndjp.net&type=ws#
+ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNToxNmIzNzkzYi0zMzM1LTQ4MzItYjFmZC04NzdiMmM1ZTE1ZDY@xhkt5.ddns.net:12014#
+vless://c9fd0fb1-8251-4106-b09a-f4b426736f67@137.184.218.169:36925?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.cloudflare.com&fp=chrome&pbk=lJ9INPpO4rdnm2Tek_yg0PGFyUrBB6MoKyvqt_Mfqm0&type=tcp&headerType=none#
