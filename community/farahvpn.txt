@@ -1,6 +1,6 @@
 # Trivox community mirror
 # channel=@farahvpn
-# generated_at=2026-08-30T23:31:55+00:00
+# generated_at=2026-08-31T01:33:24+00:00
 # source_route=telegram
 # count=160
 vless://9500cf8b-020a-4a70-906c-e14bb5375875@144.31.237.215:443?security=reality&type=tcp&packetEncoding=xudp&sni=www.sciencedirect.com&fp=firefox&flow=xtls-rprx-vision&sid=a1b2c4d4a1b2c5d5&pbk=cNWgfJHerzIEb0RXxncP8R9Ex8-FkALOtbhneEIHpR0#
