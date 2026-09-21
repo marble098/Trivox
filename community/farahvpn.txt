@@ -1,6 +1,6 @@
 # Trivox community mirror
 # channel=@farahvpn
-# generated_at=2026-09-21T19:28:38+00:00
+# generated_at=2026-09-21T22:42:54+00:00
 # source_route=telegram
 # count=18
 vless://eb64e036-d64e-42d7-94ac-9800d8f16b08@46.8.228.52:28329?encryption=none&extra=%7B%22mode%22%3A%22auto%22%2C%22xPaddingBytes%22%3A%22100-1000%22%2C%22xPaddingObfsMode%22%3Atrue%7D&fp=chrome&host=&mode=auto&path=%2F&pbk=EmrdveO2Gy-rvuyzUEDtbRO7Kp0Zc5tIwoCHsMIr5Xs&security=reality&sid=f79b&sni=android.clients.google.com&spx=%2F64450295bb9870c&type=xhttp&x_padding_bytes=100-1000#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
