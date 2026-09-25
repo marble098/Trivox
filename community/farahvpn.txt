@@ -1,6 +1,6 @@
 # Trivox community mirror
 # channel=@farahvpn
-# generated_at=2026-09-24T23:29:20+00:00
+# generated_at=2026-09-25T01:44:22+00:00
 # source_route=telegram
 # count=18
 vless://XpnTeam-24@199.232.78.160:443?insecure=0&encryption=none&security=tls&fp=chrome&sni=ssl.fastly.com&allowInsecure=0&path=%2F&type=ws&alpn=http%2F1.1&host=Appxdn.global.ssl.fastly.net#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
