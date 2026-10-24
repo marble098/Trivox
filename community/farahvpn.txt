@@ -1,10 +1,8 @@
 # Trivox community mirror
 # channel=@farahvpn
-# generated_at=2026-10-24T19:02:41+00:00
+# generated_at=2026-10-24T21:31:31+00:00
 # source_route=telegram
-# count=18
-vless://48ff2b70-e180-582f-8866-d9a2edeed5f5@15.204.97.206:23576?security=reality&encryption=none&pbk=1y5h2FGWKXTJ9xLPCqPo6Mw7RxoZzh6fGkEQKNxpZ3s&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=fuck.rkn&sid=01#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
-vless://2a6c617d-98e4-49c3-95ab-76f02fcf0150@46.137.202.178:12512?security=reality&encryption=none&pbk=sO0RBMr_l8TLtZaYBX8n3NdI9AtaugUqJpCR1szNsyA&headerType=none&fp=firefox&type=tcp&flow=xtls-rprx-vision&sni=www.intel.com&sid=e692a8250d2e2fd0#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
+# count=17
 vless://495c7195-85b8-498a-bf20-2ea9ce9175b5@93.127.223.238:8443?path=%2F&security=tls&encryption=none&insecure=0&host=snip.edgeoneai.cc.cd&fp=chrome&type=ws&allowInsecure=0&sni=snip.edgeoneai.cc.cd#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
 vmess://eyJhZGQiOiAiZGVmZS5zeW5jLWJyaWRnZS5pciIsICJhaWQiOiAiMCIsICJhbHBuIjogImgyLGh0dHAvMS4xIiwgImZwIjogImNocm9tZSIsICJob3N0IjogImRlZmUuc3luYy1icmlkZ2UuaXIiLCAiaWQiOiAiMzg2YzUzMjItNDhhYS00ZmMxLTgxNGYtMmZmNmMzNGQ3N2UwIiwgImluc2VjdXJlIjogIjAiLCAibmV0IjogImh0dHB1cGdyYWRlIiwgInBhdGgiOiAiL2NoYW5uZWxAYXdzXzQ0MyIsICJwY3MiOiAiIiwgInBvcnQiOiAiNDQzIiwgInBzIjogIlx1MDYyZVx1MDYzMVx1MDZjY1x1MDYyZiBcdTA2NDhcdTA2Y2MgXHUwNjdlXHUwNmNjIFx1MDYyN1x1MDY0NiBcdTA2MjdcdTA2MzFcdTA2MzJcdTA2MjdcdTA2NDYgQE5vcmFQaW5nQm90IiwgInNjeSI6ICJhdXRvIiwgInNuaSI6ICJkZWZlLnN5bmMtYnJpZGdlLmlyIiwgInRscyI6ICJ0bHMiLCAidHlwZSI6ICItLS0iLCAidiI6ICIyIiwgInZjbiI6ICIifQ==
 vless://ebd1c0d6-7ff4-4b9f-8692-237517a27a64@tgfree.rush-server.com:443?security=reality&encryption=none&pbk=mza5Hn1aolSz65qu-UwvBP3oesxMe25r11o4nxvikF0&headerType=none&fp=ios&type=tcp&flow=xtls-rprx-vision&sni=anyfile2file.com&sid=64c1fe36c7846400#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
@@ -21,3 +19,4 @@ vless://1443b7a1-7ba9-4ec9-b904-2e867367b5d7@172.67.208.1:443?path=%2Fsync&secur
 vless://e4514801-0d5a-42ba-869f-39bd605aef9e@15.188.237.199:22223?encryption=none&security=none&type=tcp#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
 vless://d56624b2-35bb-468c-9b2a-e0b0df7230c1@154.31.114.248:50159?security=reality&encryption=none&pbk=j4QXngGuJkUGwRj4XIrfHRohYYuEfnJlX4cvCE-WklA&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=www.cloudflare.com&sid=091e1c5db8451757#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
 vless://eec2f6a7-c10f-43b0-b133-61f9bf9bbc27@45.150.33.33:443?encryption=none&type=tcp&security=reality&headerType=none&sni=amazon.de&fp=ios&insecure=1&allowInsecure=1&pbk=G8SING6Ibc_igZ5vI5578fXCT_mBMRuq_o8_Ymnj2SQ&sid=eba1498e012ef580&flow=xtls-rprx-vision#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
+ss://YWVzLTI1Ni1nY206TlRpSEJnNjRmc1k4dThEYkdydHlwRDlnUEdTTDM4NnA%3D@195.133.5.194:18443#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
