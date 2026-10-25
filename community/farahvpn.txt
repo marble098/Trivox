@@ -1,10 +1,8 @@
 # Trivox community mirror
 # channel=@farahvpn
-# generated_at=2026-10-24T23:37:59+00:00
+# generated_at=2026-10-25T01:34:53+00:00
 # source_route=telegram
 # count=17
-ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpvWklvQTY5UTh5aGNRVjhrYTNQYTNB@193.29.139.197:8080#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
-ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpvWklvQTY5UTh5aGNRVjhrYTNQYTNB@193.29.139.225:8080#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
 vless://2f35965a-9a9b-45fd-ba32-987296dfb6be@150.40.126.24:443?mode=gun&security=reality&encryption=none&authority=%2Ft.me%2FV2rayBaaz&pbk=X8mPYnsoTd8QCnvFZKSy7VvpSn_nrt_NWJkCUJhFCyE&fp=firefox&type=grpc&serviceName=gw.v1.ObjectService&sni=rs5.univesalsrv.com&sid=4872856d5489c37d#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
 vless://2f35965a-9a9b-45fd-ba32-987296dfb6be@45.9.156.24:443?mode=gun&security=reality&encryption=none&pbk=0f0dh_FUju5cHgQcIwUjHvxQb9aIZ00p0kZRHeE7Ey4&fp=chrome&type=grpc&serviceName=api.v2.PushService&sni=bg2.univesalsrv.com&sid=501ab3325b77e1ca#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
 vless://e8d81ba0-217c-4566-9c3d-96d4481d0586@109.248.161.150:443?headerType=none&type=tcp&encryption=none&security=none#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
@@ -20,3 +18,5 @@ vless://d342d11e-d224-4463-b982-532309285094@159.65.51.189:443?path=/fp&security
 vless://495c7195-85b8-498a-bf20-2ea9ce9175b5@93.127.223.238:8443?path=%2F&security=tls&encryption=none&insecure=0&host=snip.edgeoneai.cc.cd&fp=chrome&type=ws&allowInsecure=0&sni=snip.edgeoneai.cc.cd#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
 trojan://humanity@31.57.190.71:443?path=%2Fassignment&security=tls&alpn=http%2F1.1&insecure=0&type=ws&allowInsecure=0&sni=www.pleadcourt.org#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
 vless://c0dd6d59-1573-43af-8b70-1470b2632a6d@208.69.78.217:2053?Telegram=@GozargahAzad,@GozargahAzad,@GozargahAzad,@GozargahAzad,@GozargahAzad,@GozargahAzad,@GozargahAzad&type=tcp&security=reality&fp=chrome&pbk=A49ue7zXSusJZdErPAewg3jqGdUFIO1a9xOunEKJfC0&sid=ad86e2d52ff40ebd&sni=www.apple.com#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
+vless://7dee06cc-4bc8-43ca-a6c2-59f81107f2e3@199.232.78.160:443?insecure=0&allowInsecure=0&type=ws&pcs=CD6E838B9BFE31CAB8B3D5C858B0D6223FE84ECE236C1FDB281BE93C302E1E6E&security=tls&encryption=none&sni=firefox.com&host=copy_az_channel_NUFiLTER_10i.global.ssl.fastly.net.#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
+vless://7dee06cc-4bc8-43ca-a6c2-59f81107f2e3@199.232.78.159:443?insecure=0&type=ws&sni=firefox.com&host=copy_az_channel_NUFiLTER_8i.global.ssl.fastly.net.&security=tls&encryption=none&allowInsecure=0&pcs=CD6E838B9BFE31CAB8B3D5C858B0D6223FE84ECE236C1FDB281BE93C302E1E6E#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
