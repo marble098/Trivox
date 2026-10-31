@@ -1,10 +1,8 @@
 # Trivox community mirror
 # channel=@farahvpn
-# generated_at=2026-10-31T20:41:38+00:00
+# generated_at=2026-10-31T23:46:40+00:00
 # source_route=telegram
 # count=19
-vless://b59d913d-e686-4e89-b37b-00b56de6f7ba@146.75.57.238:443?pcs=cd6e838b9bfe31cab8b3d5c858b0d6223fe84ece236c1fdb281be93c302e1e6e&security=tls&extra=%7B%0A%20%20%22mode%22%20%3A%20%22auto%22%2C%0A%20%20%22xPaddingBytes%22%20%3A%20%220-0%22%0A%7D&type=xhttp&host=Manek--kip.global.ssl.fastly.net&insecure=0&sni=cdn.akamai.steamstatic.com&fp=chrome&encryption=none&path=%2F%3FTELEGRAM-TOOTFFARANGI%20&mode=auto&allowInsecure=0&alpn=h2#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
-vless://98a24806-141a-43d3-b094-bd66c4eb93b8@198.16.113.222:8443?security=reality&type=tcp&packetEncoding=xudp&sni=www.apple.com&fp=chrome&flow=xtls-rprx-vision&sid=69984b9e02545831&pbk=8NkTRxC5Q7bptx-8ADobkuhPK-ZN0kEEbzv6tCFGMzE&encryption=none#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
 ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpvWklvQTY5UTh5aGNRVjhrYTNQYTNB@82.38.31.62:8080#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
 vmess://eyJ2IjogIjIiLCAicHMiOiAiXHUwNjJlXHUwNjMxXHUwNmNjXHUwNjJmIFx1MDY0OFx1MDZjYyBcdTA2N2VcdTA2Y2MgXHUwNjI3XHUwNjQ2IFx1MDYyN1x1MDYzMVx1MDYzMlx1MDYyN1x1MDY0NiBATm9yYVBpbmdCb3QiLCAiYWRkIjogIjE2OC4xMzguNDMuNzUiLCAicG9ydCI6ICI4MCIsICJpZCI6ICIxMWMzNjI3Zi0zMWU4LTQ2OTUtZGZiZC0zNDA3NmUyZjFmNWQiLCAiYWlkIjogIjAiLCAic2N5IjogImF1dG8iLCAibmV0IjogIndzIiwgInR5cGUiOiAiIiwgInRscyI6ICIiLCAicGF0aCI6ICIvY2N0djEzLm0zdTgiLCAiaG9zdCI6ICJqcDAxLmEwYS54eXoiLCAic2tpcC1jZXJ0LXZlcmlmeSI6IHRydWV9
 trojan://0ab6c98dae3b48e8b9c4a776b6c9c19a@66.163.122.7:443?allowInsecure=0&sni=www.searchnationwidecareerchangehelperandguidancetoday.com#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
@@ -22,3 +20,5 @@ vless://d342d11e-d224-4463-b982-532309285094@159.65.51.189:443?path=/fp&security
 vless://d342d11e-d224-4463-b982-532309285094@159.65.51.189:443?&security=tls&fp=chrome&sni=ccc.010304.xyz&type=ws&headerType=none&host=ccc.010304.xyz&path=/#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
 vless://d342d11e-d224-4463-b982-532309285094@107.189.26.160:443?path=%2Ffp&security=tls&encryption=none&insecure=0&host=ccc.010304.xyz&type=ws&allowInsecure=0&sni=ccc.010304.xyz#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
 vless://9e3132b8-b595-444a-833a-2de44789f9d7@117.55.233.250:443?&security=tls&fp=chrome&sni=shephe.dpdns.org&type=ws&headerType=none&host=shephe.dpdns.org&path=%2F#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
+ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTo0YTJyZml4b3BoZGpmZmE4S1ZBNEFh@193.29.139.234:8080#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
+vless://e6df2095-a73c-4043-8693-8d5a03686870@188.114.97.6:443?path=%2Fcart%2Fdocs%2Fwww%2Fproxyip&security=tls&alpn=http%2F1.1&encryption=none&insecure=0&host=lucasjow.us.ci&fp=chrome&ech=cloudflare-ech.com%2Budp%3A%2F%2F1.1.1.1&type=ws&allowInsecure=0&sni=lucasjow.us.ci#%D8%AE%D8%B1%DB%8C%D8%AF%20%D9%88%DB%8C%20%D9%BE%DB%8C%20%D8%A7%D9%86%20%D8%A7%D8%B1%D8%B2%D8%A7%D9%86%20@NoraPingBot
